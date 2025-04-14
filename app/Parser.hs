@@ -30,29 +30,33 @@ data Ty = Num | Str deriving (Show, Eq)
 
 data VarDef = VarDef Ident Ty deriving (Show, Eq)
 
-data PrintStmtKind = SemiColon | Newline deriving (Eq)
-
 data PrintExpr = PrintStr StrExpr | PrintExp Expr deriving (Show, Eq)
 
-instance Show PrintStmtKind where
-  show Parser.SemiColon = "';'"
-  show Parser.Newline = "'\\n'"
+data Assignment
+  = Assignment
+      VarDef
+      Expr
+  deriving (Show, Eq)
 
 data Stmt
-  = LetStmt VarDef Expr
+  = LetStmt [Assignment]
   | IfStmt Expr Stmt
-  | PrintStmt PrintExpr PrintStmtKind
+  | PrintStmt [PrintExpr]
+  | InputStmt (Maybe PrintExpr) Expr
   | EndStmt
+  | Comment
+  | ForStmt Assignment Expr
+  | NextStmt VarDef
   deriving (Show, Eq)
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
 data Line
-  = Line Int [Stmt]
+  = Line {lineNumber :: Int, lineStmts :: [Stmt]}
   deriving (Show, Eq)
 
-newtype Program = Program [Line] deriving (Show, Eq)
+newtype Program = Program {programLines :: [Line]} deriving (Show, Eq)
 
 type TParser o = Parser [Token] o
 
@@ -64,9 +68,6 @@ number = Parser (\case Number n : rest -> Just (n, rest); _ -> Nothing)
 
 operator :: Operator -> TParser Operator
 operator op = Parser (\case Operator op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
-
-stringLiteral :: TParser String
-stringLiteral = Parser (\case StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
 
 expr :: TParser Expr
 expr = eqExpr
@@ -93,11 +94,12 @@ expr = eqExpr
 
     eqExpr = do
       left <- addSubExpr
-      maybeOp <- optional (operator Equal)
+      maybeOp <- optional (operator Equal <|> operator LessThan <|> operator GreaterThan)
       case maybeOp of
         Just op -> BinExpr left op <$> eqExpr
         Nothing -> return left
 
+-- String expressions allow concatenation
 strExpr :: TParser StrExpr
 strExpr = do
   left <- strFactor
@@ -111,53 +113,45 @@ strExpr = do
         strLit = StrLit <$> stringLiteral
         strVar = StrVar <$> identifier <* satisfy (== Punctuation Dollar)
 
--- In BASIC a let statment can optionally begin with the LET keyword
--- example: LET A = 5
--- example: A = 5
-letStmt :: TParser Stmt
-letStmt =
-  explicitLetStmt
-    <|> implicitLetStmt
+    stringLiteral = Parser (\case StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
 
-implicitLetStmt :: TParser Stmt
-implicitLetStmt = do
+-- Either a string expression or a numeric expression
+printExpr :: TParser PrintExpr
+printExpr = PrintExp <$> expr <|> PrintStr <$> strExpr
+
+-- In our version of BASIC the LET keyword is mandatory
+-- example: LET A = 5
+-- multiple variable can be assigned, separated by commas
+-- example: LET A = 5, B = 10
+assignment :: TParser Assignment
+assignment = do
   ident <- identifier
   _ <- operator Equal
-  LetStmt (VarDef ident Num) <$> expr
+  Assignment (VarDef ident Num) <$> expr
 
-explicitLetStmt :: TParser Stmt
-explicitLetStmt = satisfy (== Keyword Let) *> implicitLetStmt
+letStmt :: TParser Stmt
+letStmt = do
+  _ <- satisfy (== Keyword Let)
+  assign <- assignment
+  restAssigns <- many (satisfy (== Punctuation Comma) *> assignment)
+  return (LetStmt (assign : restAssigns))
 
-explicitPrintStmt :: TParser Stmt
-explicitPrintStmt = do
-  _ <- satisfy (== Keyword Print)
-  strExpr' <- strExpr
-  kind <- optional (satisfy (== Punctuation Token.SemiColon))
-  case kind of
-    Just (Punctuation Token.SemiColon) -> return (PrintStmt (PrintStr strExpr') Parser.SemiColon)
-    _ -> return (PrintStmt (PrintStr strExpr') Parser.Newline)
-
-implicitPrintStmt :: TParser Stmt
-implicitPrintStmt = do
-  strExpr' <- strExpr
-  kind <- optional (satisfy (== Punctuation Token.SemiColon))
-  case kind of
-    Just (Punctuation Token.SemiColon) -> return (PrintStmt (PrintStr strExpr') Parser.SemiColon)
-    _ -> return (PrintStmt (PrintStr strExpr') Parser.Newline)
-
-implicitPrintStmtExpr :: TParser Stmt
-implicitPrintStmtExpr = do
-  strExpr' <- expr
-  kind <- optional (satisfy (== Punctuation Token.SemiColon))
-  case kind of
-    Just (Punctuation Token.SemiColon) -> return (PrintStmt (PrintExp strExpr') Parser.SemiColon)
-    _ -> return (PrintStmt (PrintExp strExpr') Parser.Newline)
-
+-- A print statement can contain multiple expressions separated by ';'
 printStmt :: TParser Stmt
-printStmt =
-  explicitPrintStmt
-    <|> implicitPrintStmt
-    <|> implicitPrintStmtExpr
+printStmt = do
+  _ <- satisfy (== Keyword Print)
+  printExpr' <- printExpr
+  restPrintExprs <- many (satisfy (== Punctuation SemiColon) *> printExpr)
+  return (PrintStmt (printExpr' : restPrintExprs))
+
+-- An input statement can contain an optional print expression
+-- example: INPUT A$, B$
+-- example: INPUT "Accept? (Y/N)"; A$
+inputStmt :: TParser Stmt
+inputStmt = do
+  _ <- satisfy (== Keyword Input)
+  maybePrintExpr <- optional (printExpr <* satisfy (== Punctuation SemiColon))
+  InputStmt maybePrintExpr <$> expr
 
 endStmt :: TParser Stmt
 endStmt = satisfy (== Keyword End) $> EndStmt
@@ -167,8 +161,27 @@ ifStmt :: TParser Stmt
 ifStmt = do
   _ <- satisfy (== Keyword If)
   cond <- expr
-  _ <- optional (satisfy (== Keyword Then))
+  _ <- satisfy (== Keyword Then)
   IfStmt cond <$> stmt
+
+forStmt :: TParser Stmt
+forStmt = do
+  _ <- satisfy (== Keyword For)
+  assign <- assignment
+  _ <- satisfy (== Keyword To)
+  ForStmt assign <$> expr
+
+nextStmt :: TParser Stmt
+nextStmt = do
+  _ <- satisfy (== Keyword Next)
+  varDef <- VarDef <$> identifier <*> pure Num
+  return (NextStmt varDef)
+
+comment :: TParser Stmt
+comment = do
+  _ <- satisfy (== Keyword Remark)
+  _ <- many (satisfy (/= Punctuation Token.Newline))
+  return Comment
 
 stmt :: TParser Stmt
 stmt =
@@ -176,6 +189,10 @@ stmt =
     <|> endStmt
     <|> printStmt
     <|> ifStmt
+    <|> comment
+    <|> inputStmt
+    <|> forStmt
+    <|> nextStmt
 
 -- Parse LET statements last to avoid ambiguity with expressions
 -- multiple statements in the same line MUST be separated by ":"

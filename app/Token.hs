@@ -38,8 +38,13 @@ data Keyword
   = Let
   | If
   | Then
+  | Input
   | Print
   | End
+  | Remark
+  | For
+  | To
+  | Next
   deriving (Show, Eq)
 
 data Token
@@ -95,6 +100,11 @@ keyword =
     <|> (string "THEN" $> Then)
     <|> (string "PRINT" $> Print)
     <|> (string "END" $> End)
+    <|> (string "REM" $> Remark)
+    <|> (string "INPUT" $> Input)
+    <|> (string "FOR" $> For)
+    <|> (string "TO" $> To)
+    <|> (string "NEXT" $> Next)
 
 punctuation :: SParser Punctuation
 punctuation =
