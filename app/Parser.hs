@@ -32,6 +32,8 @@ data VarDef = VarDef Ident Ty deriving (Show, Eq)
 
 data PrintExpr = PrintStr StrExpr | PrintExp Expr deriving (Show, Eq)
 
+data PrintKind = NewLine | NoNewLine deriving (Show, Eq)
+
 data Assignment
   = Assignment
       VarDef
@@ -41,7 +43,7 @@ data Assignment
 data Stmt
   = LetStmt [Assignment]
   | IfStmt Expr Stmt
-  | PrintStmt [PrintExpr]
+  | PrintStmt [PrintExpr] PrintKind
   | InputStmt (Maybe PrintExpr) Expr
   | EndStmt
   | Comment
@@ -137,12 +139,29 @@ letStmt = do
   return (LetStmt (assign : restAssigns))
 
 -- A print statement can contain multiple expressions separated by ';'
+-- example: PRINT A; B
+-- If the print statement ends with a semicolon, the next print statement will be on the same line
+-- example: PRINT "A"; "B"
+--          PRINT "C"
+-- will print: AB
+--             C
+-- whereas: PRINT "A"; "B";
+--          PRINT "C"
+-- will print: ABC
 printStmt :: TParser Stmt
 printStmt = do
   _ <- satisfy (== Keyword Print)
   printExpr' <- printExpr
   restPrintExprs <- many (satisfy (== Punctuation SemiColon) *> printExpr)
-  return (PrintStmt (printExpr' : restPrintExprs))
+  semi <- optional (satisfy (== Punctuation SemiColon))
+  return
+    ( PrintStmt
+        (printExpr' : restPrintExprs)
+        ( case semi of
+            Just _ -> NoNewLine
+            Nothing -> NewLine
+        )
+    )
 
 -- An input statement can contain an optional print expression
 -- example: INPUT A$, B$
