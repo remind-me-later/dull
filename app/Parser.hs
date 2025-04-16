@@ -62,10 +62,21 @@ data Stmt
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
 data Line
-  = Line {lineLabel :: Maybe String, lineNumber :: Int, lineStmts :: [Stmt]}
+  = Line {lineNumber :: Int, lineLabel :: Maybe String, lineStmts :: [Stmt]}
   deriving (Show, Eq)
 
-newtype Program = Program {programLines :: [Line]} deriving (Show, Eq)
+newtype Program = Program {programLines :: [Line]} deriving (Eq)
+
+instance Show Program where
+  show (Program ls) =
+    unlines
+      ( map
+          ( \case
+              Line n Nothing stmts -> show n ++ " " ++ unwords (map show stmts)
+              Line n (Just label) stmts -> show n ++ " " ++ label ++ ": " ++ unwords (map show stmts)
+          )
+          ls
+      )
 
 type TParser o = Parser [Token.Token] o
 
@@ -257,7 +268,7 @@ line = do
   label <- optional stringLiteral
   stmts <- sepBy (== Token.Punctuation Token.Colon) stmt
   _ <- optional (satisfy (== Token.Punctuation Token.NewLine))
-  return (Line label lineNumber stmts)
+  return (Line lineNumber label stmts)
 
 program :: TParser Program
 program = do
