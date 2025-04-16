@@ -5,6 +5,7 @@ module ParserCombinators
     satisfy,
     char,
     string,
+    sepBy,
   )
 where
 
@@ -45,3 +46,7 @@ char c = satisfy (== c)
 
 string :: String -> Parser String String
 string = traverse char
+
+-- Parses a sequence of elements separated by a separator but not ending with it
+sepBy :: (a -> Bool) -> Parser [a] o -> Parser [a] [o]
+sepBy sep p = (:) <$> p <*> many (satisfy sep *> p) <|> pure []

@@ -4,7 +4,7 @@ module Parser (Expr (..), Stmt (..), TParser, Program (..), program) where
 
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
-import ParserCombinators (Parser (..), satisfy)
+import ParserCombinators (Parser (..), satisfy, sepBy)
 import Token (Keyword (..), Operator (..), Punctuation (..), Token (..))
 
 newtype Ident = Ident String deriving (Show, Eq)
@@ -49,13 +49,14 @@ data Stmt
   | Comment
   | ForStmt Assignment Expr
   | NextStmt VarDef
+  | ClearStmt
   deriving (Show, Eq)
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
 data Line
-  = Line {lineNumber :: Int, lineStmts :: [Stmt]}
+  = Line {lineLabel :: Maybe String, lineNumber :: Int, lineStmts :: [Stmt]}
   deriving (Show, Eq)
 
 newtype Program = Program {programLines :: [Line]} deriving (Show, Eq)
@@ -115,7 +116,8 @@ strExpr = do
         strLit = StrLit <$> stringLiteral
         strVar = StrVar <$> identifier <* satisfy (== Punctuation Dollar)
 
-    stringLiteral = Parser (\case StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
+stringLiteral :: Parser [Token] String
+stringLiteral = Parser (\case StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
 
 -- Either a string expression or a numeric expression
 printExpr :: TParser PrintExpr
@@ -196,6 +198,9 @@ nextStmt = do
   varDef <- VarDef <$> identifier <*> pure Num
   return (NextStmt varDef)
 
+clearStmt :: TParser Stmt
+clearStmt = satisfy (== Keyword Clear) $> ClearStmt
+
 comment :: TParser Stmt
 comment = do
   _ <- satisfy (== Keyword Remark)
@@ -212,16 +217,17 @@ stmt =
     <|> inputStmt
     <|> forStmt
     <|> nextStmt
+    <|> clearStmt
 
 -- Parse LET statements last to avoid ambiguity with expressions
 -- multiple statements in the same line MUST be separated by ":"
 line :: TParser Line
 line = do
   lineNumber <- number
-  firstStmt <- stmt
-  restStmts <- many (optional (satisfy (== Punctuation Colon)) *> stmt)
+  label <- optional stringLiteral
+  stmts <- sepBy (== Punctuation Colon) stmt
   _ <- optional (satisfy (== Punctuation Token.Newline))
-  return (Line lineNumber (firstStmt : restStmts))
+  return (Line label lineNumber stmts)
 
 program :: TParser Program
 program = do

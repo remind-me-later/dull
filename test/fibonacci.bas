@@ -1,5 +1,5 @@
 5   REM Compute the Nth Fibonacci number
-10  INPUT "Enter N: "; N
+10  "A" INPUT "Enter N: "; N
 20  IF N < 0 THEN PRINT "N must be non-negative": END
 30  IF N = 0 THEN PRINT "F(0) = 0": END
 40  IF N = 1 THEN PRINT "F(1) = 1": END

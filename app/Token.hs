@@ -45,6 +45,7 @@ data Keyword
   | For
   | To
   | Next
+  | Clear
   deriving (Show, Eq)
 
 data Token
@@ -105,6 +106,7 @@ keyword =
     <|> (string "FOR" $> For)
     <|> (string "TO" $> To)
     <|> (string "NEXT" $> Next)
+    <|> (string "CLEAR" $> Clear)
 
 punctuation :: SParser Punctuation
 punctuation =
