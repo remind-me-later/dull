@@ -30,7 +30,7 @@ data Punctuation
   | SemiColon
   | LeftParen
   | RightParen
-  | Newline
+  | NewLine
   | Dollar
   deriving (Show, Eq)
 
@@ -46,6 +46,9 @@ data Keyword
   | To
   | Next
   | Clear
+  | Goto
+  | Gosub
+  | Wait
   deriving (Show, Eq)
 
 data Token
@@ -107,6 +110,9 @@ keyword =
     <|> (string "TO" $> To)
     <|> (string "NEXT" $> Next)
     <|> (string "CLEAR" $> Clear)
+    <|> (string "GOTO" $> Goto)
+    <|> (string "GOSUB" $> Gosub)
+    <|> (string "WAIT" $> Wait)
 
 punctuation :: SParser Punctuation
 punctuation =
@@ -116,7 +122,7 @@ punctuation =
     <|> (char '(' $> LeftParen)
     <|> (char ')' $> RightParen)
     <|> (char '$' $> Dollar)
-    <|> (char '\n' $> Newline)
+    <|> (char '\n' $> NewLine)
 
 token :: SParser Token
 token =

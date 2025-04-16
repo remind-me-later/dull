@@ -1,16 +1,18 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Parser (Expr (..), Stmt (..), TParser, Program (..), program) where
+module Parser (NumExpr (..), Stmt (..), TParser, Program (..), program) where
 
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import ParserCombinators (Parser (..), satisfy, sepBy)
-import Token (Keyword (..), Operator (..), Punctuation (..), Token (..))
+import Token qualified (Keyword (..), Operator (..), Punctuation (..), Token (..))
 
-newtype Ident = Ident String deriving (Show, Eq)
+data Ty = Num | Str deriving (Show, Eq)
 
-data Expr
-  = BinExpr Expr Operator Expr
+data Ident = VarDef String Ty deriving (Show, Eq)
+
+data NumExpr
+  = BinExpr NumExpr Token.Operator NumExpr
   | NumExpr Int
   | NumVar Ident
   | StrExpr String
@@ -26,30 +28,34 @@ data StrExpr
       StrExpr
   deriving (Show, Eq)
 
-data Ty = Num | Str deriving (Show, Eq)
-
-data VarDef = VarDef Ident Ty deriving (Show, Eq)
-
-data PrintExpr = PrintStr StrExpr | PrintExp Expr deriving (Show, Eq)
+type PrintExpr = Either NumExpr StrExpr
 
 data PrintKind = NewLine | NoNewLine deriving (Show, Eq)
 
 data Assignment
   = Assignment
-      VarDef
-      Expr
+      Ident
+      NumExpr
+  deriving (Show, Eq)
+
+data GotoTarget
+  = GoToIdent String
+  | GoToLine Int
   deriving (Show, Eq)
 
 data Stmt
   = LetStmt [Assignment]
-  | IfStmt Expr Stmt
+  | IfStmt NumExpr Stmt
   | PrintStmt [PrintExpr] PrintKind
-  | InputStmt (Maybe PrintExpr) Expr
+  | InputStmt (Maybe PrintExpr) NumExpr
   | EndStmt
   | Comment
-  | ForStmt Assignment Expr
-  | NextStmt VarDef
+  | ForStmt Assignment NumExpr
+  | NextStmt Ident
   | ClearStmt
+  | GoToStmt GotoTarget
+  | GoSubStmt GotoTarget
+  | WaitStmt NumExpr
   deriving (Show, Eq)
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
@@ -61,43 +67,54 @@ data Line
 
 newtype Program = Program {programLines :: [Line]} deriving (Show, Eq)
 
-type TParser o = Parser [Token] o
+type TParser o = Parser [Token.Token] o
 
-identifier :: TParser Ident
-identifier = Parser (\case Identifier s : rest -> Just (Ident s, rest); _ -> Nothing)
+-- An identifier is a token identifier that can optionally end with a "$" sign to indicate a string variable
+-- example: A$, B, C$
+-- example: A = 5
+-- example: A$ = "Hello"
+ident :: TParser Ident
+ident = do
+  s <- atom
+  maybeDollar <- optional (satisfy (== Token.Punctuation Token.Dollar))
+  case maybeDollar of
+    Just _ -> return (VarDef s Str)
+    Nothing -> return (VarDef s Num)
+  where
+    atom = Parser (\case Token.Identifier s : rest -> Just (s, rest); _ -> Nothing)
 
 number :: TParser Int
-number = Parser (\case Number n : rest -> Just (n, rest); _ -> Nothing)
+number = Parser (\case Token.Number n : rest -> Just (n, rest); _ -> Nothing)
 
-operator :: Operator -> TParser Operator
-operator op = Parser (\case Operator op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
+operator :: Token.Operator -> TParser Token.Operator
+operator op = Parser (\case Token.Operator op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
 
-expr :: TParser Expr
+expr :: TParser NumExpr
 expr = eqExpr
   where
     factor = parenExpr <|> numberExpr <|> identifierExpr
       where
         numberExpr = NumExpr <$> number
-        identifierExpr = NumVar <$> identifier
-        parenExpr = satisfy (== Punctuation LeftParen) *> expr <* satisfy (== Punctuation RightParen)
+        identifierExpr = NumVar <$> ident
+        parenExpr = satisfy (== Token.Punctuation Token.LeftParen) *> expr <* satisfy (== Token.Punctuation Token.RightParen)
 
     mulExpr = do
       left <- factor
-      maybeOp <- optional (operator Multiply)
+      maybeOp <- optional (operator Token.Multiply)
       case maybeOp of
         Just op -> BinExpr left op <$> mulExpr
         Nothing -> return left
 
     addSubExpr = do
       left <- mulExpr
-      maybeOp <- optional (operator Add <|> operator Subtract)
+      maybeOp <- optional (operator Token.Add <|> operator Token.Subtract)
       case maybeOp of
         Just op -> BinExpr left op <$> addSubExpr
         Nothing -> return left
 
     eqExpr = do
       left <- addSubExpr
-      maybeOp <- optional (operator Equal <|> operator LessThan <|> operator GreaterThan)
+      maybeOp <- optional (operator Token.Equal <|> operator Token.LessThan <|> operator Token.GreaterThan)
       case maybeOp of
         Just op -> BinExpr left op <$> eqExpr
         Nothing -> return left
@@ -106,7 +123,7 @@ expr = eqExpr
 strExpr :: TParser StrExpr
 strExpr = do
   left <- strFactor
-  maybeOp <- optional (operator Add)
+  maybeOp <- optional (operator Token.Add)
   case maybeOp of
     Just _ -> Concat left <$> strExpr
     Nothing -> return left
@@ -114,14 +131,14 @@ strExpr = do
     strFactor = strLit <|> strVar
       where
         strLit = StrLit <$> stringLiteral
-        strVar = StrVar <$> identifier <* satisfy (== Punctuation Dollar)
+        strVar = StrVar <$> ident <* satisfy (== Token.Punctuation Token.Dollar)
 
-stringLiteral :: Parser [Token] String
-stringLiteral = Parser (\case StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
+stringLiteral :: Parser [Token.Token] String
+stringLiteral = Parser (\case Token.StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
 
 -- Either a string expression or a numeric expression
 printExpr :: TParser PrintExpr
-printExpr = PrintExp <$> expr <|> PrintStr <$> strExpr
+printExpr = Left <$> expr <|> Right <$> strExpr
 
 -- In our version of BASIC the LET keyword is mandatory
 -- example: LET A = 5
@@ -129,16 +146,15 @@ printExpr = PrintExp <$> expr <|> PrintStr <$> strExpr
 -- example: LET A = 5, B = 10
 assignment :: TParser Assignment
 assignment = do
-  ident <- identifier
-  _ <- operator Equal
-  Assignment (VarDef ident Num) <$> expr
+  v <- ident
+  _ <- operator Token.Equal
+  Assignment v <$> expr
 
 letStmt :: TParser Stmt
 letStmt = do
-  _ <- satisfy (== Keyword Let)
-  assign <- assignment
-  restAssigns <- many (satisfy (== Punctuation Comma) *> assignment)
-  return (LetStmt (assign : restAssigns))
+  _ <- satisfy (== Token.Keyword Token.Let)
+  assignments <- sepBy (== Token.Punctuation Token.Comma) assignment
+  return (LetStmt assignments)
 
 -- A print statement can contain multiple expressions separated by ';'
 -- example: PRINT A; B
@@ -152,10 +168,10 @@ letStmt = do
 -- will print: ABC
 printStmt :: TParser Stmt
 printStmt = do
-  _ <- satisfy (== Keyword Print)
+  _ <- satisfy (== Token.Keyword Token.Print)
   printExpr' <- printExpr
-  restPrintExprs <- many (satisfy (== Punctuation SemiColon) *> printExpr)
-  semi <- optional (satisfy (== Punctuation SemiColon))
+  restPrintExprs <- many (satisfy (== Token.Punctuation Token.SemiColon) *> printExpr)
+  semi <- optional (satisfy (== Token.Punctuation Token.SemiColon))
   return
     ( PrintStmt
         (printExpr' : restPrintExprs)
@@ -170,41 +186,52 @@ printStmt = do
 -- example: INPUT "Accept? (Y/N)"; A$
 inputStmt :: TParser Stmt
 inputStmt = do
-  _ <- satisfy (== Keyword Input)
-  maybePrintExpr <- optional (printExpr <* satisfy (== Punctuation SemiColon))
+  _ <- satisfy (== Token.Keyword Token.Input)
+  maybePrintExpr <- optional (printExpr <* satisfy (== Token.Punctuation Token.SemiColon))
   InputStmt maybePrintExpr <$> expr
 
 endStmt :: TParser Stmt
-endStmt = satisfy (== Keyword End) $> EndStmt
+endStmt = satisfy (== Token.Keyword Token.End) $> EndStmt
 
 -- FIXME: If the statement of the THEN branch is a let statement the LET keyword MUST be used
 ifStmt :: TParser Stmt
 ifStmt = do
-  _ <- satisfy (== Keyword If)
+  _ <- satisfy (== Token.Keyword Token.If)
   cond <- expr
-  _ <- satisfy (== Keyword Then)
+  _ <- satisfy (== Token.Keyword Token.Then)
   IfStmt cond <$> stmt
 
 forStmt :: TParser Stmt
 forStmt = do
-  _ <- satisfy (== Keyword For)
+  _ <- satisfy (== Token.Keyword Token.For)
   assign <- assignment
-  _ <- satisfy (== Keyword To)
+  _ <- satisfy (== Token.Keyword Token.To)
   ForStmt assign <$> expr
 
 nextStmt :: TParser Stmt
-nextStmt = do
-  _ <- satisfy (== Keyword Next)
-  varDef <- VarDef <$> identifier <*> pure Num
-  return (NextStmt varDef)
+nextStmt = satisfy (== Token.Keyword Token.Next) *> (NextStmt <$> ident)
 
 clearStmt :: TParser Stmt
-clearStmt = satisfy (== Keyword Clear) $> ClearStmt
+clearStmt = satisfy (== Token.Keyword Token.Clear) $> ClearStmt
+
+gotoTarget :: TParser GotoTarget
+gotoTarget =
+  GoToIdent <$> stringLiteral
+    <|> GoToLine <$> number
+
+gotoStmt :: TParser Stmt
+gotoStmt = satisfy (== Token.Keyword Token.Goto) *> (GoToStmt <$> gotoTarget)
+
+gosubStmt :: TParser Stmt
+gosubStmt = satisfy (== Token.Keyword Token.Gosub) *> (GoSubStmt <$> gotoTarget)
+
+waitStmt :: TParser Stmt
+waitStmt = satisfy (== Token.Keyword Token.Wait) *> (WaitStmt <$> expr)
 
 comment :: TParser Stmt
 comment = do
-  _ <- satisfy (== Keyword Remark)
-  _ <- many (satisfy (/= Punctuation Token.Newline))
+  _ <- satisfy (== Token.Keyword Token.Remark)
+  _ <- many (satisfy (/= Token.Punctuation Token.NewLine))
   return Comment
 
 stmt :: TParser Stmt
@@ -218,6 +245,9 @@ stmt =
     <|> forStmt
     <|> nextStmt
     <|> clearStmt
+    <|> gotoStmt
+    <|> gosubStmt
+    <|> waitStmt
 
 -- Parse LET statements last to avoid ambiguity with expressions
 -- multiple statements in the same line MUST be separated by ":"
@@ -225,8 +255,8 @@ line :: TParser Line
 line = do
   lineNumber <- number
   label <- optional stringLiteral
-  stmts <- sepBy (== Punctuation Colon) stmt
-  _ <- optional (satisfy (== Punctuation Token.Newline))
+  stmts <- sepBy (== Token.Punctuation Token.Colon) stmt
+  _ <- optional (satisfy (== Token.Punctuation Token.NewLine))
   return (Line label lineNumber stmts)
 
 program :: TParser Program
