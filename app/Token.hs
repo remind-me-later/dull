@@ -1,6 +1,7 @@
 module Token
   ( Token (..),
-    Operator (..),
+    ArithmeticOp (..),
+    LogicalOp (..),
     Keyword (..),
     Punctuation (..),
     tokens,
@@ -11,53 +12,98 @@ import Control.Applicative (Alternative (many, some, (<|>)))
 import Data.Functor (($>))
 import ParserCombinators (Parser, char, satisfy, string)
 
-data Operator
-  = Add
-  | Subtract
-  | Multiply
-  | Equal
-  | Range
-  | LessThan
-  | GreaterThan
-  | LessThanOrEqual
-  | GreaterThanOrEqual
-  | NotEqual
-  deriving (Show, Eq)
+data LogicalOp where
+  Equal :: LogicalOp
+  LessThan :: LogicalOp
+  GreaterThan :: LogicalOp
+  LessThanOrEqual :: LogicalOp
+  GreaterThanOrEqual :: LogicalOp
+  NotEqual :: LogicalOp
+  deriving (Eq)
 
-data Punctuation
-  = Comma
-  | Colon
-  | SemiColon
-  | LeftParen
-  | RightParen
-  | NewLine
-  | Dollar
-  deriving (Show, Eq)
+instance Show LogicalOp where
+  show Equal = "="
+  show LessThan = "<"
+  show GreaterThan = ">"
+  show LessThanOrEqual = "<="
+  show GreaterThanOrEqual = ">="
+  show NotEqual = "<>"
 
-data Keyword
-  = Let
-  | If
-  | Then
-  | Input
-  | Print
-  | End
-  | Remark
-  | For
-  | To
-  | Next
-  | Clear
-  | Goto
-  | Gosub
-  | Wait
-  deriving (Show, Eq)
+data ArithmeticOp where
+  Add :: ArithmeticOp
+  Subtract :: ArithmeticOp
+  Multiply :: ArithmeticOp
+  Divide :: ArithmeticOp
+  deriving (Eq)
 
-data Token
-  = Identifier String
-  | Number Int
-  | Operator Operator
-  | Keyword Keyword
-  | Punctuation Punctuation
-  | StringLiteral String
+instance Show ArithmeticOp where
+  show Add = "+"
+  show Subtract = "-"
+  show Multiply = "*"
+  show Divide = "/"
+
+data Punctuation where
+  Comma :: Punctuation
+  Colon :: Punctuation
+  SemiColon :: Punctuation
+  LeftParen :: Punctuation
+  RightParen :: Punctuation
+  NewLine :: Punctuation
+  Dollar :: Punctuation
+  deriving (Eq)
+
+instance Show Punctuation where
+  show Comma = ","
+  show Colon = ":"
+  show SemiColon = ";"
+  show LeftParen = "("
+  show RightParen = ")"
+  show NewLine = "\n"
+  show Dollar = "$"
+
+data Keyword where
+  Let :: Keyword
+  If :: Keyword
+  Then :: Keyword
+  Input :: Keyword
+  Print :: Keyword
+  End :: Keyword
+  Remark :: Keyword
+  For :: Keyword
+  To :: Keyword
+  Next :: Keyword
+  Clear :: Keyword
+  Goto :: Keyword
+  Gosub :: Keyword
+  Wait :: Keyword
+  Pause :: Keyword
+  deriving (Eq)
+
+instance Show Keyword where
+  show Let = "LET"
+  show If = "IF"
+  show Then = "THEN"
+  show Input = "INPUT"
+  show Print = "PRINT"
+  show End = "END"
+  show Remark = "REM"
+  show For = "FOR"
+  show To = "TO"
+  show Next = "NEXT"
+  show Clear = "CLEAR"
+  show Goto = "GOTO"
+  show Gosub = "GOSUB"
+  show Wait = "WAIT"
+  show Pause = "PAUSE"
+
+data Token where
+  Identifier :: String -> Token
+  Number :: Int -> Token
+  ArithmeticOp :: ArithmeticOp -> Token
+  LogicalOp :: LogicalOp -> Token
+  Keyword :: Keyword -> Token
+  Punctuation :: Punctuation -> Token
+  StringLiteral :: String -> Token
   deriving (Show, Eq)
 
 type SParser o = Parser String o
@@ -83,13 +129,16 @@ stringLiteral =
     *> many (satisfy (/= '"'))
     <* char '"'
 
--- Be careful with the order of the parsers, because the parser for `==` is a prefix of the parser for `=`.
-operator :: SParser Operator
-operator =
+arithmeticOp :: SParser ArithmeticOp
+arithmeticOp =
   (string "+" $> Add)
     <|> (string "-" $> Subtract)
     <|> (string "*" $> Multiply)
-    <|> (string "=" $> Equal)
+    <|> (string "/" $> Divide)
+
+logicalOp :: SParser LogicalOp
+logicalOp =
+  (string "=" $> Equal)
     <|> (string "<=" $> LessThanOrEqual)
     <|> (string "<" $> LessThan)
     <|> (string ">=" $> GreaterThanOrEqual)
@@ -113,6 +162,7 @@ keyword =
     <|> (string "GOTO" $> Goto)
     <|> (string "GOSUB" $> Gosub)
     <|> (string "WAIT" $> Wait)
+    <|> (string "PAUSE" $> Pause)
 
 punctuation :: SParser Punctuation
 punctuation =
@@ -131,7 +181,8 @@ token =
            <|> StringLiteral <$> stringLiteral
            <|> Keyword <$> keyword
            <|> Identifier <$> identifier
-           <|> Operator <$> operator
+           <|> LogicalOp <$> logicalOp
+           <|> ArithmeticOp <$> arithmeticOp
            <|> Punctuation <$> punctuation
        )
 

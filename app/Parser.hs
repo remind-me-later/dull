@@ -1,82 +1,125 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Parser (NumExpr (..), Stmt (..), TParser, Program (..), program) where
+module Parser (Expr (..), Stmt (..), TParser, Program (..), program) where
 
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
+import Data.List (intercalate)
 import ParserCombinators (Parser (..), satisfy, sepBy)
-import Token qualified (Keyword (..), Operator (..), Punctuation (..), Token (..))
+import Token qualified (ArithmeticOp (..), Keyword (..), LogicalOp (..), Punctuation (..), Token (..))
 
-data Ty = Num | Str deriving (Show, Eq)
+data Ident where
+  NumIdent :: String -> Ident
+  StrIdent :: String -> Ident
+  deriving (Eq)
 
-data Ident = VarDef String Ty deriving (Show, Eq)
+instance Show Ident where
+  show (NumIdent x) = x
+  show (StrIdent s) = s ++ "$"
 
-data NumExpr
-  = BinExpr NumExpr Token.Operator NumExpr
-  | NumExpr Int
-  | NumVar Ident
-  | StrExpr String
+data Expr where
+  NumBinExpr :: Expr -> Token.ArithmeticOp -> Expr -> Expr
+  NumLitExpr :: Int -> Expr
+  NumVarExpr :: Ident -> Expr
+  StrLitExpr :: String -> Expr
+  StrVarExpr :: Ident -> Expr
+  StrCatExpr :: Expr -> Expr -> Expr
+  BoolBinExpr :: Expr -> Token.LogicalOp -> Expr -> Expr
+  deriving (Eq)
+
+instance Show Expr where
+  show (NumBinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
+  show (BoolBinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
+  show (NumLitExpr n) = show n
+  show (NumVarExpr x) = show x
+  show (StrVarExpr s) = show s
+  show (StrLitExpr s) = "\"" ++ s ++ "\""
+  show (StrCatExpr left right) = "(" ++ show left ++ " + " ++ show right ++ ")"
+
+data PrintEnding where
+  NewLine :: PrintEnding
+  NoNewLine :: PrintEnding
   deriving (Show, Eq)
 
-data StrExpr
-  = StrLit
-      String
-  | StrVar
-      Ident
-  | Concat
-      StrExpr
-      StrExpr
+data PrintKind where
+  Print :: PrintKind
+  Pause :: PrintKind
   deriving (Show, Eq)
 
-type PrintExpr = Either NumExpr StrExpr
+data Assignment where
+  Assignment :: Ident -> Expr -> Assignment
+  deriving (Eq)
 
-data PrintKind = NewLine | NoNewLine deriving (Show, Eq)
+instance Show Assignment where
+  show (Assignment x e) = show x ++ " = " ++ show e
 
-data Assignment
-  = Assignment
-      Ident
-      NumExpr
+data GotoTarget where
+  GoToIdent :: String -> GotoTarget
+  GoToLine :: Int -> GotoTarget
   deriving (Show, Eq)
 
-data GotoTarget
-  = GoToIdent String
-  | GoToLine Int
-  deriving (Show, Eq)
+data Stmt where
+  LetStmt :: [Assignment] -> Stmt
+  IfStmt :: Expr -> Stmt -> Stmt -- Should be BOOL even if we reject valid programs
+  PrintStmt :: PrintKind -> [Expr] -> PrintEnding -> Stmt
+  InputStmt :: Maybe Expr -> Expr -> Stmt
+  EndStmt :: Stmt
+  Comment :: Stmt
+  ForStmt :: Assignment -> Expr -> Stmt
+  NextStmt :: Ident -> Stmt
+  ClearStmt :: Stmt
+  GoToStmt :: GotoTarget -> Stmt
+  GoSubStmt :: GotoTarget -> Stmt
+  WaitStmt :: Expr -> Stmt
+  deriving (Eq)
 
-data Stmt
-  = LetStmt [Assignment]
-  | IfStmt NumExpr Stmt
-  | PrintStmt [PrintExpr] PrintKind
-  | InputStmt (Maybe PrintExpr) NumExpr
-  | EndStmt
-  | Comment
-  | ForStmt Assignment NumExpr
-  | NextStmt Ident
-  | ClearStmt
-  | GoToStmt GotoTarget
-  | GoSubStmt GotoTarget
-  | WaitStmt NumExpr
-  deriving (Show, Eq)
+instance Show Stmt where
+  show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
+  show (IfStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
+  show (PrintStmt k exprs kind) =
+    ( case k of
+        Print -> "PRINT "
+        Pause -> "PAUSE "
+    )
+      ++ intercalate "; " (show <$> exprs)
+      ++ case kind of
+        NewLine -> ""
+        NoNewLine -> ";"
+  show (InputStmt maybePrintExpr me) =
+    "INPUT "
+      ++ maybe "" (\e -> show e ++ "; ") maybePrintExpr
+      ++ show me
+  show EndStmt = "END"
+  show Comment = "REM"
+  show (ForStmt assign to) = "FOR " ++ show assign ++ " TO " ++ show to
+  show (NextStmt i) = "NEXT " ++ show i
+  show ClearStmt = "CLEAR"
+  show (GoToStmt target) = "GOTO " ++ show target
+  show (GoSubStmt target) = "GOSUB " ++ show target
+  show (WaitStmt e) = "WAIT " ++ show e
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
-data Line
-  = Line {lineNumber :: Int, lineLabel :: Maybe String, lineStmts :: [Stmt]}
+data Line where
+  Line ::
+    { lineNumber :: Int,
+      lineLabel :: Maybe String,
+      lineStmts :: [Stmt]
+    } ->
+    Line
   deriving (Show, Eq)
 
-newtype Program = Program {programLines :: [Line]} deriving (Eq)
+newtype Program where
+  Program :: {programLines :: [Line]} -> Program
 
 instance Show Program where
   show (Program ls) =
-    unlines
-      ( map
-          ( \case
-              Line n Nothing stmts -> show n ++ " " ++ unwords (map show stmts)
-              Line n (Just label) stmts -> show n ++ " " ++ label ++ ": " ++ unwords (map show stmts)
-          )
-          ls
-      )
+    unlines $
+      \case
+        Line n Nothing stmts -> show n ++ " " ++ intercalate " : " (show <$> stmts)
+        Line n (Just label) stmts -> show n ++ " \"" ++ label ++ "\" " ++ intercalate ": " (show <$> stmts)
+        <$> ls
 
 type TParser o = Parser [Token.Token] o
 
@@ -87,69 +130,87 @@ type TParser o = Parser [Token.Token] o
 ident :: TParser Ident
 ident = do
   s <- atom
-  maybeDollar <- optional (satisfy (== Token.Punctuation Token.Dollar))
-  case maybeDollar of
-    Just _ -> return (VarDef s Str)
-    Nothing -> return (VarDef s Num)
+  d <- optional (satisfy (== Token.Punctuation Token.Dollar))
+  case d of
+    Just _ -> return (StrIdent s)
+    Nothing -> return (NumIdent s)
+  where
+    atom = Parser (\case Token.Identifier s : rest -> Just (s, rest); _ -> Nothing)
+
+strIdent :: TParser Ident
+strIdent = do
+  s <- atom
+  _ <- satisfy (== Token.Punctuation Token.Dollar)
+  return (StrIdent s)
   where
     atom = Parser (\case Token.Identifier s : rest -> Just (s, rest); _ -> Nothing)
 
 number :: TParser Int
 number = Parser (\case Token.Number n : rest -> Just (n, rest); _ -> Nothing)
 
-operator :: Token.Operator -> TParser Token.Operator
-operator op = Parser (\case Token.Operator op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
+arithmeticOp :: Token.ArithmeticOp -> TParser Token.ArithmeticOp
+arithmeticOp op = Parser (\case Token.ArithmeticOp op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
 
-expr :: TParser NumExpr
-expr = eqExpr
+logicalOp :: Token.LogicalOp -> TParser Token.LogicalOp
+logicalOp op = Parser (\case Token.LogicalOp op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
+
+expr :: TParser Expr
+expr = strExpr <|> numExpr
   where
-    factor = parenExpr <|> numberExpr <|> identifierExpr
+    numExpr :: TParser Expr
+    numExpr = compExpr
       where
-        numberExpr = NumExpr <$> number
-        identifierExpr = NumVar <$> ident
-        parenExpr = satisfy (== Token.Punctuation Token.LeftParen) *> expr <* satisfy (== Token.Punctuation Token.RightParen)
+        factor = parenExpr <|> numLitExpr <|> numVarExpr
+          where
+            numLitExpr = NumLitExpr <$> number
+            numVarExpr = NumVarExpr <$> ident
+            parenExpr = satisfy (== Token.Punctuation Token.LeftParen) *> numExpr <* satisfy (== Token.Punctuation Token.RightParen)
 
-    mulExpr = do
-      left <- factor
-      maybeOp <- optional (operator Token.Multiply)
+        mulExpr = do
+          left <- factor
+          maybeOp <- optional (arithmeticOp Token.Multiply)
+          case maybeOp of
+            Just op -> NumBinExpr left op <$> mulExpr
+            Nothing -> return left
+
+        addSubExpr = do
+          left <- mulExpr
+          maybeOp <- optional (arithmeticOp Token.Add <|> arithmeticOp Token.Subtract)
+          case maybeOp of
+            Just op -> NumBinExpr left op <$> addSubExpr
+            Nothing -> return left
+
+        compExpr = do
+          left <- addSubExpr
+          maybeOp <-
+            optional
+              ( logicalOp Token.Equal
+                  <|> logicalOp Token.LessThan
+                  <|> logicalOp Token.GreaterThan
+                  <|> logicalOp Token.LessThanOrEqual
+                  <|> logicalOp Token.GreaterThanOrEqual
+                  <|> logicalOp Token.NotEqual
+              )
+          case maybeOp of
+            Just op -> BoolBinExpr left op <$> compExpr
+            Nothing -> return left
+
+    -- String expressions allow concatenation
+    strExpr :: TParser Expr
+    strExpr = do
+      left <- strFactor
+      maybeOp <- optional (arithmeticOp Token.Add)
       case maybeOp of
-        Just op -> BinExpr left op <$> mulExpr
+        Just _ -> StrCatExpr left <$> strExpr
         Nothing -> return left
-
-    addSubExpr = do
-      left <- mulExpr
-      maybeOp <- optional (operator Token.Add <|> operator Token.Subtract)
-      case maybeOp of
-        Just op -> BinExpr left op <$> addSubExpr
-        Nothing -> return left
-
-    eqExpr = do
-      left <- addSubExpr
-      maybeOp <- optional (operator Token.Equal <|> operator Token.LessThan <|> operator Token.GreaterThan)
-      case maybeOp of
-        Just op -> BinExpr left op <$> eqExpr
-        Nothing -> return left
-
--- String expressions allow concatenation
-strExpr :: TParser StrExpr
-strExpr = do
-  left <- strFactor
-  maybeOp <- optional (operator Token.Add)
-  case maybeOp of
-    Just _ -> Concat left <$> strExpr
-    Nothing -> return left
-  where
-    strFactor = strLit <|> strVar
       where
-        strLit = StrLit <$> stringLiteral
-        strVar = StrVar <$> ident <* satisfy (== Token.Punctuation Token.Dollar)
+        strFactor = strLit <|> strVar
+          where
+            strLit = StrLitExpr <$> stringLiteral
+            strVar = StrVarExpr <$> strIdent
 
-stringLiteral :: Parser [Token.Token] String
+stringLiteral :: TParser String
 stringLiteral = Parser (\case Token.StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
-
--- Either a string expression or a numeric expression
-printExpr :: TParser PrintExpr
-printExpr = Left <$> expr <|> Right <$> strExpr
 
 -- In our version of BASIC the LET keyword is mandatory
 -- example: LET A = 5
@@ -158,7 +219,7 @@ printExpr = Left <$> expr <|> Right <$> strExpr
 assignment :: TParser Assignment
 assignment = do
   v <- ident
-  _ <- operator Token.Equal
+  _ <- logicalOp Token.Equal
   Assignment v <$> expr
 
 letStmt :: TParser Stmt
@@ -179,13 +240,16 @@ letStmt = do
 -- will print: ABC
 printStmt :: TParser Stmt
 printStmt = do
-  _ <- satisfy (== Token.Keyword Token.Print)
-  printExpr' <- printExpr
-  restPrintExprs <- many (satisfy (== Token.Punctuation Token.SemiColon) *> printExpr)
+  k <- satisfy (== Token.Keyword Token.Print) <|> satisfy (== Token.Keyword Token.Pause)
+  exprs <- sepBy (== Token.Punctuation Token.SemiColon) expr
   semi <- optional (satisfy (== Token.Punctuation Token.SemiColon))
   return
     ( PrintStmt
-        (printExpr' : restPrintExprs)
+        ( case k of
+            Token.Keyword Token.Print -> Print
+            _ -> Pause
+        )
+        exprs
         ( case semi of
             Just _ -> NoNewLine
             Nothing -> NewLine
@@ -198,7 +262,7 @@ printStmt = do
 inputStmt :: TParser Stmt
 inputStmt = do
   _ <- satisfy (== Token.Keyword Token.Input)
-  maybePrintExpr <- optional (printExpr <* satisfy (== Token.Punctuation Token.SemiColon))
+  maybePrintExpr <- optional (expr <* satisfy (== Token.Punctuation Token.SemiColon))
   InputStmt maybePrintExpr <$> expr
 
 endStmt :: TParser Stmt
@@ -215,9 +279,9 @@ ifStmt = do
 forStmt :: TParser Stmt
 forStmt = do
   _ <- satisfy (== Token.Keyword Token.For)
-  assign <- assignment
+  a <- assignment
   _ <- satisfy (== Token.Keyword Token.To)
-  ForStmt assign <$> expr
+  ForStmt a <$> expr
 
 nextStmt :: TParser Stmt
 nextStmt = satisfy (== Token.Keyword Token.Next) *> (NextStmt <$> ident)
@@ -271,6 +335,4 @@ line = do
   return (Line lineNumber label stmts)
 
 program :: TParser Program
-program = do
-  programLines <- many line
-  return (Program programLines)
+program = Program <$> many line
