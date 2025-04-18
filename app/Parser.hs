@@ -6,7 +6,6 @@ import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.List (intercalate)
 import ParserCombinators (Parser (..), satisfy, sepBy)
-import Token (Token (Identifier), Ty (NumType))
 import Token qualified (Id (..), Keyword (..), Operation (..), Punctuation (..), Token (..), Ty (..))
 
 data Ident where
@@ -135,7 +134,7 @@ ident :: TParser Ident
 ident = numIdent <|> strIdent
   where
     numIdent :: TParser Ident
-    numIdent = Parser (\case Token.Identifier ((Token.Id s NumType)) : rest -> Just (NumIdent s, rest); _ -> Nothing)
+    numIdent = Parser (\case Token.Identifier ((Token.Id s Token.NumType)) : rest -> Just (NumIdent s, rest); _ -> Nothing)
 
     strIdent :: TParser Ident
     strIdent = Parser (\case Token.Identifier ((Token.Id s Token.StrType)) : rest -> Just (StrIdent s, rest); _ -> Nothing)
