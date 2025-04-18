@@ -6,7 +6,8 @@ import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.List (intercalate)
 import ParserCombinators (Parser (..), satisfy, sepBy)
-import Token qualified (ArithmeticOp (..), Keyword (..), LogicalOp (..), Punctuation (..), Token (..))
+import Token (Token (Identifier), Ty (NumType))
+import Token qualified (Id (..), Keyword (..), Operation (..), Punctuation (..), Token (..), Ty (..))
 
 data Ident where
   NumIdent :: String -> Ident
@@ -14,27 +15,23 @@ data Ident where
   deriving (Eq)
 
 instance Show Ident where
-  show (NumIdent x) = x
+  show (NumIdent s) = s
   show (StrIdent s) = s ++ "$"
 
 data Expr where
-  NumBinExpr :: Expr -> Token.ArithmeticOp -> Expr -> Expr
+  BinExpr :: Expr -> Token.Operation -> Expr -> Expr
   NumLitExpr :: Int -> Expr
-  NumVarExpr :: Ident -> Expr
+  VarExpr :: Ident -> Expr
   StrLitExpr :: String -> Expr
-  StrVarExpr :: Ident -> Expr
-  StrCatExpr :: Expr -> Expr -> Expr
-  BoolBinExpr :: Expr -> Token.LogicalOp -> Expr -> Expr
+  FunCallExpr :: Ident -> [Expr] -> Expr
   deriving (Eq)
 
 instance Show Expr where
-  show (NumBinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
-  show (BoolBinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
+  show (BinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
   show (NumLitExpr n) = show n
-  show (NumVarExpr x) = show x
-  show (StrVarExpr s) = show s
+  show (VarExpr x) = show x
   show (StrLitExpr s) = "\"" ++ s ++ "\""
-  show (StrCatExpr left right) = "(" ++ show left ++ " + " ++ show right ++ ")"
+  show (FunCallExpr f args) = show f ++ "(" ++ intercalate ", " (show <$> args) ++ ")"
 
 data PrintEnding where
   NewLine :: PrintEnding
@@ -71,6 +68,9 @@ data Stmt where
   GoToStmt :: GotoTarget -> Stmt
   GoSubStmt :: GotoTarget -> Stmt
   WaitStmt :: Expr -> Stmt
+  ClsStmt :: Stmt
+  RandomStmt :: Stmt
+  GprintStmt :: [Expr] -> PrintEnding -> Stmt
   deriving (Eq)
 
 instance Show Stmt where
@@ -97,6 +97,14 @@ instance Show Stmt where
   show (GoToStmt target) = "GOTO " ++ show target
   show (GoSubStmt target) = "GOSUB " ++ show target
   show (WaitStmt e) = "WAIT " ++ show e
+  show ClsStmt = "CLS"
+  show RandomStmt = "RANDOM"
+  show (GprintStmt exprs kind) =
+    "GPRINT "
+      ++ intercalate "; " (show <$> exprs)
+      ++ case kind of
+        NewLine -> ""
+        NoNewLine -> ";"
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
@@ -123,91 +131,69 @@ instance Show Program where
 
 type TParser o = Parser [Token.Token] o
 
--- An identifier is a token identifier that can optionally end with a "$" sign to indicate a string variable
--- example: A$, B, C$
--- example: A = 5
--- example: A$ = "Hello"
 ident :: TParser Ident
-ident = do
-  s <- atom
-  d <- optional (satisfy (== Token.Punctuation Token.Dollar))
-  case d of
-    Just _ -> return (StrIdent s)
-    Nothing -> return (NumIdent s)
+ident = numIdent <|> strIdent
   where
-    atom = Parser (\case Token.Identifier s : rest -> Just (s, rest); _ -> Nothing)
+    numIdent :: TParser Ident
+    numIdent = Parser (\case Token.Identifier ((Token.Id s NumType)) : rest -> Just (NumIdent s, rest); _ -> Nothing)
 
-strIdent :: TParser Ident
-strIdent = do
-  s <- atom
-  _ <- satisfy (== Token.Punctuation Token.Dollar)
-  return (StrIdent s)
-  where
-    atom = Parser (\case Token.Identifier s : rest -> Just (s, rest); _ -> Nothing)
+    strIdent :: TParser Ident
+    strIdent = Parser (\case Token.Identifier ((Token.Id s Token.StrType)) : rest -> Just (StrIdent s, rest); _ -> Nothing)
 
 number :: TParser Int
 number = Parser (\case Token.Number n : rest -> Just (n, rest); _ -> Nothing)
 
-arithmeticOp :: Token.ArithmeticOp -> TParser Token.ArithmeticOp
-arithmeticOp op = Parser (\case Token.ArithmeticOp op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
-
-logicalOp :: Token.LogicalOp -> TParser Token.LogicalOp
-logicalOp op = Parser (\case Token.LogicalOp op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
+operation :: Token.Operation -> TParser Token.Operation
+operation op = Parser (\case Token.Operation op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
 
 expr :: TParser Expr
-expr = strExpr <|> numExpr
+expr = logicalExpr
   where
-    numExpr :: TParser Expr
-    numExpr = compExpr
+    factor = parenExpr <|> numLitExpr <|> strLitExpr <|> funCallExpr <|> numVarExpr
       where
-        factor = parenExpr <|> numLitExpr <|> numVarExpr
-          where
-            numLitExpr = NumLitExpr <$> number
-            numVarExpr = NumVarExpr <$> ident
-            parenExpr = satisfy (== Token.Punctuation Token.LeftParen) *> numExpr <* satisfy (== Token.Punctuation Token.RightParen)
+        numLitExpr = NumLitExpr <$> number
+        strLitExpr = StrLitExpr <$> stringLiteral
+        numVarExpr = VarExpr <$> ident
+        parenExpr = satisfy (== Token.Punctuation Token.LeftParen) *> expr <* satisfy (== Token.Punctuation Token.RightParen)
+        funCallExpr = do
+          f <- ident
+          _ <- satisfy (== Token.Punctuation Token.LeftParen)
+          args <- sepBy (== Token.Punctuation Token.Comma) expr
+          _ <- satisfy (== Token.Punctuation Token.RightParen)
+          return (FunCallExpr f args)
 
-        mulExpr = do
-          left <- factor
-          maybeOp <- optional (arithmeticOp Token.Multiply)
-          case maybeOp of
-            Just op -> NumBinExpr left op <$> mulExpr
-            Nothing -> return left
-
-        addSubExpr = do
-          left <- mulExpr
-          maybeOp <- optional (arithmeticOp Token.Add <|> arithmeticOp Token.Subtract)
-          case maybeOp of
-            Just op -> NumBinExpr left op <$> addSubExpr
-            Nothing -> return left
-
-        compExpr = do
-          left <- addSubExpr
-          maybeOp <-
-            optional
-              ( logicalOp Token.Equal
-                  <|> logicalOp Token.LessThan
-                  <|> logicalOp Token.GreaterThan
-                  <|> logicalOp Token.LessThanOrEqual
-                  <|> logicalOp Token.GreaterThanOrEqual
-                  <|> logicalOp Token.NotEqual
-              )
-          case maybeOp of
-            Just op -> BoolBinExpr left op <$> compExpr
-            Nothing -> return left
-
-    -- String expressions allow concatenation
-    strExpr :: TParser Expr
-    strExpr = do
-      left <- strFactor
-      maybeOp <- optional (arithmeticOp Token.Add)
+    mulDivExpr = do
+      left <- factor
+      maybeOp <- optional (operation Token.Multiply <|> operation Token.Divide)
       case maybeOp of
-        Just _ -> StrCatExpr left <$> strExpr
+        Just op -> BinExpr left op <$> mulDivExpr
         Nothing -> return left
-      where
-        strFactor = strLit <|> strVar
-          where
-            strLit = StrLitExpr <$> stringLiteral
-            strVar = StrVarExpr <$> strIdent
+
+    addSubExpr = do
+      left <- mulDivExpr
+      maybeOp <-
+        optional
+          ( operation Token.Add
+              <|> operation Token.Subtract
+          )
+      case maybeOp of
+        Just op -> BinExpr left op <$> addSubExpr
+        Nothing -> return left
+
+    logicalExpr = do
+      left <- addSubExpr
+      maybeOp <-
+        optional
+          ( operation Token.Equal
+              <|> operation Token.LessThan
+              <|> operation Token.GreaterThan
+              <|> operation Token.LessThanOrEqual
+              <|> operation Token.GreaterThanOrEqual
+              <|> operation Token.NotEqual
+          )
+      case maybeOp of
+        Just op -> BinExpr left op <$> logicalExpr
+        Nothing -> return left
 
 stringLiteral :: TParser String
 stringLiteral = Parser (\case Token.StringLiteral s : rest -> Just (s, rest); _ -> Nothing)
@@ -219,7 +205,7 @@ stringLiteral = Parser (\case Token.StringLiteral s : rest -> Just (s, rest); _ 
 assignment :: TParser Assignment
 assignment = do
   v <- ident
-  _ <- logicalOp Token.Equal
+  _ <- operation Token.Equal
   Assignment v <$> expr
 
 letStmt :: TParser Stmt
@@ -249,6 +235,20 @@ printStmt = do
             Token.Keyword Token.Print -> Print
             _ -> Pause
         )
+        exprs
+        ( case semi of
+            Just _ -> NoNewLine
+            Nothing -> NewLine
+        )
+    )
+
+gprintStmt :: TParser Stmt
+gprintStmt = do
+  _ <- satisfy (== Token.Keyword Token.Gprint)
+  exprs <- sepBy (== Token.Punctuation Token.SemiColon) expr
+  semi <- optional (satisfy (== Token.Punctuation Token.SemiColon))
+  return
+    ( GprintStmt
         exprs
         ( case semi of
             Just _ -> NoNewLine
@@ -289,6 +289,12 @@ nextStmt = satisfy (== Token.Keyword Token.Next) *> (NextStmt <$> ident)
 clearStmt :: TParser Stmt
 clearStmt = satisfy (== Token.Keyword Token.Clear) $> ClearStmt
 
+clsStmt :: TParser Stmt
+clsStmt = satisfy (== Token.Keyword Token.Cls) $> ClsStmt
+
+randomStmt :: TParser Stmt
+randomStmt = satisfy (== Token.Keyword Token.Random) $> RandomStmt
+
 gotoTarget :: TParser GotoTarget
 gotoTarget =
   GoToIdent <$> stringLiteral
@@ -323,6 +329,9 @@ stmt =
     <|> gotoStmt
     <|> gosubStmt
     <|> waitStmt
+    <|> clsStmt
+    <|> randomStmt
+    <|> gprintStmt
 
 -- Parse LET statements last to avoid ambiguity with expressions
 -- multiple statements in the same line MUST be separated by ":"

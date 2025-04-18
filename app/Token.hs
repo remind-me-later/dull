@@ -1,46 +1,42 @@
 module Token
   ( Token (..),
-    ArithmeticOp (..),
-    LogicalOp (..),
+    Operation (..),
     Keyword (..),
     Punctuation (..),
     tokens,
+    Ty (..),
+    Id (..),
   )
 where
 
-import Control.Applicative (Alternative (many, some, (<|>)))
+import Control.Applicative (Alternative (many, some, (<|>)), optional)
 import Data.Functor (($>))
 import ParserCombinators (Parser, char, satisfy, string)
 
-data LogicalOp where
-  Equal :: LogicalOp
-  LessThan :: LogicalOp
-  GreaterThan :: LogicalOp
-  LessThanOrEqual :: LogicalOp
-  GreaterThanOrEqual :: LogicalOp
-  NotEqual :: LogicalOp
+data Operation where
+  Add :: Operation
+  Subtract :: Operation
+  Multiply :: Operation
+  Divide :: Operation
+  Equal :: Operation
+  LessThan :: Operation
+  GreaterThan :: Operation
+  LessThanOrEqual :: Operation
+  GreaterThanOrEqual :: Operation
+  NotEqual :: Operation
   deriving (Eq)
 
-instance Show LogicalOp where
+instance Show Operation where
+  show Add = "+"
+  show Subtract = "-"
+  show Multiply = "*"
+  show Divide = "/"
   show Equal = "="
   show LessThan = "<"
   show GreaterThan = ">"
   show LessThanOrEqual = "<="
   show GreaterThanOrEqual = ">="
   show NotEqual = "<>"
-
-data ArithmeticOp where
-  Add :: ArithmeticOp
-  Subtract :: ArithmeticOp
-  Multiply :: ArithmeticOp
-  Divide :: ArithmeticOp
-  deriving (Eq)
-
-instance Show ArithmeticOp where
-  show Add = "+"
-  show Subtract = "-"
-  show Multiply = "*"
-  show Divide = "/"
 
 data Punctuation where
   Comma :: Punctuation
@@ -62,6 +58,7 @@ instance Show Punctuation where
   show Dollar = "$"
 
 data Keyword where
+  -- Statements
   Let :: Keyword
   If :: Keyword
   Then :: Keyword
@@ -77,6 +74,9 @@ data Keyword where
   Gosub :: Keyword
   Wait :: Keyword
   Pause :: Keyword
+  Cls :: Keyword
+  Random :: Keyword
+  Gprint :: Keyword
   deriving (Eq)
 
 instance Show Keyword where
@@ -95,12 +95,23 @@ instance Show Keyword where
   show Gosub = "GOSUB"
   show Wait = "WAIT"
   show Pause = "PAUSE"
+  show Cls = "CLS"
+  show Random = "RANDOM"
+  show Gprint = "GPRINT"
+
+data Ty where
+  NumType :: Ty
+  StrType :: Ty
+  deriving (Show, Eq)
+
+data Id where
+  Id :: String -> Ty -> Id
+  deriving (Show, Eq)
 
 data Token where
-  Identifier :: String -> Token
+  Identifier :: Id -> Token
   Number :: Int -> Token
-  ArithmeticOp :: ArithmeticOp -> Token
-  LogicalOp :: LogicalOp -> Token
+  Operation :: Operation -> Token
   Keyword :: Keyword -> Token
   Punctuation :: Punctuation -> Token
   StringLiteral :: String -> Token
@@ -117,11 +128,18 @@ spaces = many space
 number :: SParser Int
 number = read <$> some (satisfy (`elem` ['0' .. '9']))
 
-identifier :: SParser String
+identifier :: SParser Id
 identifier = do
-  c <- satisfy (`elem` ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['_'])
-  cs <- many (satisfy (`elem` ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['0' .. '9'] ++ ['_']))
-  return (c : cs)
+  cs <- some (satisfy (`elem` ['a' .. 'z'] ++ ['A' .. 'Z']))
+  d <- optional (char '$')
+  return
+    ( Id
+        cs
+        ( case d of
+            Just _ -> StrType
+            Nothing -> NumType
+        )
+    )
 
 stringLiteral :: SParser String
 stringLiteral =
@@ -129,16 +147,13 @@ stringLiteral =
     *> many (satisfy (/= '"'))
     <* char '"'
 
-arithmeticOp :: SParser ArithmeticOp
-arithmeticOp =
+operation :: SParser Operation
+operation =
   (string "+" $> Add)
     <|> (string "-" $> Subtract)
     <|> (string "*" $> Multiply)
     <|> (string "/" $> Divide)
-
-logicalOp :: SParser LogicalOp
-logicalOp =
-  (string "=" $> Equal)
+    <|> (string "=" $> Equal)
     <|> (string "<=" $> LessThanOrEqual)
     <|> (string "<" $> LessThan)
     <|> (string ">=" $> GreaterThanOrEqual)
@@ -163,6 +178,9 @@ keyword =
     <|> (string "GOSUB" $> Gosub)
     <|> (string "WAIT" $> Wait)
     <|> (string "PAUSE" $> Pause)
+    <|> (string "CLS" $> Cls)
+    <|> (string "RANDOM" $> Random)
+    <|> (string "GPRINT" $> Gprint)
 
 punctuation :: SParser Punctuation
 punctuation =
@@ -181,8 +199,7 @@ token =
            <|> StringLiteral <$> stringLiteral
            <|> Keyword <$> keyword
            <|> Identifier <$> identifier
-           <|> LogicalOp <$> logicalOp
-           <|> ArithmeticOp <$> arithmeticOp
+           <|> Operation <$> operation
            <|> Punctuation <$> punctuation
        )
 
