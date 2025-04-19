@@ -6,7 +6,7 @@ import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.List (intercalate)
 import ParserCombinators (Parser (..), satisfy, sepBy)
-import Token qualified (Id (..), Keyword (..), Operation (..), Punctuation (..), Token (..), Ty (..))
+import Token qualified (Id (..), Operation (..), Punctuation (..), StmtKeyword (..), Token (..), Ty (..))
 
 data Ident where
   NumIdent :: String -> Ident
@@ -19,7 +19,7 @@ instance Show Ident where
 
 data Expr where
   BinExpr :: Expr -> Token.Operation -> Expr -> Expr
-  NumLitExpr :: Int -> Expr
+  NumLitExpr :: Double -> Expr
   VarExpr :: Ident -> Expr
   StrLitExpr :: String -> Expr
   FunCallExpr :: Ident -> [Expr] -> Expr
@@ -40,6 +40,7 @@ data PrintEnding where
 data PrintKind where
   Print :: PrintKind
   Pause :: PrintKind
+  Using :: PrintKind
   deriving (Show, Eq)
 
 data Assignment where
@@ -50,13 +51,22 @@ instance Show Assignment where
   show (Assignment x e) = show x ++ " = " ++ show e
 
 data GotoTarget where
-  GoToIdent :: String -> GotoTarget
-  GoToLine :: Int -> GotoTarget
-  deriving (Show, Eq)
+  GoToLabel :: String -> GotoTarget
+  GoToLine :: Double -> GotoTarget
+  deriving (Eq)
+
+instance Show GotoTarget where
+  show (GoToLabel s) = "\"" ++ s ++ "\""
+  show (GoToLine n) = show n
+
+data PokeKind where
+  Me0 :: PokeKind
+  Me1 :: PokeKind
+  deriving (Eq)
 
 data Stmt where
   LetStmt :: [Assignment] -> Stmt
-  IfStmt :: Expr -> Stmt -> Stmt -- Should be BOOL even if we reject valid programs
+  IfStmt :: Expr -> Stmt -> Stmt
   PrintStmt :: PrintKind -> [Expr] -> PrintEnding -> Stmt
   InputStmt :: Maybe Expr -> Expr -> Stmt
   EndStmt :: Stmt
@@ -66,10 +76,19 @@ data Stmt where
   ClearStmt :: Stmt
   GoToStmt :: GotoTarget -> Stmt
   GoSubStmt :: GotoTarget -> Stmt
-  WaitStmt :: Expr -> Stmt
+  WaitStmt :: Maybe Expr -> Stmt
   ClsStmt :: Stmt
   RandomStmt :: Stmt
   GprintStmt :: [Expr] -> PrintEnding -> Stmt
+  GCursorStmt :: Expr -> Stmt
+  CursorStmt :: Expr -> Stmt
+  BeepStmt :: [Expr] -> Stmt
+  ReturnStmt :: Stmt
+  PokeStmt :: PokeKind -> [Expr] -> Stmt
+  DimStmt :: Expr -> Stmt
+  ReadStmt :: [Expr] -> Stmt
+  DataStmt :: [Expr] -> Stmt
+  RestoreStmt :: Maybe Expr -> Stmt
   deriving (Eq)
 
 instance Show Stmt where
@@ -79,6 +98,7 @@ instance Show Stmt where
     ( case k of
         Print -> "PRINT "
         Pause -> "PAUSE "
+        Using -> "USING "
     )
       ++ intercalate "; " (show <$> exprs)
       ++ case kind of
@@ -104,13 +124,28 @@ instance Show Stmt where
       ++ case kind of
         NewLine -> ""
         NoNewLine -> ";"
+  show (GCursorStmt e) = "GCURSOR " ++ show e
+  show (BeepStmt exprs) = "BEEP " ++ intercalate ", " (show <$> exprs)
+  show (CursorStmt e) = "CURSOR " ++ show e
+  show ReturnStmt = "RETURN"
+  show (PokeStmt kind exprs) =
+    "POKE"
+      ++ case kind of
+        Me0 -> " "
+        Me1 -> "# "
+      ++ intercalate ", " (show <$> exprs)
+  show (DimStmt e) = "DIM " ++ show e
+  show (ReadStmt ids) = "READ " ++ intercalate ", " (show <$> ids)
+  show (DataStmt exprs) = "DATA " ++ intercalate ", " (show <$> exprs)
+  show (RestoreStmt Nothing) = "RESTORE"
+  show (RestoreStmt (Just n)) = "RESTORE " ++ show n
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
 data Line where
   Line ::
-    { lineNumber :: Int,
+    { lineNumber :: Double,
       lineLabel :: Maybe String,
       lineStmts :: [Stmt]
     } ->
@@ -139,14 +174,14 @@ ident = numIdent <|> strIdent
     strIdent :: TParser Ident
     strIdent = Parser (\case Token.Identifier ((Token.Id s Token.StrType)) : rest -> Just (StrIdent s, rest); _ -> Nothing)
 
-number :: TParser Int
+number :: TParser Double
 number = Parser (\case Token.Number n : rest -> Just (n, rest); _ -> Nothing)
 
 operation :: Token.Operation -> TParser Token.Operation
 operation op = Parser (\case Token.Operation op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
 
 expr :: TParser Expr
-expr = logicalExpr
+expr = comparisonExpr
   where
     factor = parenExpr <|> numLitExpr <|> strLitExpr <|> funCallExpr <|> numVarExpr
       where
@@ -163,7 +198,7 @@ expr = logicalExpr
 
     mulDivExpr = do
       left <- factor
-      maybeOp <- optional (operation Token.Multiply <|> operation Token.Divide)
+      maybeOp <- optional (operation Token.Multiply <|> operation Token.Divide <|> operation Token.Caret)
       case maybeOp of
         Just op -> BinExpr left op <$> mulDivExpr
         Nothing -> return left
@@ -179,8 +214,22 @@ expr = logicalExpr
         Just op -> BinExpr left op <$> addSubExpr
         Nothing -> return left
 
-    logicalExpr = do
+    orExpr = do
       left <- addSubExpr
+      maybeOp <- optional (operation Token.Or)
+      case maybeOp of
+        Just op -> BinExpr left op <$> orExpr
+        Nothing -> return left
+
+    andExpr = do
+      left <- orExpr
+      maybeOp <- optional (operation Token.And)
+      case maybeOp of
+        Just op -> BinExpr left op <$> andExpr
+        Nothing -> return left
+
+    comparisonExpr = do
+      left <- andExpr
       maybeOp <-
         optional
           ( operation Token.Equal
@@ -191,7 +240,7 @@ expr = logicalExpr
               <|> operation Token.NotEqual
           )
       case maybeOp of
-        Just op -> BinExpr left op <$> logicalExpr
+        Just op -> BinExpr left op <$> comparisonExpr
         Nothing -> return left
 
 stringLiteral :: TParser String
@@ -225,14 +274,15 @@ letStmt = do
 -- will print: ABC
 printStmt :: TParser Stmt
 printStmt = do
-  k <- satisfy (== Token.Keyword Token.Print) <|> satisfy (== Token.Keyword Token.Pause)
+  k <- satisfy (== Token.Keyword Token.Print) <|> satisfy (== Token.Keyword Token.Pause) <|> satisfy (== Token.Keyword Token.Using)
   exprs <- sepBy (== Token.Punctuation Token.SemiColon) expr
   semi <- optional (satisfy (== Token.Punctuation Token.SemiColon))
   return
     ( PrintStmt
         ( case k of
-            Token.Keyword Token.Print -> Print
-            _ -> Pause
+            Token.Keyword Token.Pause -> Pause
+            Token.Keyword Token.Using -> Using
+            _ -> Print
         )
         exprs
         ( case semi of
@@ -241,8 +291,8 @@ printStmt = do
         )
     )
 
-gprintStmt :: TParser Stmt
-gprintStmt = do
+gPrintStmt :: TParser Stmt
+gPrintStmt = do
   _ <- satisfy (== Token.Keyword Token.Gprint)
   exprs <- sepBy (== Token.Punctuation Token.SemiColon) expr
   semi <- optional (satisfy (== Token.Punctuation Token.SemiColon))
@@ -254,6 +304,16 @@ gprintStmt = do
             Nothing -> NewLine
         )
     )
+
+gCursorStmt :: TParser Stmt
+gCursorStmt = do
+  _ <- satisfy (== Token.Keyword Token.GCursor)
+  GCursorStmt <$> expr
+
+cursorStmt :: TParser Stmt
+cursorStmt = do
+  _ <- satisfy (== Token.Keyword Token.Cursor)
+  CursorStmt <$> expr
 
 -- An input statement can contain an optional print expression
 -- example: INPUT A$, B$
@@ -296,7 +356,7 @@ randomStmt = satisfy (== Token.Keyword Token.Random) $> RandomStmt
 
 gotoTarget :: TParser GotoTarget
 gotoTarget =
-  GoToIdent <$> stringLiteral
+  GoToLabel <$> stringLiteral
     <|> GoToLine <$> number
 
 gotoStmt :: TParser Stmt
@@ -306,13 +366,56 @@ gosubStmt :: TParser Stmt
 gosubStmt = satisfy (== Token.Keyword Token.Gosub) *> (GoSubStmt <$> gotoTarget)
 
 waitStmt :: TParser Stmt
-waitStmt = satisfy (== Token.Keyword Token.Wait) *> (WaitStmt <$> expr)
+waitStmt = satisfy (== Token.Keyword Token.Wait) *> (WaitStmt <$> optional expr)
 
 comment :: TParser Stmt
 comment = do
   _ <- satisfy (== Token.Keyword Token.Remark)
   _ <- many (satisfy (/= Token.Punctuation Token.NewLine))
   return Comment
+
+beepStmt :: TParser Stmt
+beepStmt = do
+  _ <- satisfy (== Token.Keyword Token.Beep)
+  exprs <- sepBy (== Token.Punctuation Token.Comma) expr
+  return (BeepStmt exprs)
+
+returnStmt :: TParser Stmt
+returnStmt = satisfy (== Token.Keyword Token.Return) $> ReturnStmt
+
+pokeStmt :: TParser Stmt
+pokeStmt = do
+  _ <- satisfy (== Token.Keyword Token.Poke)
+  kind <- optional (satisfy (== Token.Punctuation Token.Hashtag))
+  exprs <- sepBy (== Token.Punctuation Token.Comma) expr
+  return
+    ( PokeStmt
+        ( case kind of
+            Just _ -> Me1
+            Nothing -> Me0
+        )
+        exprs
+    )
+
+dimStmt :: TParser Stmt
+dimStmt = do
+  _ <- satisfy (== Token.Keyword Token.Dim)
+  DimStmt <$> expr
+
+dataStmt :: TParser Stmt
+dataStmt = do
+  _ <- satisfy (== Token.Keyword Token.Data)
+  DataStmt <$> sepBy (== Token.Punctuation Token.Comma) expr
+
+readStmt :: TParser Stmt
+readStmt = do
+  _ <- satisfy (== Token.Keyword Token.Read)
+  ReadStmt <$> sepBy (== Token.Punctuation Token.Comma) expr
+
+restoreStmt :: TParser Stmt
+restoreStmt = do
+  _ <- satisfy (== Token.Keyword Token.Restore)
+  RestoreStmt <$> optional expr
 
 stmt :: TParser Stmt
 stmt =
@@ -330,7 +433,16 @@ stmt =
     <|> waitStmt
     <|> clsStmt
     <|> randomStmt
-    <|> gprintStmt
+    <|> gPrintStmt
+    <|> gCursorStmt
+    <|> beepStmt
+    <|> cursorStmt
+    <|> returnStmt
+    <|> pokeStmt
+    <|> dimStmt
+    <|> readStmt
+    <|> dataStmt
+    <|> restoreStmt
 
 -- Parse LET statements last to avoid ambiguity with expressions
 -- multiple statements in the same line MUST be separated by ":"

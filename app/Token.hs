@@ -1,7 +1,7 @@
 module Token
   ( Token (..),
     Operation (..),
-    Keyword (..),
+    StmtKeyword (..),
     Punctuation (..),
     tokens,
     Ty (..),
@@ -24,6 +24,9 @@ data Operation where
   LessThanOrEqual :: Operation
   GreaterThanOrEqual :: Operation
   NotEqual :: Operation
+  Or :: Operation
+  And :: Operation
+  Caret :: Operation
   deriving (Eq)
 
 instance Show Operation where
@@ -32,11 +35,14 @@ instance Show Operation where
   show Multiply = "*"
   show Divide = "/"
   show Equal = "="
-  show LessThan = "<"
-  show GreaterThan = ">"
   show LessThanOrEqual = "<="
   show GreaterThanOrEqual = ">="
   show NotEqual = "<>"
+  show LessThan = "<"
+  show GreaterThan = ">"
+  show Or = "OR"
+  show And = "AND"
+  show Caret = "^"
 
 data Punctuation where
   Comma :: Punctuation
@@ -46,6 +52,8 @@ data Punctuation where
   RightParen :: Punctuation
   NewLine :: Punctuation
   Dollar :: Punctuation
+  Dot :: Punctuation
+  Hashtag :: Punctuation
   deriving (Eq)
 
 instance Show Punctuation where
@@ -56,30 +64,42 @@ instance Show Punctuation where
   show RightParen = ")"
   show NewLine = "\n"
   show Dollar = "$"
+  show Dot = "."
+  show Hashtag = "#"
 
-data Keyword where
+data StmtKeyword where
   -- Statements
-  Let :: Keyword
-  If :: Keyword
-  Then :: Keyword
-  Input :: Keyword
-  Print :: Keyword
-  End :: Keyword
-  Remark :: Keyword
-  For :: Keyword
-  To :: Keyword
-  Next :: Keyword
-  Clear :: Keyword
-  Goto :: Keyword
-  Gosub :: Keyword
-  Wait :: Keyword
-  Pause :: Keyword
-  Cls :: Keyword
-  Random :: Keyword
-  Gprint :: Keyword
+  Let :: StmtKeyword
+  If :: StmtKeyword
+  Then :: StmtKeyword
+  Input :: StmtKeyword
+  Print :: StmtKeyword
+  End :: StmtKeyword
+  Remark :: StmtKeyword
+  For :: StmtKeyword
+  To :: StmtKeyword
+  Next :: StmtKeyword
+  Clear :: StmtKeyword
+  Goto :: StmtKeyword
+  Gosub :: StmtKeyword
+  Wait :: StmtKeyword
+  Pause :: StmtKeyword
+  Cls :: StmtKeyword
+  Random :: StmtKeyword
+  Gprint :: StmtKeyword
+  GCursor :: StmtKeyword
+  Cursor :: StmtKeyword
+  Beep :: StmtKeyword
+  Using :: StmtKeyword
+  Return :: StmtKeyword
+  Poke :: StmtKeyword
+  Dim :: StmtKeyword
+  Read :: StmtKeyword
+  Data :: StmtKeyword
+  Restore :: StmtKeyword
   deriving (Eq)
 
-instance Show Keyword where
+instance Show StmtKeyword where
   show Let = "LET"
   show If = "IF"
   show Then = "THEN"
@@ -98,6 +118,16 @@ instance Show Keyword where
   show Cls = "CLS"
   show Random = "RANDOM"
   show Gprint = "GPRINT"
+  show Cursor = "CURSOR"
+  show GCursor = "GCURSOR"
+  show Beep = "BEEP"
+  show Using = "USING"
+  show Return = "RETURN"
+  show Poke = "POKE"
+  show Dim = "DIM"
+  show Read = "READ"
+  show Data = "DATA"
+  show Restore = "RESTORE"
 
 data Ty where
   NumType :: Ty
@@ -110,9 +140,9 @@ data Id where
 
 data Token where
   Identifier :: Id -> Token
-  Number :: Int -> Token
+  Number :: Double -> Token
   Operation :: Operation -> Token
-  Keyword :: Keyword -> Token
+  Keyword :: StmtKeyword -> Token
   Punctuation :: Punctuation -> Token
   StringLiteral :: String -> Token
   deriving (Show, Eq)
@@ -125,8 +155,13 @@ space = satisfy (`elem` " \t")
 spaces :: SParser String
 spaces = many space
 
-number :: SParser Int
-number = read <$> some (satisfy (`elem` ['0' .. '9']))
+-- Can be an integer, for example 123, or a float, for example 123.45
+number :: SParser Double
+number = do
+  wholePart <- some (satisfy (`elem` ['0' .. '9']))
+  decimalPart <- optional (char '.' *> some (satisfy (`elem` ['0' .. '9'])))
+  let numberStr = wholePart ++ maybe "" ('.' :) decimalPart
+  return (read numberStr)
 
 identifier :: SParser Id
 identifier = do
@@ -155,13 +190,16 @@ operation =
     <|> (string "/" $> Divide)
     <|> (string "=" $> Equal)
     <|> (string "<=" $> LessThanOrEqual)
+    <|> (string "<>" $> NotEqual)
     <|> (string "<" $> LessThan)
     <|> (string ">=" $> GreaterThanOrEqual)
     <|> (string ">" $> GreaterThan)
-    <|> (string "<>" $> NotEqual)
+    <|> (string "OR" $> Or)
+    <|> (string "AND" $> And)
+    <|> (string "^" $> Caret)
 
 -- Ensure that keywords are separated by spaces. Otherwise the parser will split valid identifiers like `let1` into `let` and `1`.
-keyword :: SParser Keyword
+keyword :: SParser StmtKeyword
 keyword =
   (string "LET" $> Let)
     <|> (string "IF" $> If)
@@ -181,16 +219,28 @@ keyword =
     <|> (string "CLS" $> Cls)
     <|> (string "RANDOM" $> Random)
     <|> (string "GPRINT" $> Gprint)
+    <|> (string "GCURSOR" $> GCursor)
+    <|> (string "BEEP" $> Beep)
+    <|> (string "CURSOR" $> Cursor)
+    <|> (string "USING" $> Using)
+    <|> (string "RETURN" $> Return)
+    <|> (string "POKE" $> Poke)
+    <|> (string "DIM" $> Dim)
+    <|> (string "READ" $> Read)
+    <|> (string "DATA" $> Data)
+    <|> (string "RESTORE" $> Restore)
 
 punctuation :: SParser Punctuation
 punctuation =
   (char ',' $> Comma)
+    <|> (char '.' $> Dot)
     <|> (char ':' $> Colon)
     <|> (char ';' $> SemiColon)
     <|> (char '(' $> LeftParen)
     <|> (char ')' $> RightParen)
     <|> (char '$' $> Dollar)
     <|> (char '\n' $> NewLine)
+    <|> (char '#' $> Hashtag)
 
 token :: SParser Token
 token =
@@ -198,9 +248,9 @@ token =
     *> ( Number <$> number
            <|> StringLiteral <$> stringLiteral
            <|> Keyword <$> keyword
-           <|> Identifier <$> identifier
            <|> Operation <$> operation
            <|> Punctuation <$> punctuation
+           <|> Identifier <$> identifier
        )
 
 tokens :: SParser [Token]
