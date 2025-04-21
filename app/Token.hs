@@ -6,6 +6,7 @@ module Token
     tokens,
     Ty (..),
     Id (..),
+    FunctionName (..),
   )
 where
 
@@ -138,6 +139,34 @@ data Id where
   Id :: String -> Ty -> Id
   deriving (Show, Eq)
 
+data FunctionArity where
+  Arity0 :: FunctionArity
+  Arity1 :: FunctionArity
+  Arity2 :: FunctionArity
+  Arity3 :: FunctionArity
+  deriving (Show, Eq)
+
+data FunctionName where
+  -- String functions
+  MidStr :: FunctionArity -> FunctionName
+  LeftStr :: FunctionArity -> FunctionName
+  RightStr :: FunctionArity -> FunctionName
+  InkeyStr :: FunctionArity -> FunctionName
+  -- Integer functions
+  Point :: FunctionArity -> FunctionName
+  Rnd :: FunctionArity -> FunctionName
+  Int :: FunctionArity -> FunctionName
+  deriving (Eq)
+
+instance Show FunctionName where
+  show (MidStr _) = "MID$"
+  show (LeftStr _) = "LEFT$"
+  show (RightStr _) = "RIGHT$"
+  show (Point _) = "POINT"
+  show (Rnd _) = "RND"
+  show (InkeyStr _) = "INKEY$"
+  show (Int _) = "INT"
+
 data Token where
   Identifier :: Id -> Token
   Number :: Double -> Token
@@ -145,6 +174,7 @@ data Token where
   Keyword :: StmtKeyword -> Token
   Punctuation :: Punctuation -> Token
   StringLiteral :: String -> Token
+  FunctionName :: FunctionName -> Token
   deriving (Show, Eq)
 
 type SParser o = Parser String o
@@ -165,16 +195,27 @@ number = do
 
 identifier :: SParser Id
 identifier = do
-  cs <- some (satisfy (`elem` ['a' .. 'z'] ++ ['A' .. 'Z']))
+  c <- satisfy (`elem` ['A' .. 'Z'])
+  cs <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
   d <- optional (char '$')
   return
     ( Id
-        cs
+        (c : maybe "" (: []) cs)
         ( case d of
             Just _ -> StrType
             Nothing -> NumType
         )
     )
+
+functionName :: SParser FunctionName
+functionName =
+  (string "MID$" $> MidStr Arity3)
+    <|> (string "LEFT$" $> LeftStr Arity2)
+    <|> (string "RIGHT$" $> RightStr Arity2)
+    <|> (string "POINT" $> Point Arity1)
+    <|> (string "RND" $> Rnd Arity1)
+    <|> (string "INKEY$" $> InkeyStr Arity0)
+    <|> (string "INT" $> Int Arity1)
 
 stringLiteral :: SParser String
 stringLiteral =
@@ -206,7 +247,7 @@ keyword =
     <|> (string "THEN" $> Then)
     <|> (string "PRINT" $> Print)
     <|> (string "END" $> End)
-    <|> (string "REM" $> Remark)
+    <|> (string "REM" <* many (satisfy (/= '\n')) $> Remark) -- Ignore the rest of the line
     <|> (string "INPUT" $> Input)
     <|> (string "FOR" $> For)
     <|> (string "TO" $> To)
@@ -247,9 +288,10 @@ token =
   spaces
     *> ( Number <$> number
            <|> StringLiteral <$> stringLiteral
+           <|> Punctuation <$> punctuation
            <|> Keyword <$> keyword
            <|> Operation <$> operation
-           <|> Punctuation <$> punctuation
+           <|> FunctionName <$> functionName
            <|> Identifier <$> identifier
        )
 

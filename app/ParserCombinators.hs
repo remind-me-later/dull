@@ -9,7 +9,7 @@ module ParserCombinators
   )
 where
 
-import Control.Applicative
+import Control.Applicative (Alternative (empty, many, (<|>)))
 
 newtype Parser i o = Parser {parse :: i -> Maybe (o, i)}
 

@@ -6,7 +6,15 @@ import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.List (intercalate)
 import ParserCombinators (Parser (..), satisfy, sepBy)
-import Token qualified (Id (..), Operation (..), Punctuation (..), StmtKeyword (..), Token (..), Ty (..))
+import Token qualified
+  ( FunctionName (..),
+    Id (..),
+    Operation (..),
+    Punctuation (..),
+    StmtKeyword (..),
+    Token (..),
+    Ty (..),
+  )
 
 data Ident where
   NumIdent :: String -> Ident
@@ -22,7 +30,7 @@ data Expr where
   NumLitExpr :: Double -> Expr
   VarExpr :: Ident -> Expr
   StrLitExpr :: String -> Expr
-  FunCallExpr :: Ident -> [Expr] -> Expr
+  FunCallExpr :: Token.FunctionName -> [Expr] -> Expr
   deriving (Eq)
 
 instance Show Expr where
@@ -180,6 +188,9 @@ number = Parser (\case Token.Number n : rest -> Just (n, rest); _ -> Nothing)
 operation :: Token.Operation -> TParser Token.Operation
 operation op = Parser (\case Token.Operation op' : rest | op == op' -> Just (op, rest); _ -> Nothing)
 
+funName :: TParser Token.FunctionName
+funName = Parser (\case (Token.FunctionName f) : rest -> Just (f, rest); _ -> Nothing)
+
 expr :: TParser Expr
 expr = comparisonExpr
   where
@@ -190,7 +201,7 @@ expr = comparisonExpr
         numVarExpr = VarExpr <$> ident
         parenExpr = satisfy (== Token.Punctuation Token.LeftParen) *> expr <* satisfy (== Token.Punctuation Token.RightParen)
         funCallExpr = do
-          f <- ident
+          f <- funName
           _ <- satisfy (== Token.Punctuation Token.LeftParen)
           args <- sepBy (== Token.Punctuation Token.Comma) expr
           _ <- satisfy (== Token.Punctuation Token.RightParen)
