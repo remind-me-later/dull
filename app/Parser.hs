@@ -1,6 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Parser (Expr (..), Stmt (..), TParser, Program (..), program) where
+module Parser
+  ( Expr (..),
+    Stmt (..),
+    TParser,
+    Program (..),
+    program,
+    Line (..),
+    Ident (..),
+    Assignment (..),
+  )
+where
 
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
