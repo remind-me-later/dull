@@ -1,21 +1,6 @@
 cabal-version:      3.0
--- The cabal-version field refers to the version of the .cabal specification,
--- and can be different from the cabal-install (the tool) version and the
--- Cabal (the library) version you are using. As such, the Cabal (the library)
--- version used must be equal or greater than the version stated in this field.
--- Starting from the specification version 2.2, the cabal-version field must be
--- the first thing in the cabal file.
-
 name:               dull
 version:            0.1.0.0
-
--- A short (one-line) description of the package.
--- synopsis:
-
--- A longer description of the package.
--- description:
-
--- The license under which the package is released.
 license:            BSD-3-Clause
 license-file:       LICENSE
 author:             Ricardo Maurizio Paul
@@ -23,39 +8,29 @@ maintainer:         memaurifu14@gmail.com
 category:           Language
 build-type:         Simple
 
--- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
-extra-doc-files:    CHANGELOG.md
-
--- Extra source files to be distributed with the package, such as examples, or a tutorial module.
--- extra-source-files:
-
 common warnings
     ghc-options: -Wall
 
-executable dull
-    -- Import common warning flags.
+library
     import:           warnings
-
-    -- .hs or .lhs file containing the Main module.
-    main-is:          Main.hs
-
-    -- Modules included in this executable, other than Main.
-    other-modules: 
-        Ast.Types
-        Ast.Parser 
-        TypeSystem
+    exposed-modules:  Ast.Types
+                      Ast.Parser
+                      TypeSystem
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
-
-    -- Other library packages from which modules are imported.
     build-depends:    base >= 4.17
                         , parsec >= 3.1
                         , containers >= 0.6
                         , mtl >= 2.2
+    hs-source-dirs:   src
+    default-language: GHC2021
 
-    -- Directories containing source files.
+executable dull
+    import:           warnings
+    main-is:          Main.hs
+    build-depends:    base >= 4.17
+                        , containers >= 0.7
+                        , dull
     hs-source-dirs:   app
-
-    -- Base language which the package is written in.
     default-language: GHC2021

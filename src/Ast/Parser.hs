@@ -11,7 +11,6 @@ import Text.Parsec
     satisfy,
     sepBy,
     skipMany,
-    space,
     string,
     try,
   )
@@ -19,8 +18,10 @@ import Text.Parsec
 type Parser = ParsecT String () IO
 
 -- space consumer
+-- New lines have semantic meaning in BASIC, so we don't consume them
+-- carriage returns should always be followed by a new line so it's safe to ignore them
 sc :: Parser ()
-sc = skipMany (space $> ())
+sc = skipMany (satisfy (`elem` [' ', '\t', '\r']))
 
 lex :: Parser a -> Parser a
 lex p = p <* sc
@@ -70,18 +71,6 @@ stmtKeyword :: StmtKeyword -> Parser StmtKeyword
 stmtKeyword keyword = Ast.Parser.lex $ do
   try (string (show keyword) $> keyword)
 
-punctuation :: Parser Punctuation
-punctuation = Ast.Parser.lex $ do
-  try (char ',' $> Comma)
-    <|> try (char '.' $> Dot)
-    <|> try (char ':' $> Colon)
-    <|> try (char ';' $> SemiColon)
-    <|> try (char '(' $> LeftParen)
-    <|> try (char ')' $> RightParen)
-    <|> try (char '$' $> Dollar)
-    <|> try (char '\n' $> NewLine)
-    <|> try (char '#' $> Hashtag)
-
 parens :: Parser a -> Parser a
 parens p = Ast.Parser.lex $ do
   _ <- char '('
@@ -91,6 +80,13 @@ parens p = Ast.Parser.lex $ do
 
 commaSeparated :: Parser a -> Parser [a]
 commaSeparated p = Ast.Parser.lex $ sepBy p (Ast.Parser.lex (char ','))
+
+semicolonSeparated :: Parser a -> Parser [a]
+semicolonSeparated p = Ast.Parser.lex $ sepBy p (Ast.Parser.lex (char ';'))
+
+-- Parse new line, possibly with carriage return
+newline :: Parser ()
+newline = Ast.Parser.lex (many (char '\n') $> ())
 
 expression :: Parser Expr
 expression = comparisonExpr
@@ -156,7 +152,7 @@ letStmt = do
 printStmt :: Parser Stmt
 printStmt = do
   k <- stmtKeyword Print <|> stmtKeyword Pause <|> stmtKeyword Using
-  exprs <- commaSeparated expression
+  exprs <- semicolonSeparated expression
   semi <- optional (Ast.Parser.lex (char ';'))
   return
     ( PrintStmt
@@ -322,13 +318,19 @@ stmt =
     <|> try dataStmt
     <|> restoreStmt
 
+integer :: Parser Int
+integer = Ast.Parser.lex $ do
+  digits <- many1 (satisfy (`elem` ['0' .. '9']))
+  return (read digits)
+
 line :: Parser Line
 line = do
-  lineNumber <- number
-  label <- optional stringLiteral
-  stmts <- sepBy stmt (Ast.Parser.lex (char ':'))
-  _ <- optional (Ast.Parser.lex (char '\n'))
-  return (Line lineNumber label stmts)
+  lineNumber <- integer
+  lineLabel <- optional stringLiteral
+  lineStmts <- sepBy stmt (Ast.Parser.lex (char ':'))
+  -- mandatory newline at the end of a line
+  _ <- newline
+  return Line {lineNumber, lineLabel, lineStmts}
 
 program :: Parser Program
 program = Program <$> many line

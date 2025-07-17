@@ -35,29 +35,6 @@ instance Show Operation where
   show And = "AND"
   show Caret = "^"
 
-data Punctuation where
-  Comma :: Punctuation
-  Colon :: Punctuation
-  SemiColon :: Punctuation
-  LeftParen :: Punctuation
-  RightParen :: Punctuation
-  NewLine :: Punctuation
-  Dollar :: Punctuation
-  Dot :: Punctuation
-  Hashtag :: Punctuation
-  deriving (Eq)
-
-instance Show Punctuation where
-  show Comma = ","
-  show Colon = ":"
-  show SemiColon = ";"
-  show LeftParen = "("
-  show RightParen = ")"
-  show NewLine = "\n"
-  show Dollar = "$"
-  show Dot = "."
-  show Hashtag = "#"
-
 data StmtKeyword where
   -- Statements
   Let :: StmtKeyword
@@ -207,6 +184,8 @@ data PokeKind where
 data Stmt where
   LetStmt :: [Assignment] -> Stmt
   IfStmt :: Expr -> Stmt -> Stmt
+  -- FIXME: the PRINT statement can swparate the screen in two sections, with
+  -- the first and second section being comma separated, skip for now
   PrintStmt :: PrintKind -> [Expr] -> PrintEnding -> Stmt
   InputStmt :: Maybe Expr -> Expr -> Stmt
   EndStmt :: Stmt
@@ -280,12 +259,14 @@ instance Show Stmt where
   show (RestoreStmt Nothing) = "RESTORE"
   show (RestoreStmt (Just n)) = "RESTORE " ++ show n
 
+type LineNumber = Int
+
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
 data Line where
   Line ::
-    { lineNumber :: Double,
+    { lineNumber :: LineNumber,
       lineLabel :: Maybe String,
       lineStmts :: [Stmt]
     } ->
