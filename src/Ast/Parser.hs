@@ -1,8 +1,13 @@
-module Ast.Parser where
+module Ast.Parser
+  ( parseProgram,
+  )
+where
 
 import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
+import Control.Monad (when)
 import Data.Functor (($>))
+import Data.Maybe (fromMaybe)
 import Text.Parsec
   ( ParsecT,
     char,
@@ -28,10 +33,30 @@ lex p = p <* sc
 
 number :: Parser Double -- FIXME: should use the Number representation of BASIC
 number = Ast.Parser.lex $ do
-  wholePart <- many1 (satisfy (`elem` ['0' .. '9']))
-  decimalPart <- optional (char '.' *> many1 (satisfy (`elem` ['0' .. '9'])))
-  let numberStr = wholePart ++ maybe "" ('.' :) decimalPart
-  return (read numberStr)
+  wholePart <- many (satisfy (`elem` ['0' .. '9']))
+  case wholePart of
+    [] -> do
+      -- now we must have a decimal part
+      _ <- char '.'
+      decimalPart <- many1 (satisfy (`elem` ['0' .. '9']))
+      return (read ("0." ++ decimalPart))
+    _ -> do
+      -- if we have a whole part, we can have an optional decimal part
+      decimalPart <- optional (char '.' *> many1 (satisfy (`elem` ['0' .. '9'])))
+      case decimalPart of
+        Just d -> return (read (wholePart ++ "." ++ d))
+        Nothing -> return (read wholePart)
+
+integer :: Parser Int
+integer = Ast.Parser.lex $ do
+  digits <- many1 (satisfy (`elem` ['0' .. '9']))
+  return (read digits)
+
+keyword :: String -> Parser String
+keyword kw = Ast.Parser.lex $ string kw
+
+symbol :: Char -> Parser Char
+symbol sym = Ast.Parser.lex $ char sym
 
 -- Variables consist of the following:
 -- \[A-Z][A-Z\d]$?
@@ -46,15 +71,60 @@ ident = Ast.Parser.lex $ do
     Just _ -> return (StrVar varName)
     Nothing -> return (NumVar varName)
 
-functionName :: Parser FunctionName -- TODO: should arity be defined here?
-functionName = Ast.Parser.lex $ do
-  try (string "MID$" $> MidStr Arity3)
-    <|> try (string "LEFT$" $> LeftStr Arity2)
-    <|> try (string "RIGHT$" $> RightStr Arity2)
-    <|> try (string "INKEY$" $> InkeyStr Arity0)
-    <|> try (string "POINT" $> Point Arity1)
-    <|> try (string "RND" $> Rnd Arity1)
-    <|> try (string "INT" $> Int Arity1)
+pseudoVariable :: Parser PseudoVariable
+pseudoVariable =
+  try (keyword "TIME" $> TimePseudoVar)
+    <|> keyword "INKEY$" $> InkeyPseudoVar
+
+lvalue :: Parser LValue
+lvalue =
+  Ast.Parser.lex
+    ( try (LValuePseudoVar <$> pseudoVariable)
+        <|> ( do
+                ident' <- ident
+                index <- optional (parens expression)
+                case index of
+                  Just idx -> return (LValueArrayAccess ident' idx)
+                  Nothing -> return (LValueIdent ident')
+            )
+    )
+
+functionCall :: Parser Function -- TODO: should arity be defined here?
+functionCall =
+  try (keyword "MID$" $> MidFunName)
+    <|> try (keyword "LEFT$" $> LeftFunName)
+    <|> try (keyword "RIGHT$" $> RightFunName)
+    <|> try asciiFunCall
+    <|> try pointFunCall
+    <|> try rndFunCall
+    <|> try intFunCall
+    <|> sgnFunCall
+  where
+    rndFunCall = do
+      _ <- keyword "RND"
+      RndFun <$> integer
+    asciiFunCall = do
+      _ <- keyword "ASC"
+      -- either a char or a string variable
+      arg <-
+        try
+          ( do
+              strLit <- stringLiteral
+              case strLit of
+                [c] -> return (AsciiFunArgChar c)
+                _ -> return (AsciiFunArgChar '\0') -- empty char for strings
+          )
+          <|> (AsciiFunArgVar <$> ident)
+      return (AsciiFun arg)
+    sgnFunCall = do
+      _ <- keyword "SGN"
+      SgnFun <$> expression
+    intFunCall = do
+      _ <- keyword "INT"
+      IntFun <$> expression
+    pointFunCall = do
+      _ <- keyword "POINT"
+      PointFun <$> expression
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -63,204 +133,255 @@ stringLiteral = Ast.Parser.lex $ do
   _ <- char '"'
   return content
 
-operation :: Operation -> Parser Operation
-operation op = Ast.Parser.lex $ do
-  try (string (show op) $> op)
+unaryOperator :: UnaryOperator -> Parser UnaryOperator
+unaryOperator op = try (keyword (show op) $> op)
+
+binOperator :: BinOperator -> Parser BinOperator
+binOperator op = try (keyword (show op) $> op)
 
 stmtKeyword :: StmtKeyword -> Parser StmtKeyword
-stmtKeyword keyword = Ast.Parser.lex $ do
-  try (string (show keyword) $> keyword)
+stmtKeyword kw = try (keyword (show kw) $> kw)
 
 parens :: Parser a -> Parser a
-parens p = Ast.Parser.lex $ do
-  _ <- char '('
+parens p = do
+  _ <- symbol '('
   result <- p
-  _ <- char ')'
+  _ <- symbol ')'
   return result
 
 commaSeparated :: Parser a -> Parser [a]
-commaSeparated p = Ast.Parser.lex $ sepBy p (Ast.Parser.lex (char ','))
-
-semicolonSeparated :: Parser a -> Parser [a]
-semicolonSeparated p = Ast.Parser.lex $ sepBy p (Ast.Parser.lex (char ';'))
+commaSeparated p = sepBy p (symbol ',')
 
 -- Parse new line, possibly with carriage return
 newline :: Parser ()
-newline = Ast.Parser.lex (many (char '\n') $> ())
+newline = many (symbol '\n') $> ()
 
 expression :: Parser Expr
-expression = comparisonExpr
+expression = logicalExpr
   where
-    factor = parenExpr <|> numLitExpr <|> strLitExpr <|> funCallExpr <|> numVarExpr
+    factor =
+      try parenExpr
+        <|> try numLitExpr
+        <|> try strLitExpr
+        <|> try funCallExpr
+        <|> lvalueExpr
       where
         numLitExpr = NumLitExpr <$> number
         strLitExpr = StrLitExpr <$> stringLiteral
-        numVarExpr = VarExpr <$> ident
+        lvalueExpr = LValueExpr <$> lvalue
         parenExpr = parens expression
-        funCallExpr = do
-          f <- functionName
-          args <- parens (commaSeparated expression)
-          return (FunCallExpr f args)
+        funCallExpr = FunCallExpr <$> functionCall
+
+    exponentExpr = do
+      left <- factor
+      maybeOp <- optional (binOperator CaretOp)
+      case maybeOp of
+        Just op -> BinExpr left op <$> exponentExpr
+        Nothing -> return left
+
+    unaryOpExpr = do
+      maybeOp <-
+        optional
+          ( try
+              (unaryOperator UnaryPlusOp)
+              <|> unaryOperator UnaryMinusOp
+          )
+      case maybeOp of
+        Just op -> UnaryExpr op <$> unaryOpExpr
+        Nothing -> exponentExpr
 
     mulDivExpr = do
-      left <- factor
-      maybeOp <- optional (operation Multiply <|> operation Divide <|> operation Caret)
+      left <- unaryOpExpr
+      maybeOp <-
+        optional
+          ( try (binOperator MultiplyOp)
+              <|> binOperator DivideOp
+          )
       case maybeOp of
         Just op -> BinExpr left op <$> mulDivExpr
         Nothing -> return left
 
     addSubExpr = do
       left <- mulDivExpr
-      maybeOp <- optional (operation Add <|> operation Subtract)
+      maybeOp <-
+        optional
+          ( try (binOperator AddOp)
+              <|> binOperator SubtractOp
+          )
       case maybeOp of
         Just op -> BinExpr left op <$> addSubExpr
         Nothing -> return left
 
-    orExpr = do
-      left <- addSubExpr
-      maybeOp <- optional (operation Or)
-      case maybeOp of
-        Just op -> BinExpr left op <$> orExpr
-        Nothing -> return left
-
-    andExpr = do
-      left <- orExpr
-      maybeOp <- optional (operation And)
-      case maybeOp of
-        Just op -> BinExpr left op <$> andExpr
-        Nothing -> return left
-
     comparisonExpr = do
-      left <- andExpr
-      maybeOp <- optional (operation Equal <|> operation LessThan <|> operation GreaterThan <|> operation LessThanOrEqual <|> operation GreaterThanOrEqual <|> operation NotEqual)
+      left <- addSubExpr
+      maybeOp <-
+        optional
+          ( -- Order matters, parse longest operators first
+            try (binOperator EqualOp) -- =
+              <|> try (binOperator NotEqualOp) -- <>
+              <|> try (binOperator LessThanOrEqualOp) -- <=
+              <|> try (binOperator LessThanOp) -- <
+              <|> try (binOperator GreaterThanOrEqualOp) -- >=
+              <|> binOperator GreaterThanOp -- >
+          )
       case maybeOp of
         Just op -> BinExpr left op <$> comparisonExpr
         Nothing -> return left
 
+    unaryLogicalExpr = do
+      maybeOp <- optional (unaryOperator UnaryNotOp)
+      case maybeOp of
+        Just op -> UnaryExpr op <$> comparisonExpr
+        Nothing -> comparisonExpr
+
+    logicalExpr = do
+      left <- unaryLogicalExpr
+      maybeOp <-
+        optional
+          ( try (binOperator AndOp)
+              <|> binOperator OrOp
+          )
+      case maybeOp of
+        Just op -> BinExpr left op <$> logicalExpr
+        Nothing -> return left
+
 assignment :: Parser Assignment
 assignment = do
-  v <- ident
-  _ <- operation Equal
+  v <- lvalue
+  _ <- binOperator EqualOp
   Assignment v <$> expression
 
-letStmt :: Parser Stmt
-letStmt = do
-  _ <- stmtKeyword Let
+letStmt :: Bool -> Parser Stmt
+letStmt mandatoryLet = do
+  when mandatoryLet (stmtKeyword LetKeyword $> ())
   assignments <- commaSeparated assignment
   return (LetStmt assignments)
 
 printStmt :: Parser Stmt
 printStmt = do
-  k <- stmtKeyword Print <|> stmtKeyword Pause <|> stmtKeyword Using
-  exprs <- semicolonSeparated expression
-  semi <- optional (Ast.Parser.lex (char ';'))
+  k <- stmtKeyword PrintKeyword <|> stmtKeyword PauseKeyword <|> stmtKeyword UsingKeyword
+  firstExpr <- expression
+  restExprs <- many (try (symbol ';' *> expression))
+  semi <- optional (symbol ';')
   return
     ( PrintStmt
-        ( case k of
-            Print -> PrintKindPrint
-            Pause -> PrintKindPause
-            Using -> PrintKindUsing
-            _ -> error "Unexpected print kind" -- FIXME: reshape AST to avoid this
-        )
-        exprs
-        ( case semi of
-            Just _ -> PrintEndingNoNewLine
-            Nothing -> PrintEndingNewLine
-        )
+        { printKind =
+            case k of
+              PrintKeyword -> PrintKindPrint
+              PauseKeyword -> PrintKindPause
+              UsingKeyword -> PrintKindUsing
+              _ -> error "Unexpected print kind",
+          printExprs = firstExpr : restExprs,
+          printEnding =
+            case semi of
+              Just _ -> PrintEndingNoNewLine
+              Nothing -> PrintEndingNewLine
+        }
     )
 
 gPrintStmt :: Parser Stmt
 gPrintStmt = do
-  _ <- stmtKeyword Gprint
-  exprs <- commaSeparated expression
-  semi <- optional (Ast.Parser.lex (char ';'))
+  _ <- stmtKeyword GprintKeyword
+  firstExpr <- expression
+  restExprs <- many (try (symbol ';' *> expression))
+  semi <- optional (symbol ';')
   return
     ( GprintStmt
-        exprs
-        ( case semi of
-            Just _ -> PrintEndingNoNewLine
-            Nothing -> PrintEndingNewLine
-        )
+        { gprintExprs = firstExpr : restExprs,
+          gprintEnding =
+            case semi of
+              Just _ -> PrintEndingNoNewLine
+              Nothing -> PrintEndingNewLine
+        }
     )
 
 gCursorStmt :: Parser Stmt
 gCursorStmt = do
-  _ <- stmtKeyword GCursor
+  _ <- stmtKeyword GCursorKeyword
   GCursorStmt <$> expression
 
 cursorStmt :: Parser Stmt
 cursorStmt = do
-  _ <- stmtKeyword Cursor
+  _ <- stmtKeyword CursorKeyword
   CursorStmt <$> expression
 
 inputStmt :: Parser Stmt
 inputStmt = do
-  _ <- stmtKeyword Input
-  maybePrintExpr <- optional (expression <* Ast.Parser.lex (char ';'))
-  InputStmt maybePrintExpr <$> expression
+  _ <- stmtKeyword InputKeyword
+  maybePrintExpr <- optional (expression <* symbol ';')
+  identifier <- ident
+  return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 
 endStmt :: Parser Stmt
-endStmt = Ast.Parser.lex (stmtKeyword End) $> EndStmt
+endStmt = stmtKeyword EndKeyword $> EndStmt
 
 ifStmt :: Parser Stmt
 ifStmt = do
-  _ <- stmtKeyword If
+  _ <- stmtKeyword IfKeyword
   cond <- expression
-  _ <- stmtKeyword Then
-  IfStmt cond <$> stmt
+  _ <- optional (stmtKeyword ThenKeyword)
+  -- the then statement can be a normal statement with a mandatory let or a line number
+  thenStmt <- try (stmt True) <|> (GoToStmt . GoToLine <$> integer)
+  return
+    IfThenStmt
+      { ifCondition = cond,
+        ifThenStmt = thenStmt
+      }
 
 forStmt :: Parser Stmt
 forStmt = do
-  _ <- stmtKeyword For
+  _ <- stmtKeyword ForKeyword
   a <- assignment
-  _ <- stmtKeyword To
+  _ <- stmtKeyword ToKeyword
   ForStmt a <$> expression
 
 nextStmt :: Parser Stmt
-nextStmt = stmtKeyword Next *> (NextStmt <$> ident)
+nextStmt = stmtKeyword NextKeyword *> (NextStmt <$> ident)
 
 clearStmt :: Parser Stmt
-clearStmt = stmtKeyword Clear $> ClearStmt
+clearStmt = stmtKeyword ClearKeyword $> ClearStmt
 
 clsStmt :: Parser Stmt
-clsStmt = stmtKeyword Cls $> ClsStmt
+clsStmt = stmtKeyword ClsKeyword $> ClsStmt
 
 randomStmt :: Parser Stmt
-randomStmt = stmtKeyword Random $> RandomStmt
+randomStmt = stmtKeyword RandomKeyword $> RandomStmt
 
-gotoTarget :: Parser GotoTarget
-gotoTarget =
+gotoTargetStmt :: Parser GotoTarget
+gotoTargetStmt =
   try (GoToLabel <$> stringLiteral)
-    <|> GoToLine <$> number
+    <|> GoToLine <$> integer
 
 gotoStmt :: Parser Stmt
-gotoStmt = stmtKeyword Goto *> (GoToStmt <$> gotoTarget)
+gotoStmt = do
+  _ <- stmtKeyword GotoKeyword
+  GoToStmt <$> gotoTargetStmt
 
 gosubStmt :: Parser Stmt
-gosubStmt = stmtKeyword Gosub *> (GoSubStmt <$> gotoTarget)
+gosubStmt = stmtKeyword GosubKeyword *> (GoSubStmt <$> gotoTargetStmt)
 
 waitStmt :: Parser Stmt
-waitStmt = stmtKeyword Wait *> (WaitStmt <$> optional expression)
+waitStmt = stmtKeyword WaitKeyword *> (WaitStmt <$> optional expression)
 
 comment :: Parser Stmt
 comment = do
-  _ <- stmtKeyword Remark
+  _ <- stmtKeyword RemarkKeyword
   _ <- many (satisfy (/= '\n'))
   return Comment
 
 beepStmt :: Parser Stmt
 beepStmt = do
-  _ <- stmtKeyword Beep
+  _ <- stmtKeyword BeepKeyword
   exprs <- commaSeparated expression
   return (BeepStmt exprs)
 
 returnStmt :: Parser Stmt
-returnStmt = stmtKeyword Return $> ReturnStmt
+returnStmt = stmtKeyword ReturnKeyword $> ReturnStmt
 
 pokeStmt :: Parser Stmt
 pokeStmt = do
-  _ <- stmtKeyword Poke
-  kind <- optional (Ast.Parser.lex (char '#'))
+  _ <- stmtKeyword PokeKeyword
+  kind <- optional (symbol '#')
   exprs <- commaSeparated expression
   return
     ( PokeStmt
@@ -273,28 +394,33 @@ pokeStmt = do
 
 dimStmt :: Parser Stmt
 dimStmt = do
-  _ <- stmtKeyword Dim
-  DimStmt <$> expression
+  _ <- stmtKeyword DimKeyword
+  identifier <- ident
+  size <- parens integer
+  case identifier of
+    StrVar _ -> do
+      len <- optional (binOperator MultiplyOp *> integer)
+      return (DimStmt (DimString {dimStringVarName = identifier, dimStringSize = size, dimStringLength = fromMaybe 16 len}))
+    NumVar _ -> return (DimStmt (DimNumeric {dimNumericVarName = identifier, dimNumericSize = size}))
 
 dataStmt :: Parser Stmt
 dataStmt = do
-  _ <- stmtKeyword Data
+  _ <- stmtKeyword DataKeyword
   DataStmt <$> commaSeparated expression
 
 readStmt :: Parser Stmt
 readStmt = do
-  _ <- stmtKeyword Read
-  ReadStmt <$> commaSeparated expression
+  _ <- stmtKeyword ReadKeyword
+  ReadStmt <$> commaSeparated lvalue
 
 restoreStmt :: Parser Stmt
 restoreStmt = do
-  _ <- stmtKeyword Restore
-  RestoreStmt <$> optional expression
+  _ <- stmtKeyword RestoreKeyword
+  RestoreStmt <$> expression
 
-stmt :: Parser Stmt
-stmt =
-  try letStmt
-    <|> try endStmt
+stmt :: Bool -> Parser Stmt
+stmt mandatoryLet =
+  try endStmt
     <|> try printStmt
     <|> try ifStmt
     <|> try comment
@@ -316,24 +442,22 @@ stmt =
     <|> try dimStmt
     <|> try readStmt
     <|> try dataStmt
-    <|> restoreStmt
-
-integer :: Parser Int
-integer = Ast.Parser.lex $ do
-  digits <- many1 (satisfy (`elem` ['0' .. '9']))
-  return (read digits)
+    <|> try restoreStmt
+    <|> letStmt mandatoryLet
 
 line :: Parser Line
 line = do
   lineNumber <- integer
   lineLabel <- optional stringLiteral
-  lineStmts <- sepBy stmt (Ast.Parser.lex (char ':'))
+  lineStmts <- sepBy (stmt False) (symbol ':')
   -- mandatory newline at the end of a line
   _ <- newline
   return Line {lineNumber, lineLabel, lineStmts}
 
 program :: Parser Program
-program = Program <$> many line
+program = do
+  sc
+  Program <$> many line
 
 parseProgram :: String -> String -> IO (Either String Program)
 parseProgram fileName contents = do

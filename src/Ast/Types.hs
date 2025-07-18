@@ -1,129 +1,190 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Ast.Types where
+module Ast.Types
+  ( BinOperator (..),
+    StmtKeyword (..),
+    Function (..),
+    Ident (..),
+    Expr (..),
+    PrintEnding (..),
+    PrintKind (..),
+    Assignment (..),
+    GotoTarget (..),
+    PokeKind (..),
+    Stmt (..),
+    LineNumber,
+    Line (..),
+    Program (..),
+    DimKind (..),
+    LValue (..),
+    PseudoVariable (..),
+    UnaryOperator (..),
+    AsciiFunArgument (..),
+  )
+where
 
 import Data.List (intercalate)
 
-data Operation where
-  Add :: Operation
-  Subtract :: Operation
-  Multiply :: Operation
-  Divide :: Operation
-  Equal :: Operation
-  LessThan :: Operation
-  GreaterThan :: Operation
-  LessThanOrEqual :: Operation
-  GreaterThanOrEqual :: Operation
-  NotEqual :: Operation
-  Or :: Operation
-  And :: Operation
-  Caret :: Operation
+data BinOperator where
+  AddOp :: BinOperator
+  SubtractOp :: BinOperator
+  MultiplyOp :: BinOperator
+  DivideOp :: BinOperator
+  EqualOp :: BinOperator
+  LessThanOp :: BinOperator
+  GreaterThanOp :: BinOperator
+  LessThanOrEqualOp :: BinOperator
+  GreaterThanOrEqualOp :: BinOperator
+  NotEqualOp :: BinOperator
+  OrOp :: BinOperator
+  AndOp :: BinOperator
+  CaretOp :: BinOperator
   deriving (Eq)
 
-instance Show Operation where
-  show Add = "+"
-  show Subtract = "-"
-  show Multiply = "*"
-  show Divide = "/"
-  show Equal = "="
-  show LessThanOrEqual = "<="
-  show GreaterThanOrEqual = ">="
-  show NotEqual = "<>"
-  show LessThan = "<"
-  show GreaterThan = ">"
-  show Or = "OR"
-  show And = "AND"
-  show Caret = "^"
+instance Show BinOperator where
+  show AddOp = "+"
+  show SubtractOp = "-"
+  show MultiplyOp = "*"
+  show DivideOp = "/"
+  show EqualOp = "="
+  show LessThanOrEqualOp = "<="
+  show GreaterThanOrEqualOp = ">="
+  show NotEqualOp = "<>"
+  show LessThanOp = "<"
+  show GreaterThanOp = ">"
+  show OrOp = "OR"
+  show AndOp = "AND"
+  show CaretOp = "^"
 
 data StmtKeyword where
   -- Statements
-  Let :: StmtKeyword
-  If :: StmtKeyword
-  Then :: StmtKeyword
-  Input :: StmtKeyword
-  Print :: StmtKeyword
-  End :: StmtKeyword
-  Remark :: StmtKeyword
-  For :: StmtKeyword
-  To :: StmtKeyword
-  Next :: StmtKeyword
-  Clear :: StmtKeyword
-  Goto :: StmtKeyword
-  Gosub :: StmtKeyword
-  Wait :: StmtKeyword
-  Pause :: StmtKeyword
-  Cls :: StmtKeyword
-  Random :: StmtKeyword
-  Gprint :: StmtKeyword
-  GCursor :: StmtKeyword
-  Cursor :: StmtKeyword
-  Beep :: StmtKeyword
-  Using :: StmtKeyword
-  Return :: StmtKeyword
-  Poke :: StmtKeyword
-  Dim :: StmtKeyword
-  Read :: StmtKeyword
-  Data :: StmtKeyword
-  Restore :: StmtKeyword
+  LetKeyword :: StmtKeyword
+  IfKeyword :: StmtKeyword
+  ThenKeyword :: StmtKeyword
+  InputKeyword :: StmtKeyword
+  PrintKeyword :: StmtKeyword
+  EndKeyword :: StmtKeyword
+  RemarkKeyword :: StmtKeyword
+  ForKeyword :: StmtKeyword
+  ToKeyword :: StmtKeyword
+  NextKeyword :: StmtKeyword
+  ClearKeyword :: StmtKeyword
+  GotoKeyword :: StmtKeyword
+  GosubKeyword :: StmtKeyword
+  WaitKeyword :: StmtKeyword
+  PauseKeyword :: StmtKeyword
+  ClsKeyword :: StmtKeyword
+  RandomKeyword :: StmtKeyword
+  GprintKeyword :: StmtKeyword
+  GCursorKeyword :: StmtKeyword
+  CursorKeyword :: StmtKeyword
+  BeepKeyword :: StmtKeyword
+  UsingKeyword :: StmtKeyword
+  ReturnKeyword :: StmtKeyword
+  PokeKeyword :: StmtKeyword
+  DimKeyword :: StmtKeyword
+  ReadKeyword :: StmtKeyword
+  DataKeyword :: StmtKeyword
+  RestoreKeyword :: StmtKeyword
   deriving (Eq)
 
 instance Show StmtKeyword where
-  show Let = "LET"
-  show If = "IF"
-  show Then = "THEN"
-  show Input = "INPUT"
-  show Print = "PRINT"
-  show End = "END"
-  show Remark = "REM"
-  show For = "FOR"
-  show To = "TO"
-  show Next = "NEXT"
-  show Clear = "CLEAR"
-  show Goto = "GOTO"
-  show Gosub = "GOSUB"
-  show Wait = "WAIT"
-  show Pause = "PAUSE"
-  show Cls = "CLS"
-  show Random = "RANDOM"
-  show Gprint = "GPRINT"
-  show Cursor = "CURSOR"
-  show GCursor = "GCURSOR"
-  show Beep = "BEEP"
-  show Using = "USING"
-  show Return = "RETURN"
-  show Poke = "POKE"
-  show Dim = "DIM"
-  show Read = "READ"
-  show Data = "DATA"
-  show Restore = "RESTORE"
+  show LetKeyword = "LET"
+  show IfKeyword = "IF"
+  show ThenKeyword = "THEN"
+  show InputKeyword = "INPUT"
+  show PrintKeyword = "PRINT"
+  show EndKeyword = "END"
+  show RemarkKeyword = "REM"
+  show ForKeyword = "FOR"
+  show ToKeyword = "TO"
+  show NextKeyword = "NEXT"
+  show ClearKeyword = "CLEAR"
+  show GotoKeyword = "GOTO"
+  show GosubKeyword = "GOSUB"
+  show WaitKeyword = "WAIT"
+  show PauseKeyword = "PAUSE"
+  show ClsKeyword = "CLS"
+  show RandomKeyword = "RANDOM"
+  show GprintKeyword = "GPRINT"
+  show CursorKeyword = "CURSOR"
+  show GCursorKeyword = "GCURSOR"
+  show BeepKeyword = "BEEP"
+  show UsingKeyword = "USING"
+  show ReturnKeyword = "RETURN"
+  show PokeKeyword = "POKE"
+  show DimKeyword = "DIM"
+  show ReadKeyword = "READ"
+  show DataKeyword = "DATA"
+  show RestoreKeyword = "RESTORE"
 
-data FunctionArity where
-  Arity0 :: FunctionArity
-  Arity1 :: FunctionArity
-  Arity2 :: FunctionArity
-  Arity3 :: FunctionArity
-  deriving (Show, Eq)
-
-data FunctionName where
-  -- String functions
-  MidStr :: FunctionArity -> FunctionName
-  LeftStr :: FunctionArity -> FunctionName
-  RightStr :: FunctionArity -> FunctionName
-  InkeyStr :: FunctionArity -> FunctionName
-  -- Integer functions
-  Point :: FunctionArity -> FunctionName
-  Rnd :: FunctionArity -> FunctionName
-  Int :: FunctionArity -> FunctionName
+data AsciiFunArgument where
+  AsciiFunArgChar :: Char -> AsciiFunArgument
+  AsciiFunArgVar :: Ident -> AsciiFunArgument -- TODO: spearate string and int idents
   deriving (Eq)
 
-instance Show FunctionName where
-  show (MidStr _) = "MID$"
-  show (LeftStr _) = "LEFT$"
-  show (RightStr _) = "RIGHT$"
-  show (Point _) = "POINT"
-  show (Rnd _) = "RND"
-  show (InkeyStr _) = "INKEY$"
-  show (Int _) = "INT"
+instance Show AsciiFunArgument where
+  show (AsciiFunArgChar c) = "'" ++ [c] ++ "'"
+  show (AsciiFunArgVar ident) = show ident
+
+data Function where
+  -- String functions
+  MidFunName :: Function
+  LeftFunName :: Function
+  RightFunName :: Function
+  AsciiFun ::
+    { asciiFunArgument :: AsciiFunArgument
+    } ->
+    Function
+  -- Integer functions
+  PointFun ::
+    { pointFunPositionExpr :: Expr -- returns the color of the pixel at the position, the expression must be in range 0-155
+    } ->
+    Function
+  RndFun ::
+    { rndRangeEnd :: Int -- TODO: what is the range of RND?
+    } ->
+    Function
+  IntFun ::
+    { intFunExpr :: Expr -- returns the integer part of the expression
+    } ->
+    Function
+  SgnFun ::
+    { sgnFunExpr :: Expr -- returns 1, 0 or -1
+    } ->
+    Function
+  deriving (Eq)
+
+instance Show Function where
+  show MidFunName = "MID$"
+  show LeftFunName = "LEFT$"
+  show RightFunName = "RIGHT$"
+  show PointFun {pointFunPositionExpr = pos} =
+    "(POINT " ++ show pos ++ ")"
+  show
+    RndFun
+      { rndRangeEnd = end
+      } =
+      "(RND " ++ show end ++ ")"
+  show IntFun {intFunExpr = expr} =
+    "(INT " ++ show expr ++ ")"
+  show SgnFun {sgnFunExpr = expr} =
+    "(SGN " ++ show expr ++ ")"
+  show
+    AsciiFun
+      { asciiFunArgument = arg
+      } =
+      "(ASC " ++ show arg ++ ")"
+
+-- like varibles, but built-in
+data PseudoVariable where
+  TimePseudoVar :: PseudoVariable
+  InkeyPseudoVar :: PseudoVariable -- Read only
+  deriving (Eq)
+
+instance Show PseudoVariable where
+  show TimePseudoVar = "TIME"
+  show InkeyPseudoVar = "INKEY$"
 
 data Ident where
   NumVar :: String -> Ident
@@ -134,20 +195,49 @@ instance Show Ident where
   show (NumVar s) = s
   show (StrVar s) = s ++ "$"
 
+data LValue where
+  LValueIdent :: Ident -> LValue
+  LValueArrayAccess ::
+    { lValueArrayIdent :: Ident,
+      lValueArrayIndex :: Expr
+    } ->
+    LValue
+  LValuePseudoVar :: PseudoVariable -> LValue
+  deriving (Eq)
+
+instance Show LValue where
+  show (LValueIdent ident) = show ident
+  show (LValueArrayAccess ident index) =
+    show ident ++ "(" ++ show index ++ ")"
+  show (LValuePseudoVar pseudoVar) = show pseudoVar
+
+data UnaryOperator where
+  UnaryMinusOp :: UnaryOperator
+  UnaryPlusOp :: UnaryOperator
+  UnaryNotOp :: UnaryOperator
+  deriving (Eq)
+
+instance Show UnaryOperator where
+  show UnaryMinusOp = "-"
+  show UnaryPlusOp = "+"
+  show UnaryNotOp = "NOT"
+
 data Expr where
-  BinExpr :: Expr -> Operation -> Expr -> Expr
+  UnaryExpr :: UnaryOperator -> Expr -> Expr
+  BinExpr :: Expr -> BinOperator -> Expr -> Expr
   NumLitExpr :: Double -> Expr
-  VarExpr :: Ident -> Expr
+  LValueExpr :: LValue -> Expr
   StrLitExpr :: String -> Expr
-  FunCallExpr :: FunctionName -> [Expr] -> Expr
+  FunCallExpr :: Function -> Expr
   deriving (Eq)
 
 instance Show Expr where
+  show (UnaryExpr op expr) = show op ++ show expr
   show (BinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
   show (NumLitExpr n) = show n
-  show (VarExpr x) = show x
+  show (LValueExpr lval) = show lval
   show (StrLitExpr s) = "\"" ++ s ++ "\""
-  show (FunCallExpr f args) = show f ++ "(" ++ intercalate ", " (show <$> args) ++ ")"
+  show (FunCallExpr f) = show f
 
 data PrintEnding where
   PrintEndingNewLine :: PrintEnding
@@ -161,7 +251,7 @@ data PrintKind where
   deriving (Show, Eq)
 
 data Assignment where
-  Assignment :: Ident -> Expr -> Assignment
+  Assignment :: LValue -> Expr -> Assignment
   deriving (Eq)
 
 instance Show Assignment where
@@ -169,7 +259,7 @@ instance Show Assignment where
 
 data GotoTarget where
   GoToLabel :: String -> GotoTarget
-  GoToLine :: Double -> GotoTarget
+  GoToLine :: LineNumber -> GotoTarget
   deriving (Eq)
 
 instance Show GotoTarget where
@@ -181,38 +271,84 @@ data PokeKind where
   Me1 :: PokeKind
   deriving (Eq)
 
+-- FIXME: allow 2 dimensions
+data DimKind where
+  DimNumeric ::
+    { dimNumericVarName :: Ident,
+      dimNumericSize :: Int
+    } ->
+    DimKind
+  DimString ::
+    { dimStringVarName :: Ident,
+      dimStringSize :: Int,
+      dimStringLength :: Int
+    } ->
+    DimKind
+  deriving (Eq)
+
+instance Show DimKind where
+  show (DimNumeric var size) = "DIM " ++ show var ++ "(" ++ show size ++ ")"
+  show (DimString var size len) =
+    "DIM " ++ show var ++ "(" ++ show size ++ ")*" ++ show len
+
 data Stmt where
-  LetStmt :: [Assignment] -> Stmt
-  IfStmt :: Expr -> Stmt -> Stmt
+  LetStmt :: {letAssignments :: [Assignment]} -> Stmt
+  IfThenStmt :: {ifCondition :: Expr, ifThenStmt :: Stmt} -> Stmt
   -- FIXME: the PRINT statement can swparate the screen in two sections, with
   -- the first and second section being comma separated, skip for now
-  PrintStmt :: PrintKind -> [Expr] -> PrintEnding -> Stmt
-  InputStmt :: Maybe Expr -> Expr -> Stmt
+  PrintStmt ::
+    { printKind :: PrintKind,
+      printExprs :: [Expr],
+      printEnding :: PrintEnding
+    } ->
+    Stmt
+  InputStmt ::
+    { inputPrintExpr :: Maybe Expr,
+      inputDestination :: Ident
+    } ->
+    Stmt
   EndStmt :: Stmt
   Comment :: Stmt
-  ForStmt :: Assignment -> Expr -> Stmt
-  NextStmt :: Ident -> Stmt
+  ForStmt :: {forAssignment :: Assignment, forToExpr :: Expr} -> Stmt
+  NextStmt :: {nextIdent :: Ident} -> Stmt
   ClearStmt :: Stmt
-  GoToStmt :: GotoTarget -> Stmt
-  GoSubStmt :: GotoTarget -> Stmt
-  WaitStmt :: Maybe Expr -> Stmt
+  GoToStmt :: {gotoTarget :: GotoTarget} -> Stmt
+  GoSubStmt :: {gosubTarget :: GotoTarget} -> Stmt
+  WaitStmt ::
+    { waitForExpr :: Maybe Expr -- TODO: should be in range 0-65535, how do we enforce this?
+    } ->
+    Stmt
   ClsStmt :: Stmt
   RandomStmt :: Stmt
-  GprintStmt :: [Expr] -> PrintEnding -> Stmt
-  GCursorStmt :: Expr -> Stmt
-  CursorStmt :: Expr -> Stmt
-  BeepStmt :: [Expr] -> Stmt
+  GprintStmt ::
+    { gprintExprs :: [Expr],
+      gprintEnding :: PrintEnding
+    } ->
+    Stmt
+  GCursorStmt :: {gCursorExpr :: Expr} -> Stmt
+  CursorStmt :: {cursorExpr :: Expr} -> Stmt
+  BeepStmt :: {beepExprs :: [Expr]} -> Stmt
   ReturnStmt :: Stmt
-  PokeStmt :: PokeKind -> [Expr] -> Stmt
-  DimStmt :: Expr -> Stmt
-  ReadStmt :: [Expr] -> Stmt
+  PokeStmt ::
+    { pokeKind :: PokeKind,
+      pokeExprs :: [Expr]
+    } ->
+    Stmt
+  DimStmt :: {dimKind :: DimKind} -> Stmt
+  ReadStmt ::
+    { readStmtDestinations :: [LValue]
+    } ->
+    Stmt
   DataStmt :: [Expr] -> Stmt
-  RestoreStmt :: Maybe Expr -> Stmt
+  RestoreStmt ::
+    { restoreLineOrLabelExpr :: Expr
+    } ->
+    Stmt
   deriving (Eq)
 
 instance Show Stmt where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
-  show (IfStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
+  show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
   show (PrintStmt k exprs kind) =
     ( case k of
         PrintKindPrint -> "PRINT "
@@ -256,8 +392,7 @@ instance Show Stmt where
   show (DimStmt e) = "DIM " ++ show e
   show (ReadStmt ids) = "READ " ++ intercalate ", " (show <$> ids)
   show (DataStmt exprs) = "DATA " ++ intercalate ", " (show <$> exprs)
-  show (RestoreStmt Nothing) = "RESTORE"
-  show (RestoreStmt (Just n)) = "RESTORE " ++ show n
+  show (RestoreStmt n) = "RESTORE " ++ show n
 
 type LineNumber = Int
 
