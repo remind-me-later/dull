@@ -14,6 +14,7 @@ import Text.Parsec
     runParserT,
     satisfy,
     sepBy,
+    sepBy1,
     skipMany,
     string,
     try,
@@ -170,7 +171,7 @@ parens p = do
   return result
 
 commaSeparated :: Parser a -> Parser [a]
-commaSeparated p = sepBy p (symbol ',')
+commaSeparated p = sepBy1 p (symbol ',')
 
 -- Parse new line, possibly with carriage return
 newline :: Parser ()
@@ -486,9 +487,26 @@ line = do
   lineNumber <- integer
   lineLabel <- optional stringLiteral
   lineStmts <- sepBy (stmt False) (symbol ':')
-  -- mandatory newline at the end of a line
-  _ <- newline
-  return Line {lineNumber, lineLabel, lineStmts}
+  -- if there are no stmts the label wasn't a label it was a print statement
+  case (lineLabel, lineStmts) of
+    (Just label, []) -> do
+      _ <- newline
+      return
+        Line
+          { lineNumber,
+            lineLabel = Nothing,
+            lineStmts =
+              [ PrintStmt
+                  { printKind = PrintKindPrint,
+                    printExprs = [StrLitExpr label],
+                    printEnding = PrintEndingNewLine,
+                    printUsingClause = Nothing
+                  }
+              ]
+          }
+    _ -> do
+      _ <- newline
+      return Line {lineNumber, lineLabel, lineStmts}
 
 program :: Parser Program
 program = do
