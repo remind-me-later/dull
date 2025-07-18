@@ -21,6 +21,8 @@ module Ast.Types
     UnaryOperator (..),
     StringVariableOrLiteral (..),
     UsingClause (..),
+    StrIdent (..),
+    NumIdent (..),
   )
 where
 
@@ -203,14 +205,28 @@ instance Show PseudoVariable where
   show TimePseudoVar = "TIME"
   show InkeyPseudoVar = "INKEY$"
 
+data StrIdent where
+  StrIdent :: String -> StrIdent
+  deriving (Eq)
+
+instance Show StrIdent where
+  show (StrIdent s) = s ++ "$"
+
+data NumIdent where
+  NumIdent :: String -> NumIdent
+  deriving (Eq)
+
+instance Show NumIdent where
+  show (NumIdent s) = s
+
 data Ident where
-  NumVar :: String -> Ident
-  StrVar :: String -> Ident
+  NumVar :: NumIdent -> Ident
+  StrVar :: StrIdent -> Ident
   deriving (Eq)
 
 instance Show Ident where
-  show (NumVar s) = s
-  show (StrVar s) = s ++ "$"
+  show (NumVar (NumIdent s)) = s
+  show (StrVar (StrIdent s)) = s
 
 data LValue where
   LValueIdent :: Ident -> LValue
@@ -294,12 +310,12 @@ data PokeKind where
 -- FIXME: allow 2 dimensions
 data DimKind where
   DimNumeric ::
-    { dimNumericVarName :: Ident,
+    { dimNumericVarName :: NumIdent,
       dimNumericSize :: Int
     } ->
     DimKind
   DimString ::
-    { dimStringVarName :: Ident,
+    { dimStringVarName :: StrIdent,
       dimStringSize :: Int,
       dimStringLength :: Int
     } ->
@@ -329,13 +345,13 @@ data Stmt where
     Stmt
   InputStmt ::
     { inputPrintExpr :: Maybe Expr,
-      inputDestination :: Ident
+      inputDestination :: StrIdent
     } ->
     Stmt
   EndStmt :: Stmt
   Comment :: Stmt
   ForStmt :: {forAssignment :: Assignment, forToExpr :: Expr} -> Stmt
-  NextStmt :: {nextIdent :: Ident} -> Stmt
+  NextStmt :: {nextIdent :: NumIdent} -> Stmt
   ClearStmt :: Stmt
   GoToStmt :: {gotoTarget :: GotoTarget} -> Stmt
   GoSubStmt :: {gosubTarget :: GotoTarget} -> Stmt

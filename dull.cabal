@@ -15,7 +15,6 @@ library
     import:           warnings
     exposed-modules:  Ast.Types
                       Ast.Parser
-                      TypeSystem
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

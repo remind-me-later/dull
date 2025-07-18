@@ -61,15 +61,26 @@ symbol sym = Ast.Parser.lex $ char sym
 -- Variables consist of the following:
 -- \[A-Z][A-Z\d]$?
 -- the dollar indicates a string variable
-ident :: Parser Ident
-ident = Ast.Parser.lex $ do
+numIdent :: Parser NumIdent
+numIdent = Ast.Parser.lex $ do
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
   secondChar <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
-  dollar <- optional (char '$')
   let varName = firstChar : maybe "" (: []) secondChar
-  case dollar of
-    Just _ -> return (StrVar varName)
-    Nothing -> return (NumVar varName)
+  return (NumIdent varName)
+
+strIdent :: Parser StrIdent
+strIdent = Ast.Parser.lex $ do
+  firstChar <- satisfy (`elem` ['A' .. 'Z'])
+  secondChar <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
+  _ <- char '$'
+  let varName = firstChar : maybe "" (: []) secondChar
+  return (StrIdent varName)
+
+-- try strIdent first, then numIdent, since we have to match the longest identifier first
+ident :: Parser Ident
+ident =
+  try (StrVar <$> strIdent)
+    <|> try (NumVar <$> numIdent)
 
 pseudoVariable :: Parser PseudoVariable
 pseudoVariable =
@@ -341,7 +352,7 @@ inputStmt :: Parser Stmt
 inputStmt = do
   _ <- stmtKeyword InputKeyword
   maybePrintExpr <- optional (expression <* symbol ';')
-  identifier <- ident
+  identifier <- strIdent
   return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 
 endStmt :: Parser Stmt
@@ -368,7 +379,7 @@ forStmt = do
   ForStmt a <$> expression
 
 nextStmt :: Parser Stmt
-nextStmt = stmtKeyword NextKeyword *> (NextStmt <$> ident)
+nextStmt = stmtKeyword NextKeyword *> (NextStmt <$> numIdent)
 
 clearStmt :: Parser Stmt
 clearStmt = stmtKeyword ClearKeyword $> ClearStmt
@@ -434,10 +445,26 @@ dimStmt = do
   identifier <- ident
   size <- parens integer
   case identifier of
-    StrVar _ -> do
+    StrVar strIdent' -> do
       len <- optional (binOperator MultiplyOp *> integer)
-      return (DimStmt (DimString {dimStringVarName = identifier, dimStringSize = size, dimStringLength = fromMaybe 16 len}))
-    NumVar _ -> return (DimStmt (DimNumeric {dimNumericVarName = identifier, dimNumericSize = size}))
+      return
+        ( DimStmt
+            ( DimString
+                { dimStringVarName = strIdent',
+                  dimStringSize = size,
+                  dimStringLength = fromMaybe 16 len
+                }
+            )
+        )
+    NumVar numIdent' ->
+      return
+        ( DimStmt
+            ( DimNumeric
+                { dimNumericVarName = numIdent',
+                  dimNumericSize = size
+                }
+            )
+        )
 
 dataStmt :: Parser Stmt
 dataStmt = do
