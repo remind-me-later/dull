@@ -5,7 +5,6 @@ where
 
 import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
-import Control.Monad (when)
 import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
 import Text.Parsec
@@ -89,11 +88,16 @@ lvalue =
             )
     )
 
-functionCall :: Parser Function -- TODO: should arity be defined here?
+stringVariableOrLiteral :: Parser StringVariableOrLiteral
+stringVariableOrLiteral =
+  try (StringLiteral <$> stringLiteral)
+    <|> (StringVariable <$> ident)
+
+functionCall :: Parser Function
 functionCall =
-  try (keyword "MID$" $> MidFunName)
-    <|> try (keyword "LEFT$" $> LeftFunName)
-    <|> try (keyword "RIGHT$" $> RightFunName)
+  try midFunCall
+    <|> try leftFunCall
+    <|> try rightFunCall
     <|> try asciiFunCall
     <|> try pointFunCall
     <|> try rndFunCall
@@ -105,17 +109,7 @@ functionCall =
       RndFun <$> integer
     asciiFunCall = do
       _ <- keyword "ASC"
-      -- either a char or a string variable
-      arg <-
-        try
-          ( do
-              strLit <- stringLiteral
-              case strLit of
-                [c] -> return (AsciiFunArgChar c)
-                _ -> return (AsciiFunArgChar '\0') -- empty char for strings
-          )
-          <|> (AsciiFunArgVar <$> ident)
-      return (AsciiFun arg)
+      AsciiFun <$> stringVariableOrLiteral
     sgnFunCall = do
       _ <- keyword "SGN"
       SgnFun <$> expression
@@ -125,6 +119,32 @@ functionCall =
     pointFunCall = do
       _ <- keyword "POINT"
       PointFun <$> expression
+    midFunCall = do
+      _ <- keyword "MID$"
+      _ <- symbol '('
+      strExpr <- stringVariableOrLiteral
+      _ <- symbol ','
+      startExpr <- expression
+      _ <- symbol ','
+      lengthExpr <- expression
+      _ <- symbol ')'
+      return (MidFun {midFunStringExpr = strExpr, midFunStartExpr = startExpr, midFunLengthExpr = lengthExpr})
+    leftFunCall = do
+      _ <- keyword "LEFT$"
+      _ <- symbol '('
+      strExpr <- stringVariableOrLiteral
+      _ <- symbol ','
+      lengthExpr <- expression
+      _ <- symbol ')'
+      return (LeftFun {leftFunStringExpr = strExpr, leftFunLengthExpr = lengthExpr})
+    rightFunCall = do
+      _ <- keyword "RIGHT$"
+      _ <- symbol '('
+      strExpr <- stringVariableOrLiteral
+      _ <- symbol ','
+      lengthExpr <- expression
+      _ <- symbol ')'
+      return (RightFun {rightFunStringExpr = strExpr, rightFunLengthExpr = lengthExpr})
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -253,13 +273,24 @@ assignment = do
 
 letStmt :: Bool -> Parser Stmt
 letStmt mandatoryLet = do
-  when mandatoryLet (stmtKeyword LetKeyword $> ())
+  if mandatoryLet
+    then do
+      stmtKeyword LetKeyword $> ()
+    else
+      optional (stmtKeyword LetKeyword) $> ()
+
   assignments <- commaSeparated assignment
   return (LetStmt assignments)
 
+usingClause :: Parser UsingClause
+usingClause = do
+  _ <- stmtKeyword UsingKeyword
+  UsingClause <$> stringVariableOrLiteral
+
 printStmt :: Parser Stmt
 printStmt = do
-  k <- stmtKeyword PrintKeyword <|> stmtKeyword PauseKeyword <|> stmtKeyword UsingKeyword
+  k <- stmtKeyword PrintKeyword <|> stmtKeyword PauseKeyword
+  maybeUsing <- optional (usingClause <* symbol ';')
   firstExpr <- expression
   restExprs <- many (try (symbol ';' *> expression))
   semi <- optional (symbol ';')
@@ -269,13 +300,13 @@ printStmt = do
             case k of
               PrintKeyword -> PrintKindPrint
               PauseKeyword -> PrintKindPause
-              UsingKeyword -> PrintKindUsing
               _ -> error "Unexpected print kind",
           printExprs = firstExpr : restExprs,
           printEnding =
             case semi of
               Just _ -> PrintEndingNoNewLine
-              Nothing -> PrintEndingNewLine
+              Nothing -> PrintEndingNewLine,
+          printUsingClause = maybeUsing
         }
     )
 
@@ -363,6 +394,10 @@ gosubStmt = stmtKeyword GosubKeyword *> (GoSubStmt <$> gotoTargetStmt)
 waitStmt :: Parser Stmt
 waitStmt = stmtKeyword WaitKeyword *> (WaitStmt <$> optional expression)
 
+usingStmt :: Parser Stmt
+usingStmt = do
+  UsingStmt <$> usingClause
+
 comment :: Parser Stmt
 comment = do
   _ <- stmtKeyword RemarkKeyword
@@ -443,6 +478,7 @@ stmt mandatoryLet =
     <|> try readStmt
     <|> try dataStmt
     <|> try restoreStmt
+    <|> try usingStmt
     <|> letStmt mandatoryLet
 
 line :: Parser Line

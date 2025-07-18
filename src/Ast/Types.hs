@@ -19,7 +19,8 @@ module Ast.Types
     LValue (..),
     PseudoVariable (..),
     UnaryOperator (..),
-    AsciiFunArgument (..),
+    StringVariableOrLiteral (..),
+    UsingClause (..),
   )
 where
 
@@ -118,22 +119,35 @@ instance Show StmtKeyword where
   show DataKeyword = "DATA"
   show RestoreKeyword = "RESTORE"
 
-data AsciiFunArgument where
-  AsciiFunArgChar :: Char -> AsciiFunArgument
-  AsciiFunArgVar :: Ident -> AsciiFunArgument -- TODO: spearate string and int idents
+data StringVariableOrLiteral where
+  StringLiteral :: String -> StringVariableOrLiteral
+  StringVariable :: Ident -> StringVariableOrLiteral -- TODO: spearate string and int idents
   deriving (Eq)
 
-instance Show AsciiFunArgument where
-  show (AsciiFunArgChar c) = "'" ++ [c] ++ "'"
-  show (AsciiFunArgVar ident) = show ident
+instance Show StringVariableOrLiteral where
+  show (StringLiteral str) = "\"" ++ str ++ "\""
+  show (StringVariable ident) = show ident
 
 data Function where
   -- String functions
-  MidFunName :: Function
-  LeftFunName :: Function
-  RightFunName :: Function
+  MidFun ::
+    { midFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
+      midFunStartExpr :: Expr, -- the start position (1-based)
+      midFunLengthExpr :: Expr -- the length of the substring
+    } ->
+    Function
+  LeftFun ::
+    { leftFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
+      leftFunLengthExpr :: Expr -- the length of the substring
+    } ->
+    Function
+  RightFun ::
+    { rightFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
+      rightFunLengthExpr :: Expr -- the length of the substring
+    } ->
+    Function
   AsciiFun ::
-    { asciiFunArgument :: AsciiFunArgument
+    { asciiFunArgument :: StringVariableOrLiteral
     } ->
     Function
   -- Integer functions
@@ -156,9 +170,12 @@ data Function where
   deriving (Eq)
 
 instance Show Function where
-  show MidFunName = "MID$"
-  show LeftFunName = "LEFT$"
-  show RightFunName = "RIGHT$"
+  show MidFun {midFunStringExpr = str, midFunStartExpr = start, midFunLengthExpr = len} =
+    "(MID " ++ show str ++ " " ++ show start ++ " " ++ show len ++ ")"
+  show LeftFun {leftFunStringExpr = str, leftFunLengthExpr = len} =
+    "(LEFT " ++ show str ++ " " ++ show len ++ ")"
+  show RightFun {rightFunStringExpr = str, rightFunLengthExpr = len} =
+    "(RIGHT " ++ show str ++ " " ++ show len ++ ")"
   show PointFun {pointFunPositionExpr = pos} =
     "(POINT " ++ show pos ++ ")"
   show
@@ -247,8 +264,11 @@ data PrintEnding where
 data PrintKind where
   PrintKindPrint :: PrintKind
   PrintKindPause :: PrintKind
-  PrintKindUsing :: PrintKind
   deriving (Show, Eq)
+
+data UsingClause where
+  UsingClause :: {usingClauseExpr :: StringVariableOrLiteral} -> UsingClause
+  deriving (Eq)
 
 data Assignment where
   Assignment :: LValue -> Expr -> Assignment
@@ -299,7 +319,12 @@ data Stmt where
   PrintStmt ::
     { printKind :: PrintKind,
       printExprs :: [Expr],
-      printEnding :: PrintEnding
+      printEnding :: PrintEnding,
+      printUsingClause :: Maybe UsingClause
+    } ->
+    Stmt
+  UsingStmt ::
+    { usingStmtClause :: UsingClause
     } ->
     Stmt
   InputStmt ::
@@ -349,16 +374,19 @@ data Stmt where
 instance Show Stmt where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
   show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
-  show (PrintStmt k exprs kind) =
+  show (PrintStmt k exprs kind maybeUsing) =
     ( case k of
         PrintKindPrint -> "PRINT "
         PrintKindPause -> "PAUSE "
-        PrintKindUsing -> "USING "
     )
+      ++ case maybeUsing of
+        Just (UsingClause e) -> "USING " ++ show e ++ "; "
+        Nothing -> ""
       ++ intercalate "; " (show <$> exprs)
       ++ case kind of
         PrintEndingNewLine -> ""
         PrintEndingNoNewLine -> ";"
+  show (UsingStmt (UsingClause e)) = "USING " ++ show e
   show (InputStmt maybePrintExpr me) =
     "INPUT "
       ++ maybe "" (\e -> show e ++ "; ") maybePrintExpr
