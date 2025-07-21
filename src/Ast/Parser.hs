@@ -7,6 +7,7 @@ import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
+import SymbolTable (ExprType (..))
 import Text.Parsec
   ( ParsecT,
     char,
@@ -79,8 +80,8 @@ strIdent = Ast.Parser.lex $ do
 -- try strIdent first, then numIdent, since we have to match the longest identifier first
 ident :: Parser Ident
 ident =
-  try (StrVar <$> strIdent)
-    <|> try (NumVar <$> numIdent)
+  try (IdentStrIdent <$> strIdent)
+    <|> try (IdentNumIdent <$> numIdent)
 
 pseudoVariable :: Parser PseudoVariable
 pseudoVariable =
@@ -103,7 +104,7 @@ lvalue =
 stringVariableOrLiteral :: Parser StringVariableOrLiteral
 stringVariableOrLiteral =
   try (StringLiteral <$> stringLiteral)
-    <|> (StringVariable <$> ident)
+    <|> (StringVariable <$> strIdent)
 
 functionCall :: Parser Function
 functionCall =
@@ -198,17 +199,27 @@ expression = logicalExpr
         <|> try funCallExpr
         <|> lvalueExpr
       where
-        numLitExpr = NumLitExpr <$> number
-        strLitExpr = StrLitExpr <$> stringLiteral
-        lvalueExpr = LValueExpr <$> lvalue
+        numLitExpr = do
+          n <- number
+          return Expr {exprInner = NumLitExpr n, exprType = ExprUnknownType}
+        strLitExpr = do
+          str <- stringLiteral
+          return Expr {exprInner = StrLitExpr str, exprType = ExprUnknownType}
+        lvalueExpr = do
+          lvalue' <- lvalue
+          return Expr {exprInner = LValueExpr lvalue', exprType = ExprUnknownType}
         parenExpr = parens expression
-        funCallExpr = FunCallExpr <$> functionCall
+        funCallExpr = do
+          fun <- functionCall
+          return Expr {exprInner = FunCallExpr fun, exprType = ExprUnknownType}
 
     exponentExpr = do
       left <- factor
       maybeOp <- optional (binOperator CaretOp)
       case maybeOp of
-        Just op -> BinExpr left op <$> exponentExpr
+        Just op -> do
+          right <- exponentExpr
+          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
         Nothing -> return left
 
     unaryOpExpr = do
@@ -219,7 +230,9 @@ expression = logicalExpr
               <|> unaryOperator UnaryMinusOp
           )
       case maybeOp of
-        Just op -> UnaryExpr op <$> unaryOpExpr
+        Just op -> do
+          right <- unaryOpExpr
+          return Expr {exprInner = UnaryExpr op right, exprType = ExprUnknownType}
         Nothing -> exponentExpr
 
     mulDivExpr = do
@@ -230,7 +243,9 @@ expression = logicalExpr
               <|> binOperator DivideOp
           )
       case maybeOp of
-        Just op -> BinExpr left op <$> mulDivExpr
+        Just op -> do
+          right <- mulDivExpr
+          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
         Nothing -> return left
 
     addSubExpr = do
@@ -241,7 +256,9 @@ expression = logicalExpr
               <|> binOperator SubtractOp
           )
       case maybeOp of
-        Just op -> BinExpr left op <$> addSubExpr
+        Just op -> do
+          right <- addSubExpr
+          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
         Nothing -> return left
 
     comparisonExpr = do
@@ -257,13 +274,17 @@ expression = logicalExpr
               <|> binOperator GreaterThanOp -- >
           )
       case maybeOp of
-        Just op -> BinExpr left op <$> comparisonExpr
+        Just op -> do
+          right <- comparisonExpr
+          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
         Nothing -> return left
 
     unaryLogicalExpr = do
       maybeOp <- optional (unaryOperator UnaryNotOp)
       case maybeOp of
-        Just op -> UnaryExpr op <$> comparisonExpr
+        Just op -> do
+          right <- unaryLogicalExpr
+          return Expr {exprInner = UnaryExpr op right, exprType = ExprUnknownType}
         Nothing -> comparisonExpr
 
     logicalExpr = do
@@ -274,7 +295,9 @@ expression = logicalExpr
               <|> binOperator OrOp
           )
       case maybeOp of
-        Just op -> BinExpr left op <$> logicalExpr
+        Just op -> do
+          right <- logicalExpr
+          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
         Nothing -> return left
 
 assignment :: Parser Assignment
@@ -352,7 +375,7 @@ inputStmt :: Parser Stmt
 inputStmt = do
   _ <- stmtKeyword InputKeyword
   maybePrintExpr <- optional (expression <* symbol ';')
-  identifier <- strIdent
+  identifier <- ident
   return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 
 endStmt :: Parser Stmt
@@ -445,7 +468,7 @@ dimStmt = do
   identifier <- ident
   size <- parens integer
   case identifier of
-    StrVar strIdent' -> do
+    IdentStrIdent strIdent' -> do
       len <- optional (binOperator MultiplyOp *> integer)
       return
         ( DimStmt
@@ -456,7 +479,7 @@ dimStmt = do
                 }
             )
         )
-    NumVar numIdent' ->
+    IdentNumIdent numIdent' ->
       return
         ( DimStmt
             ( DimNumeric
@@ -525,7 +548,7 @@ line = do
             lineStmts =
               [ PrintStmt
                   { printKind = PrintKindPrint,
-                    printExprs = [StrLitExpr label],
+                    printExprs = [Expr {exprInner = StrLitExpr label, exprType = ExprUnknownType}],
                     printEnding = PrintEndingNewLine,
                     printUsingClause = Nothing
                   }

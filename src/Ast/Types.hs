@@ -23,10 +23,12 @@ module Ast.Types
     UsingClause (..),
     StrIdent (..),
     NumIdent (..),
+    ExprInner (..),
   )
 where
 
 import Data.List (intercalate)
+import SymbolTable (ExprType)
 
 data BinOperator where
   AddOp :: BinOperator
@@ -123,7 +125,7 @@ instance Show StmtKeyword where
 
 data StringVariableOrLiteral where
   StringLiteral :: String -> StringVariableOrLiteral
-  StringVariable :: Ident -> StringVariableOrLiteral -- TODO: spearate string and int idents
+  StringVariable :: StrIdent -> StringVariableOrLiteral
   deriving (Eq)
 
 instance Show StringVariableOrLiteral where
@@ -220,13 +222,13 @@ instance Show NumIdent where
   show (NumIdent s) = s
 
 data Ident where
-  NumVar :: NumIdent -> Ident
-  StrVar :: StrIdent -> Ident
+  IdentNumIdent :: NumIdent -> Ident
+  IdentStrIdent :: StrIdent -> Ident
   deriving (Eq)
 
 instance Show Ident where
-  show (NumVar (NumIdent s)) = s
-  show (StrVar (StrIdent s)) = s
+  show (IdentNumIdent (NumIdent s)) = s
+  show (IdentStrIdent (StrIdent s)) = s
 
 data LValue where
   LValueIdent :: Ident -> LValue
@@ -255,22 +257,33 @@ instance Show UnaryOperator where
   show UnaryPlusOp = "+"
   show UnaryNotOp = "NOT"
 
-data Expr where
-  UnaryExpr :: UnaryOperator -> Expr -> Expr
-  BinExpr :: Expr -> BinOperator -> Expr -> Expr
-  NumLitExpr :: Double -> Expr
-  LValueExpr :: LValue -> Expr
-  StrLitExpr :: String -> Expr
-  FunCallExpr :: Function -> Expr
+data ExprInner where
+  UnaryExpr :: UnaryOperator -> Expr -> ExprInner
+  BinExpr :: Expr -> BinOperator -> Expr -> ExprInner
+  NumLitExpr :: Double -> ExprInner
+  LValueExpr :: LValue -> ExprInner
+  StrLitExpr :: String -> ExprInner
+  FunCallExpr :: Function -> ExprInner
   deriving (Eq)
 
-instance Show Expr where
+instance Show ExprInner where
   show (UnaryExpr op expr) = show op ++ show expr
   show (BinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
   show (NumLitExpr n) = show n
   show (LValueExpr lval) = show lval
   show (StrLitExpr s) = "\"" ++ s ++ "\""
   show (FunCallExpr f) = show f
+
+data Expr where
+  Expr ::
+    { exprInner :: ExprInner,
+      exprType :: ExprType
+    } ->
+    Expr
+  deriving (Eq)
+
+instance Show Expr where
+  show (Expr {exprInner = inner}) = show inner
 
 data PrintEnding where
   PrintEndingNewLine :: PrintEnding
@@ -345,7 +358,7 @@ data Stmt where
     Stmt
   InputStmt ::
     { inputPrintExpr :: Maybe Expr,
-      inputDestination :: StrIdent
+      inputDestination :: Ident
     } ->
     Stmt
   EndStmt :: Stmt
