@@ -345,7 +345,7 @@ data Stmt where
     Stmt
   InputStmt ::
     { inputPrintExpr :: Maybe Expr,
-      inputDestination :: StrIdent
+      inputDestination :: Ident
     } ->
     Stmt
   EndStmt :: Stmt

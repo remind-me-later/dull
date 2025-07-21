@@ -352,7 +352,7 @@ inputStmt :: Parser Stmt
 inputStmt = do
   _ <- stmtKeyword InputKeyword
   maybePrintExpr <- optional (expression <* symbol ';')
-  identifier <- strIdent
+  identifier <- ident
   return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 
 endStmt :: Parser Stmt
