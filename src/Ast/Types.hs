@@ -28,7 +28,7 @@ module Ast.Types
 where
 
 import Data.List (intercalate)
-import SymbolTable (ExprType)
+import TypeSystem (ExprType)
 
 data BinOperator where
   AddOp :: BinOperator
@@ -209,14 +209,14 @@ instance Show PseudoVariable where
 
 data StrIdent where
   StrIdent :: String -> StrIdent
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show StrIdent where
   show (StrIdent s) = s ++ "$"
 
 data NumIdent where
   NumIdent :: String -> NumIdent
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show NumIdent where
   show (NumIdent s) = s
@@ -224,7 +224,7 @@ instance Show NumIdent where
 data Ident where
   IdentNumIdent :: NumIdent -> Ident
   IdentStrIdent :: StrIdent -> Ident
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show Ident where
   show (IdentNumIdent (NumIdent s)) = s

@@ -1,25 +1,16 @@
 module SymbolTable
-  ( ExprType (..),
-    Symbol (..),
+  ( Symbol (..),
     SymbolTable (..),
     emptySymbolTable,
     insertSymbol,
     lookupSymbol,
+    sizeOfTy,
   )
 where
 
+import Ast.Types (Ident (..))
 import Data.Map
-
-data ExprType where
-  ExprStringType :: ExprType
-  ExprNumericType :: ExprType
-  ExprUnknownType :: ExprType
-  ExprArrType ::
-    { exprArrType :: ExprType,
-      exprArrSize :: Int
-    } ->
-    ExprType
-  deriving (Show, Eq)
+import TypeSystem
 
 data Symbol where
   Symbol ::
@@ -32,7 +23,7 @@ data Symbol where
 
 data SymbolTable where
   SymbolTable ::
-    { symbols :: Map String Symbol,
+    { symbols :: Map Ident Symbol,
       nextStackOffset :: Int
     } ->
     SymbolTable
@@ -44,19 +35,20 @@ emptySymbolTable = SymbolTable {symbols = empty, nextStackOffset = 0}
 sizeOfTy :: ExprType -> Int
 sizeOfTy ExprStringType = 1
 sizeOfTy ExprNumericType = 1
-sizeOfTy (ExprArrType {exprArrSize}) = exprArrSize
+sizeOfTy (ExprArrType {exprArrSize, exprArrLength}) = exprArrSize * exprArrLength
 sizeOfTy ExprUnknownType = 0
 
-insertSymbol :: String -> ExprType -> SymbolTable -> SymbolTable
+insertSymbol :: Ident -> ExprType -> SymbolTable -> SymbolTable
 insertSymbol sym ty st@SymbolTable {symbols, nextStackOffset} =
   let alreadyInSymbols = Data.Map.member sym symbols
-      newSymbol = Symbol {symbolName = sym, symbolStackOffset = nextStackOffset, exprType = ty}
+      newSymbolName = show sym
+      newSymbol = Symbol {symbolName = newSymbolName, symbolStackOffset = nextStackOffset, exprType = ty}
       newSymbols = insert sym newSymbol symbols
       newOffset = nextStackOffset + sizeOfTy ty
    in if alreadyInSymbols
         then st
         else SymbolTable {symbols = newSymbols, nextStackOffset = newOffset}
 
-lookupSymbol :: String -> SymbolTable -> Maybe Symbol
+lookupSymbol :: Ident -> SymbolTable -> Maybe Symbol
 lookupSymbol name SymbolTable {symbols} =
   Data.Map.lookup name symbols

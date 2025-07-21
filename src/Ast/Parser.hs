@@ -7,7 +7,6 @@ import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.Maybe (fromMaybe)
-import SymbolTable (ExprType (..))
 import Text.Parsec
   ( ParsecT,
     char,
@@ -20,6 +19,7 @@ import Text.Parsec
     string,
     try,
   )
+import TypeSystem (ExprType (..))
 
 type Parser = ParsecT String () IO
 
