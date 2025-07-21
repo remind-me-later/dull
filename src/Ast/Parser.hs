@@ -19,7 +19,7 @@ import Text.Parsec
     string,
     try,
   )
-import TypeSystem (ExprType (..))
+import TypeSystem (BasicType (..))
 
 type Parser = ParsecT String () IO
 
@@ -201,17 +201,17 @@ expression = logicalExpr
       where
         numLitExpr = do
           n <- number
-          return Expr {exprInner = NumLitExpr n, exprType = ExprUnknownType}
+          return Expr {exprInner = NumLitExpr n, exprType = BasicUnknownType}
         strLitExpr = do
           str <- stringLiteral
-          return Expr {exprInner = StrLitExpr str, exprType = ExprUnknownType}
+          return Expr {exprInner = StrLitExpr str, exprType = BasicUnknownType}
         lvalueExpr = do
           lvalue' <- lvalue
-          return Expr {exprInner = LValueExpr lvalue', exprType = ExprUnknownType}
+          return Expr {exprInner = LValueExpr lvalue', exprType = BasicUnknownType}
         parenExpr = parens expression
         funCallExpr = do
           fun <- functionCall
-          return Expr {exprInner = FunCallExpr fun, exprType = ExprUnknownType}
+          return Expr {exprInner = FunCallExpr fun, exprType = BasicUnknownType}
 
     exponentExpr = do
       left <- factor
@@ -219,7 +219,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- exponentExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
         Nothing -> return left
 
     unaryOpExpr = do
@@ -232,7 +232,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- unaryOpExpr
-          return Expr {exprInner = UnaryExpr op right, exprType = ExprUnknownType}
+          return Expr {exprInner = UnaryExpr op right, exprType = BasicUnknownType}
         Nothing -> exponentExpr
 
     mulDivExpr = do
@@ -245,7 +245,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- mulDivExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
         Nothing -> return left
 
     addSubExpr = do
@@ -258,7 +258,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- addSubExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
         Nothing -> return left
 
     comparisonExpr = do
@@ -276,7 +276,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- comparisonExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
         Nothing -> return left
 
     unaryLogicalExpr = do
@@ -284,7 +284,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- unaryLogicalExpr
-          return Expr {exprInner = UnaryExpr op right, exprType = ExprUnknownType}
+          return Expr {exprInner = UnaryExpr op right, exprType = BasicUnknownType}
         Nothing -> comparisonExpr
 
     logicalExpr = do
@@ -297,14 +297,20 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- logicalExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ExprUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
         Nothing -> return left
 
 assignment :: Parser Assignment
 assignment = do
   v <- lvalue
   _ <- binOperator EqualOp
-  Assignment v <$> expression
+  exp' <- expression
+  return
+    Assignment
+      { assignmentLValue = v,
+        assignmentExpr = exp',
+        assignmentType = BasicUnknownType
+      }
 
 letStmt :: Bool -> Parser Stmt
 letStmt mandatoryLet = do
@@ -548,7 +554,7 @@ line = do
             lineStmts =
               [ PrintStmt
                   { printKind = PrintKindPrint,
-                    printExprs = [Expr {exprInner = StrLitExpr label, exprType = ExprUnknownType}],
+                    printExprs = [Expr {exprInner = StrLitExpr label, exprType = BasicUnknownType}],
                     printEnding = PrintEndingNewLine,
                     printUsingClause = Nothing
                   }

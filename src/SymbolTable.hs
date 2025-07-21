@@ -16,7 +16,7 @@ data Symbol where
   Symbol ::
     { symbolName :: String,
       symbolStackOffset :: Int,
-      exprType :: ExprType
+      exprType :: BasicType
     } ->
     Symbol
   deriving (Show, Eq)
@@ -32,13 +32,13 @@ data SymbolTable where
 emptySymbolTable :: SymbolTable
 emptySymbolTable = SymbolTable {symbols = empty, nextStackOffset = 0}
 
-sizeOfTy :: ExprType -> Int
-sizeOfTy ExprStringType = 1
-sizeOfTy ExprNumericType = 1
-sizeOfTy (ExprArrType {exprArrSize, exprArrLength}) = exprArrSize * exprArrLength
-sizeOfTy ExprUnknownType = 0
+sizeOfTy :: BasicType -> Int
+sizeOfTy BasicStringType = 1
+sizeOfTy BasicNumericType = 1
+sizeOfTy (BasicArrType {exprArrSize, exprArrLength}) = exprArrSize * exprArrLength
+sizeOfTy BasicUnknownType = 0
 
-insertSymbol :: Ident -> ExprType -> SymbolTable -> SymbolTable
+insertSymbol :: Ident -> BasicType -> SymbolTable -> SymbolTable
 insertSymbol sym ty st@SymbolTable {symbols, nextStackOffset} =
   let alreadyInSymbols = Data.Map.member sym symbols
       newSymbolName = show sym

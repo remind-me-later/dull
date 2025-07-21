@@ -1,16 +1,16 @@
 module TypeSystem
-  ( ExprType (..),
+  ( BasicType (..),
   )
 where
 
-data ExprType where
-  ExprStringType :: ExprType
-  ExprNumericType :: ExprType
-  ExprUnknownType :: ExprType
-  ExprArrType ::
-    { exprArrType :: ExprType,
+data BasicType where
+  BasicStringType :: BasicType
+  BasicNumericType :: BasicType
+  BasicUnknownType :: BasicType
+  BasicArrType ::
+    { exprArrType :: BasicType,
       exprArrSize :: Int,
       exprArrLength :: Int -- Only valid for strings, for numeric arrays this is always 1
     } ->
-    ExprType
+    BasicType
   deriving (Show, Eq)

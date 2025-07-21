@@ -28,7 +28,7 @@ module Ast.Types
 where
 
 import Data.List (intercalate)
-import TypeSystem (ExprType)
+import TypeSystem (BasicType)
 
 data BinOperator where
   AddOp :: BinOperator
@@ -277,7 +277,7 @@ instance Show ExprInner where
 data Expr where
   Expr ::
     { exprInner :: ExprInner,
-      exprType :: ExprType
+      exprType :: BasicType
     } ->
     Expr
   deriving (Eq)
@@ -300,11 +300,17 @@ data UsingClause where
   deriving (Eq)
 
 data Assignment where
-  Assignment :: LValue -> Expr -> Assignment
+  Assignment ::
+    { assignmentLValue :: LValue,
+      assignmentExpr :: Expr,
+      assignmentType :: BasicType
+    } ->
+    Assignment
   deriving (Eq)
 
 instance Show Assignment where
-  show (Assignment x e) = show x ++ " = " ++ show e
+  show (Assignment lValue expr _) =
+    show lValue ++ " = " ++ show expr
 
 data GotoTarget where
   GoToLabel :: String -> GotoTarget
@@ -467,6 +473,7 @@ data Line where
 
 newtype Program where
   Program :: {programLines :: [Line]} -> Program
+  deriving (Eq)
 
 instance Show Program where
   show (Program ls) =

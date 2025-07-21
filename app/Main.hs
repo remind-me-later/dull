@@ -1,5 +1,10 @@
-import Ast.Parser (parseProgram)
+import CompilationPipeline
+  ( CompilationError (..),
+    CompilationResult (..),
+    compileProgram,
+  )
 import System.Environment (getArgs)
+import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
@@ -8,9 +13,22 @@ main = do
   case args of
     [fileName] -> do
       contents <- readFile fileName
-      parsedProgram <- parseProgram fileName contents
-      case parsedProgram of
-        Left err -> putStrLn $ "Error parsing program: " ++ err
-        Right prog -> do
-          putStrLn $ "Parsed program: \n" ++ show prog
-    _ -> putStrLn "Usage: runhaskell Main.hs <filename>"
+
+      result <- compileProgram fileName contents
+      case result of
+        Left (ParseError err) -> do
+          putStrLn $ "Parse error: " ++ err
+          exitFailure
+        Left (TypeCheckError err) -> do
+          putStrLn $ "Type checking error: " ++ err
+          exitFailure
+        Left (OtherError err) -> do
+          putStrLn $ "Compilation error: " ++ err
+          exitFailure
+        Right (CompilationResult prog symbolTable) -> do
+          putStrLn "✓ Compilation successful!"
+          putStrLn $ "Program: " ++ show prog
+          putStrLn $ "Symbol table: " ++ show symbolTable
+    _ -> do
+      putStrLn "Usage: dull <filename>"
+      exitFailure
