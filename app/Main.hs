@@ -17,18 +17,18 @@ main = do
       result <- compileProgram fileName contents
       case result of
         Left (ParseError err) -> do
-          putStrLn $ "Parse error: " ++ err
+          putStrLn $ "Parse error:\n" ++ err
           exitFailure
         Left (TypeCheckError err) -> do
-          putStrLn $ "Type checking error: " ++ err
+          putStrLn $ "Type checking error:\n" ++ err
           exitFailure
         Left (OtherError err) -> do
-          putStrLn $ "Compilation error: " ++ err
+          putStrLn $ "Compilation error:\n" ++ err
           exitFailure
         Right (CompilationResult prog symbolTable) -> do
           putStrLn "✓ Compilation successful!"
-          putStrLn $ "Program: " ++ show prog
-          putStrLn $ "Symbol table: " ++ show symbolTable
+          putStrLn $ "Program:\n" ++ show prog
+          putStrLn $ "Symbol table:\n" ++ show symbolTable
     _ -> do
       putStrLn "Usage: dull <filename>"
       exitFailure

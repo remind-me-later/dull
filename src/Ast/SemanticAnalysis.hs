@@ -41,7 +41,11 @@ insertSymbolInState :: Ident -> BasicType -> SemanticAnalysisState -> SemanticAn
 insertSymbolInState sym ty (SemanticAnalysisState symTable) =
   SemanticAnalysisState {symbolTable = insertSymbol sym ty symTable}
 
-lookupSymbolInState :: Ident -> SemanticAnalysisState -> Symbol
+insertStringLiteralInState :: String -> SemanticAnalysisState -> SemanticAnalysisState
+insertStringLiteralInState str (SemanticAnalysisState symTable) =
+  SemanticAnalysisState {symbolTable = insertStringLiteral str symTable}
+
+lookupSymbolInState :: Ident -> SemanticAnalysisState -> Variable
 lookupSymbolInState name (SemanticAnalysisState symTable) =
   case lookupSymbol name symTable of
     Just sym -> sym
@@ -75,7 +79,7 @@ analyzeLValue (LValueArrayAccess ident expr) = do
     BasicNumericType -> do
       -- Arrays must be declared before use with the DIM statement
       symbol <- gets (lookupSymbolInState ident)
-      case SymbolTable.exprType symbol of
+      case SymbolTable.variableType symbol of
         BasicNumArrType {numericArrSize} ->
           if numericArrSize >= 0
             then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicNumericType)
@@ -91,7 +95,9 @@ analyzeLValue (LValuePseudoVar pseudoVar) = do
   return (LValuePseudoVar pseudoVar, ty)
 
 analyzeStrVariableOrLiteral :: StringVariableOrLiteral -> State SemanticAnalysisState BasicType
-analyzeStrVariableOrLiteral (StringLiteral _) = return BasicStringType
+analyzeStrVariableOrLiteral (StringLiteral lit) = do
+  modify (insertStringLiteralInState lit)
+  return BasicStringType
 analyzeStrVariableOrLiteral (StringVariable ident) = analyzeStrIdent ident
 
 analyzeFunction :: RawFunction -> State SemanticAnalysisState (TypedFunction, BasicType)
@@ -156,7 +162,10 @@ analyzeFunction ident = case ident of
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (NumLitExpr num) = return (NumLitExpr num, BasicNumericType)
-analyzeExprInner (StrLitExpr str) = return (StrLitExpr str, BasicStringType)
+analyzeExprInner (StrLitExpr str) = do
+  -- Insert the string literal into the symbol table
+  modify (insertStringLiteralInState str)
+  return (StrLitExpr str, BasicStringType)
 analyzeExprInner (LValueExpr lValue) = do
   (typedLValue, ty) <- analyzeLValue lValue
   return (LValueExpr typedLValue, ty)
