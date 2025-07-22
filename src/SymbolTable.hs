@@ -6,12 +6,14 @@ module SymbolTable
     lookupSymbol,
     sizeOfTy,
     insertStringLiteral,
+    insertUsedLabel,
   )
 where
 
-import Ast.Types (Ident (..))
+import Ast.Types (GotoTarget, Ident (..))
 import Data.List (intercalate, sortBy)
 import Data.Map
+import Data.Set qualified
 import TypeSystem
 
 data Variable where
@@ -42,18 +44,22 @@ data SymbolTable where
   SymbolTable ::
     { symbolMap :: Map Ident Variable,
       stringLiteralMap :: Map String Int,
-      nextOffset :: Int
+      nextOffset :: Int,
+      usedLabels :: Data.Set.Set GotoTarget
     } ->
     SymbolTable
   deriving (Eq)
 
 instance Show SymbolTable where
-  show SymbolTable {symbolMap, stringLiteralMap} =
+  show SymbolTable {symbolMap, stringLiteralMap, usedLabels} =
     "vars: {"
       ++ intercalate ", " (show <$> orderedSymbols)
       ++ "}\n"
       ++ "strings: {"
       ++ intercalate ", " (show <$> stringLits)
+      ++ "}\n"
+      ++ "used labels: {"
+      ++ intercalate ", " (show <$> Data.Set.toList usedLabels)
       ++ "}\n"
     where
       orderedSymbols =
@@ -66,7 +72,7 @@ instance Show SymbolTable where
           (toList stringLiteralMap)
 
 emptySymbolTable :: SymbolTable
-emptySymbolTable = SymbolTable {symbolMap = empty, nextOffset = 0, stringLiteralMap = empty}
+emptySymbolTable = SymbolTable {symbolMap = empty, nextOffset = 0, stringLiteralMap = empty, usedLabels = mempty}
 
 insertSymbol :: Ident -> BasicType -> SymbolTable -> SymbolTable
 insertSymbol sym ty st@SymbolTable {symbolMap, nextOffset} =
@@ -86,6 +92,12 @@ insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffset} =
    in if alreadyInLiterals
         then st
         else st {stringLiteralMap = insert str nextOffset stringLiteralMap, nextOffset = newOffset}
+
+insertUsedLabel :: GotoTarget -> SymbolTable -> SymbolTable
+insertUsedLabel label st@SymbolTable {usedLabels} =
+  if label `elem` usedLabels
+    then st
+    else st {usedLabels = Data.Set.insert label usedLabels}
 
 lookupSymbol :: Ident -> SymbolTable -> Maybe Variable
 lookupSymbol name SymbolTable {symbolMap} =

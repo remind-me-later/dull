@@ -180,11 +180,11 @@ data Function et where
 
 instance Show (Function et) where
   show MidFun {midFunStringExpr = str, midFunStartExpr = start, midFunLengthExpr = len} =
-    "(MID " ++ show str ++ " " ++ show start ++ " " ++ show len ++ ")"
+    "MID(" ++ show str ++ ", " ++ show start ++ ", " ++ show len ++ ")"
   show LeftFun {leftFunStringExpr = str, leftFunLengthExpr = len} =
-    "(LEFT " ++ show str ++ " " ++ show len ++ ")"
+    "LEFT(" ++ show str ++ ", " ++ show len ++ ")"
   show RightFun {rightFunStringExpr = str, rightFunLengthExpr = len} =
-    "(RIGHT " ++ show str ++ " " ++ show len ++ ")"
+    "RIGHT(" ++ show str ++ ", " ++ show len ++ ")"
   show PointFun {pointFunPositionExpr = pos} =
     "(POINT " ++ show pos ++ ")"
   show
@@ -320,7 +320,7 @@ instance Show (Assignment et) where
 data GotoTarget where
   GoToLabel :: String -> GotoTarget
   GoToLine :: LineNumber -> GotoTarget
-  deriving (Eq)
+  deriving (Eq, Ord)
 
 instance Show GotoTarget where
   show (GoToLabel s) = "\"" ++ s ++ "\""
