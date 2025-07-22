@@ -19,6 +19,8 @@ library
                       SymbolTable
                       TypeSystem
                       CompilationPipeline
+                      Hir.Types
+                      Hir.Translate
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

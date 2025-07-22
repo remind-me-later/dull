@@ -446,7 +446,8 @@ instance Show (Stmt et) where
   show ClearStmt = "CLEAR"
   show (GoToStmt target) = "GOTO " ++ show target
   show (GoSubStmt target) = "GOSUB " ++ show target
-  show (WaitStmt e) = "WAIT " ++ show e
+  show (WaitStmt maybeExpr) =
+    "WAIT " ++ maybe "" show maybeExpr
   show ClsStmt = "CLS"
   show RandomStmt = "RANDOM"
   show (GprintStmt exprs kind) =

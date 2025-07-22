@@ -25,10 +25,11 @@ main = do
         Left (OtherError err) -> do
           putStrLn $ "Compilation error:\n" ++ err
           exitFailure
-        Right (CompilationResult prog symbolTable) -> do
+        Right (CompilationResult prog symbolTable hir) -> do
           putStrLn "✓ Compilation successful!"
           putStrLn $ "Program:\n" ++ show prog
           putStrLn $ "Symbol table:\n" ++ show symbolTable
+          putStrLn $ "HIR:\n" ++ show hir
     _ -> do
       putStrLn "Usage: dull <filename>"
       exitFailure
