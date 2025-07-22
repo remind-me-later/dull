@@ -1,6 +1,5 @@
 module Ast.Types
   ( BinOperator (..),
-    StmtKeyword (..),
     Function (..),
     Ident (..),
     Expr (..),
@@ -67,68 +66,6 @@ instance Show BinOperator where
   show OrOp = "OR"
   show AndOp = "AND"
   show CaretOp = "^"
-
-data StmtKeyword where
-  -- Statements
-  LetKeyword :: StmtKeyword
-  IfKeyword :: StmtKeyword
-  ThenKeyword :: StmtKeyword
-  InputKeyword :: StmtKeyword
-  PrintKeyword :: StmtKeyword
-  EndKeyword :: StmtKeyword
-  RemarkKeyword :: StmtKeyword
-  ForKeyword :: StmtKeyword
-  ToKeyword :: StmtKeyword
-  NextKeyword :: StmtKeyword
-  ClearKeyword :: StmtKeyword
-  GotoKeyword :: StmtKeyword
-  GosubKeyword :: StmtKeyword
-  WaitKeyword :: StmtKeyword
-  PauseKeyword :: StmtKeyword
-  ClsKeyword :: StmtKeyword
-  RandomKeyword :: StmtKeyword
-  GprintKeyword :: StmtKeyword
-  GCursorKeyword :: StmtKeyword
-  CursorKeyword :: StmtKeyword
-  BeepKeyword :: StmtKeyword
-  UsingKeyword :: StmtKeyword
-  ReturnKeyword :: StmtKeyword
-  PokeKeyword :: StmtKeyword
-  DimKeyword :: StmtKeyword
-  ReadKeyword :: StmtKeyword
-  DataKeyword :: StmtKeyword
-  RestoreKeyword :: StmtKeyword
-  deriving (Eq)
-
-instance Show StmtKeyword where
-  show LetKeyword = "LET"
-  show IfKeyword = "IF"
-  show ThenKeyword = "THEN"
-  show InputKeyword = "INPUT"
-  show PrintKeyword = "PRINT"
-  show EndKeyword = "END"
-  show RemarkKeyword = "REM"
-  show ForKeyword = "FOR"
-  show ToKeyword = "TO"
-  show NextKeyword = "NEXT"
-  show ClearKeyword = "CLEAR"
-  show GotoKeyword = "GOTO"
-  show GosubKeyword = "GOSUB"
-  show WaitKeyword = "WAIT"
-  show PauseKeyword = "PAUSE"
-  show ClsKeyword = "CLS"
-  show RandomKeyword = "RANDOM"
-  show GprintKeyword = "GPRINT"
-  show CursorKeyword = "CURSOR"
-  show GCursorKeyword = "GCURSOR"
-  show BeepKeyword = "BEEP"
-  show UsingKeyword = "USING"
-  show ReturnKeyword = "RETURN"
-  show PokeKeyword = "POKE"
-  show DimKeyword = "DIM"
-  show ReadKeyword = "READ"
-  show DataKeyword = "DATA"
-  show RestoreKeyword = "RESTORE"
 
 data StringVariableOrLiteral where
   StringLiteral :: String -> StringVariableOrLiteral

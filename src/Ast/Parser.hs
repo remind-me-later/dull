@@ -172,9 +172,6 @@ unaryOperator op = try (keyword (show op) $> op)
 binOperator :: BinOperator -> Parser BinOperator
 binOperator op = try (keyword (show op) $> op)
 
-stmtKeyword :: StmtKeyword -> Parser StmtKeyword
-stmtKeyword kw = try (keyword (show kw) $> kw)
-
 parens :: Parser a -> Parser a
 parens p = do
   _ <- symbol '('
@@ -316,21 +313,21 @@ letStmt :: Bool -> Parser RawStmt
 letStmt mandatoryLet = do
   if mandatoryLet
     then do
-      stmtKeyword LetKeyword $> ()
+      keyword "LET" $> ()
     else
-      optional (stmtKeyword LetKeyword) $> ()
+      optional (keyword "LET") $> ()
 
   assignments <- commaSeparated assignment
   return (LetStmt assignments)
 
 usingClause :: Parser UsingClause
 usingClause = do
-  _ <- stmtKeyword UsingKeyword
+  _ <- keyword "USING"
   UsingClause <$> stringVariableOrLiteral
 
 printStmt :: Parser RawStmt
 printStmt = do
-  k <- stmtKeyword PrintKeyword <|> stmtKeyword PauseKeyword
+  k <- try (keyword "PRINT" $> Left ()) <|> (keyword "PAUSE" $> Right ())
   maybeUsing <- optional (usingClause <* symbol ';')
   firstExpr <- expression
   restExprs <- many (try (symbol ';' *> expression))
@@ -339,9 +336,8 @@ printStmt = do
     ( PrintStmt
         { printKind =
             case k of
-              PrintKeyword -> PrintKindPrint
-              PauseKeyword -> PrintKindPause
-              _ -> error "Unexpected print kind",
+              Left _ -> PrintKindPrint
+              Right _ -> PrintKindPause,
           printExprs = firstExpr : restExprs,
           printEnding =
             case semi of
@@ -353,7 +349,7 @@ printStmt = do
 
 gPrintStmt :: Parser RawStmt
 gPrintStmt = do
-  _ <- stmtKeyword GprintKeyword
+  _ <- keyword "GPRINT"
   firstExpr <- expression
   restExprs <- many (try (symbol ';' *> expression))
   semi <- optional (symbol ';')
@@ -369,29 +365,29 @@ gPrintStmt = do
 
 gCursorStmt :: Parser RawStmt
 gCursorStmt = do
-  _ <- stmtKeyword GCursorKeyword
+  _ <- keyword "GCURSOR"
   GCursorStmt <$> expression
 
 cursorStmt :: Parser RawStmt
 cursorStmt = do
-  _ <- stmtKeyword CursorKeyword
+  _ <- keyword "CURSOR"
   CursorStmt <$> expression
 
 inputStmt :: Parser RawStmt
 inputStmt = do
-  _ <- stmtKeyword InputKeyword
+  _ <- keyword "INPUT"
   maybePrintExpr <- optional (expression <* symbol ';')
   identifier <- ident
   return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 
 endStmt :: Parser RawStmt
-endStmt = stmtKeyword EndKeyword $> EndStmt
+endStmt = keyword "END" $> EndStmt
 
 ifStmt :: Parser RawStmt
 ifStmt = do
-  _ <- stmtKeyword IfKeyword
+  _ <- keyword "IF"
   cond <- expression
-  _ <- optional (stmtKeyword ThenKeyword)
+  _ <- optional (keyword "THEN")
   -- the then statement can be a normal statement with a mandatory let or a line number
   thenStmt <- try (stmt True) <|> (GoToStmt . GoToLine <$> integer)
   return
@@ -402,22 +398,22 @@ ifStmt = do
 
 forStmt :: Parser RawStmt
 forStmt = do
-  _ <- stmtKeyword ForKeyword
+  _ <- keyword "FOR"
   a <- assignment
-  _ <- stmtKeyword ToKeyword
+  _ <- keyword "TO"
   ForStmt a <$> expression
 
 nextStmt :: Parser RawStmt
-nextStmt = stmtKeyword NextKeyword *> (NextStmt <$> numIdent)
+nextStmt = keyword "NEXT" *> (NextStmt <$> numIdent)
 
 clearStmt :: Parser RawStmt
-clearStmt = stmtKeyword ClearKeyword $> ClearStmt
+clearStmt = keyword "CLEAR" $> ClearStmt
 
 clsStmt :: Parser RawStmt
-clsStmt = stmtKeyword ClsKeyword $> ClsStmt
+clsStmt = keyword "CLS" $> ClsStmt
 
 randomStmt :: Parser RawStmt
-randomStmt = stmtKeyword RandomKeyword $> RandomStmt
+randomStmt = keyword "RANDOM" $> RandomStmt
 
 gotoTargetStmt :: Parser GotoTarget
 gotoTargetStmt =
@@ -426,14 +422,16 @@ gotoTargetStmt =
 
 gotoStmt :: Parser RawStmt
 gotoStmt = do
-  _ <- stmtKeyword GotoKeyword
+  _ <- keyword "GOTO"
   GoToStmt <$> gotoTargetStmt
 
 gosubStmt :: Parser RawStmt
-gosubStmt = stmtKeyword GosubKeyword *> (GoSubStmt <$> gotoTargetStmt)
+gosubStmt = do
+  _ <- keyword "GOSUB"
+  GoSubStmt <$> gotoTargetStmt
 
 waitStmt :: Parser RawStmt
-waitStmt = stmtKeyword WaitKeyword *> (WaitStmt <$> optional expression)
+waitStmt = keyword "WAIT" *> (WaitStmt <$> optional expression)
 
 usingStmt :: Parser RawStmt
 usingStmt = do
@@ -441,7 +439,7 @@ usingStmt = do
 
 comment :: Parser RawStmt
 comment = do
-  _ <- stmtKeyword RemarkKeyword
+  _ <- keyword "REM"
   _ <- many (satisfy (/= '\n'))
   return Comment
 
@@ -455,17 +453,17 @@ beepOptionalParamsP = do
 
 beepStmt :: Parser RawStmt
 beepStmt = do
-  _ <- stmtKeyword BeepKeyword
+  _ <- keyword "BEEP"
   repetitions <- expression
   optionalParams <- optional beepOptionalParamsP
   return BeepStmt {beepStmtRepetitionsExpr = repetitions, beepStmtOptionalParams = optionalParams}
 
 returnStmt :: Parser RawStmt
-returnStmt = stmtKeyword ReturnKeyword $> ReturnStmt
+returnStmt = keyword "RETURN" $> ReturnStmt
 
 pokeStmt :: Parser RawStmt
 pokeStmt = do
-  _ <- stmtKeyword PokeKeyword
+  _ <- keyword "POKE"
   kind <- optional (symbol '#')
   exprs <- commaSeparated expression
   return
@@ -479,7 +477,7 @@ pokeStmt = do
 
 dimStmt :: Parser RawStmt
 dimStmt = do
-  _ <- stmtKeyword DimKeyword
+  _ <- keyword "DIM"
   identifier <- ident
   size <- parens integer
   case identifier of
@@ -506,17 +504,17 @@ dimStmt = do
 
 dataStmt :: Parser RawStmt
 dataStmt = do
-  _ <- stmtKeyword DataKeyword
+  _ <- keyword "DATA"
   DataStmt <$> commaSeparated expression
 
 readStmt :: Parser RawStmt
 readStmt = do
-  _ <- stmtKeyword ReadKeyword
+  _ <- keyword "READ"
   ReadStmt <$> commaSeparated lvalue
 
 restoreStmt :: Parser RawStmt
 restoreStmt = do
-  _ <- stmtKeyword RestoreKeyword
+  _ <- keyword "RESTORE"
   RestoreStmt <$> expression
 
 stmt :: Bool -> Parser RawStmt
@@ -572,10 +570,6 @@ line = do
     _ -> do
       _ <- newline
       return Line {lineNumber, lineLabel, lineStmts}
-
--- newtype Program et where
---   Program :: {programLines :: Data.Map.Map LineNumber (Line et)} -> Program et
---   deriving (Eq)
 
 program :: Parser RawProgram
 program = do
