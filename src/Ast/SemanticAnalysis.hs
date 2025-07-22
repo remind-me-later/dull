@@ -304,7 +304,8 @@ analyzeStmt (IfThenStmt condition thenStmt) = do
   when (Ast.Types.exprType conditionType /= BasicNumericType) $
     error "Condition in IF statement must be numeric"
 
-  analyzeStmt thenStmt
+  thenStmt' <- analyzeStmt thenStmt
+  return (IfThenStmt conditionType thenStmt')
 analyzeStmt (PrintStmt printKind printExprs printEnding printUsingClause) = do
   -- mapM_ analyzeExpr printExprs
   exprTypes <- mapM analyzeExpr printExprs
