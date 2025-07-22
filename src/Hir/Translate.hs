@@ -5,22 +5,66 @@ import Control.Monad.State
 import Data.Map qualified
 import Hir.Types
 import SymbolTable
-import TypeSystem (BasicType)
+import TypeSystem (BasicType (..))
 
-newtype TranslationState = TranslationState
-  { labelToInt :: Data.Map.Map GotoTarget Int
+data TranslationState = TranslationState
+  { labelToInt :: Data.Map.Map GotoTarget Int,
+    nextLabelIdx :: Int
   }
 
 lookupLabelInState :: GotoTarget -> TranslationState -> Maybe Int
-lookupLabelInState label (TranslationState labelMap) =
-  Data.Map.lookup label labelMap
+lookupLabelInState label (TranslationState {labelToInt}) =
+  Data.Map.lookup label labelToInt
 
-symbolTableUsedLabelsToInt :: SymbolTable -> Data.Map.Map GotoTarget Int
+insertGotoLabelInState :: TranslationState -> (TranslationState, Int)
+insertGotoLabelInState state' =
+  let nextIdx = nextLabelIdx state'
+      newLabelMap = Data.Map.insert (GoToLine nextIdx) nextIdx (labelToInt state')
+      newState = state' {labelToInt = newLabelMap, nextLabelIdx = nextIdx + 1}
+   in (newState, nextIdx)
+
+symbolTableUsedLabelsToInt :: SymbolTable -> (Data.Map.Map GotoTarget Int, Int)
 symbolTableUsedLabelsToInt symbolTable =
-  Data.Map.fromList
-    [ (label, idx)
-    | (idx, label) <- zip [0 ..] (Data.Map.keys $ usedLabels symbolTable)
-    ]
+  let labels = Data.Map.keys $ usedLabels symbolTable
+      labelMap = Data.Map.fromList $ zip labels [0 ..]
+      nextIdx = length labels
+   in (labelMap, nextIdx)
+
+lookupLabelPanics :: GotoTarget -> TranslationState -> Int
+lookupLabelPanics label state' =
+  case lookupLabelInState label state' of
+    Just idx -> idx
+    Nothing -> error $ "Label not found: " ++ show label
+
+translateStmt :: Stmt BasicType -> State TranslationState [HirStmt]
+translateStmt stmt = case stmt of
+  GoToStmt target -> do
+    labelIdx <- gets (lookupLabelPanics target)
+    return [HirGoto labelIdx]
+  GoSubStmt target -> do
+    labelIdx <- gets (lookupLabelPanics target)
+    return [HirGosub labelIdx]
+  IfThenStmt condition stmt' ->
+    case stmt' of
+      GoToStmt target -> do
+        labelIdx <- gets (lookupLabelPanics target)
+        return [HirCondGoto condition labelIdx]
+      GoSubStmt target -> do
+        labelIdx <- gets (lookupLabelPanics target)
+        return [HirCondGosub condition labelIdx]
+      s ->
+        -- Reverse the condition of the if and transform it into a conditional goto
+        let newCondition =
+              Expr
+                { exprInner = UnaryExpr UnaryNotOp condition,
+                  exprType = BasicNumericType
+                }
+         in -- we have to create a new label for the if statement
+            do
+              (newState, labelIdx) <- gets insertGotoLabelInState
+              put newState
+              return [HirCondGoto newCondition labelIdx, HirStmt s, HirLabel labelIdx]
+  _ -> return [HirStmt stmt]
 
 translateLine :: Line BasicType -> State TranslationState [HirStmt]
 translateLine Line {lineNumber, lineLabel, lineStmts} = do
@@ -36,13 +80,15 @@ translateLine Line {lineNumber, lineLabel, lineStmts} = do
     case lineNumberIdx of
       Just idx -> return [HirLabel idx]
       Nothing -> return []
-  let stmts = map HirStmt lineStmts
-  return $ number ++ label ++ stmts
+  stmts <- mapM translateStmt lineStmts
+  return $ number ++ label ++ concat stmts
 
 translateProgram :: Program BasicType -> SymbolTable -> HirProgram
 translateProgram (Program programLines) symbolTable =
   let programLines' = Data.Map.elems programLines
-      initialState = TranslationState $ symbolTableUsedLabelsToInt symbolTable
+      (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable
+      initialState = TranslationState {labelToInt = labelMap, nextLabelIdx = nextIdx}
+      -- Translate each line of the program
       translatedStmts = evalState (mapM translateLine programLines') initialState
       falttenedStmts = concat translatedStmts
    in HirProgram falttenedStmts
