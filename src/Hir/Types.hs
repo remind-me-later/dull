@@ -10,6 +10,7 @@ data HirStmt where
   HirGosub :: Int -> HirStmt
   HirCondGoto :: Expr BasicType -> Int -> HirStmt
   HirCondGosub :: Expr BasicType -> Int -> HirStmt
+  HirAssign :: Assignment BasicType -> HirStmt
   deriving (Eq)
 
 instance Show HirStmt where
@@ -19,6 +20,7 @@ instance Show HirStmt where
   show (HirGosub idx) = "\tGOSUB L" ++ show idx ++ "\n"
   show (HirCondGoto cond idx) = "\tIF " ++ show cond ++ " THEN GOTO L" ++ show idx ++ "\n"
   show (HirCondGosub cond idx) = "\tIF " ++ show cond ++ " THEN GOSUB L" ++ show idx ++ "\n"
+  show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirStmt]

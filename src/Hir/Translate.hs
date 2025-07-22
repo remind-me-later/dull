@@ -64,6 +64,9 @@ translateStmt stmt = case stmt of
               (newState, labelIdx) <- gets insertGotoLabelInState
               put newState
               return [HirCondGoto newCondition labelIdx, HirStmt s, HirLabel labelIdx]
+  LetStmt {letAssignments} -> do
+    let assignments = map HirAssign letAssignments
+    return assignments
   _ -> return [HirStmt stmt]
 
 translateLine :: Line BasicType -> State TranslationState [HirStmt]
