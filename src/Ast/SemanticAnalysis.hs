@@ -294,6 +294,14 @@ analyzeAssignment (Assignment lValue expr _) = do
         )
     else error $ "Type mismatch in assignment: " ++ show lValueType ++ " vs " ++ show (Ast.Types.exprType analyzedExpr)
 
+analyzeBeepOptionalParams :: BeepOptionalParams () -> State SemanticAnalysisState (BeepOptionalParams BasicType)
+analyzeBeepOptionalParams (BeepOptionalParams frequency duration) = do
+  analyzedFrequency <- analyzeExpr frequency
+  analyzedDuration <- analyzeExpr duration
+  if Ast.Types.exprType analyzedFrequency == BasicNumericType && Ast.Types.exprType analyzedDuration == BasicNumericType
+    then return (BeepOptionalParams {beepFrequency = analyzedFrequency, beepDuration = analyzedDuration})
+    else error "Beep optional parameters must be numeric expressions"
+
 analyzeStmt :: RawStmt -> State SemanticAnalysisState TypedStmt
 analyzeStmt (LetStmt assignments) = do
   analyzedAssignments <- mapM analyzeAssignment assignments
@@ -376,13 +384,17 @@ analyzeStmt (CursorStmt cursorExpr) = do
     error "Cursor statement requires a numeric expression"
 
   return (CursorStmt {cursorExpr = cursorType})
-analyzeStmt (BeepStmt beepExprs) = do
-  exprTypes <- mapM analyzeExpr beepExprs
+analyzeStmt (BeepStmt repetitionEcpr optionalParams) = do
+  beepType <- analyzeExpr repetitionEcpr
 
-  unless (all (\et -> Ast.Types.exprType et == BasicNumericType) exprTypes) $
-    error "Beep statement requires numeric expressions"
+  when (Ast.Types.exprType beepType /= BasicNumericType) $
+    error "Beep statement requires a numeric expression for repetitions"
 
-  return (BeepStmt {beepExprs = exprTypes})
+  analyzedOptionalParams <- case optionalParams of
+    Just params -> Just <$> analyzeBeepOptionalParams params
+    Nothing -> return Nothing
+
+  return (BeepStmt {beepStmtRepetitionsExpr = beepType, beepStmtOptionalParams = analyzedOptionalParams})
 analyzeStmt ReturnStmt = return ReturnStmt
 analyzeStmt (PokeStmt pokeKind pokeExprs) = do
   exprTypes <- mapM analyzeExpr pokeExprs

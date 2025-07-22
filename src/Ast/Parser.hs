@@ -445,11 +445,20 @@ comment = do
   _ <- many (satisfy (/= '\n'))
   return Comment
 
+beepOptionalParamsP :: Parser (BeepOptionalParams ())
+beepOptionalParamsP = do
+  _ <- symbol ','
+  frequency <- expression
+  _ <- symbol ','
+  duration <- expression
+  return BeepOptionalParams {beepFrequency = frequency, beepDuration = duration}
+
 beepStmt :: Parser RawStmt
 beepStmt = do
   _ <- stmtKeyword BeepKeyword
-  exprs <- commaSeparated expression
-  return (BeepStmt exprs)
+  repetitions <- expression
+  optionalParams <- optional beepOptionalParamsP
+  return BeepStmt {beepStmtRepetitionsExpr = repetitions, beepStmtOptionalParams = optionalParams}
 
 returnStmt :: Parser RawStmt
 returnStmt = stmtKeyword ReturnKeyword $> ReturnStmt

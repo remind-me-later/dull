@@ -30,6 +30,7 @@ module Ast.Types
     RawLValue,
     RawFunction,
     RawExprInner,
+    BeepOptionalParams (..),
   )
 where
 
@@ -359,6 +360,14 @@ instance Show DimKind where
         Just l -> "*" ++ show l
         Nothing -> ""
 
+data BeepOptionalParams et where
+  BeepOptionalParams ::
+    { beepFrequency :: Expr et,
+      beepDuration :: Expr et
+    } ->
+    BeepOptionalParams et
+  deriving (Eq)
+
 data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
   IfThenStmt :: {ifCondition :: Expr et, ifThenStmt :: Stmt et} -> Stmt et
@@ -400,7 +409,11 @@ data Stmt et where
     Stmt et
   GCursorStmt :: {gCursorExpr :: Expr et} -> Stmt et
   CursorStmt :: {cursorExpr :: Expr et} -> Stmt et
-  BeepStmt :: {beepExprs :: [Expr et]} -> Stmt et
+  BeepStmt ::
+    { beepStmtRepetitionsExpr :: Expr et,
+      beepStmtOptionalParams :: Maybe (BeepOptionalParams et)
+    } ->
+    Stmt et
   ReturnStmt :: Stmt et
   PokeStmt ::
     { pokeKind :: PokeKind,
@@ -457,7 +470,13 @@ instance Show (Stmt et) where
         PrintEndingNewLine -> ""
         PrintEndingNoNewLine -> ";"
   show (GCursorStmt e) = "GCURSOR " ++ show e
-  show (BeepStmt exprs) = "BEEP " ++ intercalate ", " (show <$> exprs)
+  show (BeepStmt repetitions optionalParams) =
+    "BEEP "
+      ++ show repetitions
+      ++ case optionalParams of
+        Just (BeepOptionalParams {beepFrequency, beepDuration}) ->
+          show beepFrequency ++ ", " ++ show beepDuration
+        Nothing -> ""
   show (CursorStmt e) = "CURSOR " ++ show e
   show ReturnStmt = "RETURN"
   show (PokeStmt kind exprs) =
