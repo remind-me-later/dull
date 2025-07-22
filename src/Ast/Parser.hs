@@ -6,9 +6,11 @@ where
 import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
+import Data.Map qualified
 import Text.Parsec
   ( ParsecT,
     char,
+    eof,
     many1,
     runParserT,
     satisfy,
@@ -562,10 +564,17 @@ line = do
       _ <- newline
       return Line {lineNumber, lineLabel, lineStmts}
 
+-- newtype Program et where
+--   Program :: {programLines :: Data.Map.Map LineNumber (Line et)} -> Program et
+--   deriving (Eq)
+
 program :: Parser RawProgram
 program = do
   sc
-  Program <$> many line
+  lines' <- many line
+  eof
+  let lineMap = foldr (\l acc -> Data.Map.insert (lineNumber l) l acc) Data.Map.empty lines'
+  return (Program lineMap)
 
 parseProgram :: String -> String -> IO (Either String RawProgram)
 parseProgram fileName contents = do

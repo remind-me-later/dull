@@ -51,9 +51,9 @@ lookupSymbolInState name (SemanticAnalysisState symTable) =
     Just sym -> sym
     Nothing -> error $ "Symbol not found: " ++ show name
 
-insertUsedLabelInState :: GotoTarget -> SemanticAnalysisState -> SemanticAnalysisState
-insertUsedLabelInState label (SemanticAnalysisState symTable) =
-  SemanticAnalysisState {symbolTable = insertUsedLabel label symTable}
+insertUsedLabelInState :: GotoTarget -> Bool -> SemanticAnalysisState -> SemanticAnalysisState
+insertUsedLabelInState label isFunctionCall (SemanticAnalysisState symTable) =
+  SemanticAnalysisState {symbolTable = insertUsedLabel label isFunctionCall symTable}
 
 analyzeStrIdent :: StrIdent -> State SemanticAnalysisState BasicType
 analyzeStrIdent id'@(StrIdent _) = do
@@ -342,10 +342,10 @@ analyzeStmt (NextStmt nextIdent) = do
   return NextStmt {nextIdent = nextIdent}
 analyzeStmt ClearStmt = return ClearStmt
 analyzeStmt (GoToStmt gotoTarget) = do
-  modify (insertUsedLabelInState gotoTarget)
+  modify (insertUsedLabelInState gotoTarget False)
   return (GoToStmt {gotoTarget = gotoTarget})
 analyzeStmt (GoSubStmt gosubTarget) = do
-  modify (insertUsedLabelInState gosubTarget)
+  modify (insertUsedLabelInState gosubTarget True)
   return (GoSubStmt {gosubTarget = gosubTarget})
 analyzeStmt (WaitStmt waitForExpr) = do
   case waitForExpr of

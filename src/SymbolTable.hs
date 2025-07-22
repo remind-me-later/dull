@@ -13,7 +13,6 @@ where
 import Ast.Types (GotoTarget, Ident (..))
 import Data.List (intercalate, sortBy)
 import Data.Map
-import Data.Set qualified
 import TypeSystem
 
 data Variable where
@@ -40,12 +39,21 @@ instance Show Variable where
           ++ " : "
           ++ show variableOffset
 
+data GotoTargetData where
+  IsBranch :: GotoTargetData
+  IsFunctionCall :: GotoTargetData
+  deriving (Eq, Ord)
+
+instance Show GotoTargetData where
+  show IsBranch = "GOTO"
+  show IsFunctionCall = "GOSUB"
+
 data SymbolTable where
   SymbolTable ::
     { symbolMap :: Map Ident Variable,
       stringLiteralMap :: Map String Int,
       nextOffset :: Int,
-      usedLabels :: Data.Set.Set GotoTarget
+      usedLabels :: Map GotoTarget GotoTargetData
     } ->
     SymbolTable
   deriving (Eq)
@@ -59,7 +67,7 @@ instance Show SymbolTable where
       ++ intercalate ", " (show <$> stringLits)
       ++ "}\n"
       ++ "used labels: {"
-      ++ intercalate ", " (show <$> Data.Set.toList usedLabels)
+      ++ intercalate ", " (show <$> usedLabels')
       ++ "}\n"
     where
       orderedSymbols =
@@ -70,6 +78,10 @@ instance Show SymbolTable where
         sortBy
           (\s1 s2 -> compare (snd s1) (snd s2))
           (toList stringLiteralMap)
+      usedLabels' =
+        sortBy
+          (\(l1, _) (l2, _) -> compare l1 l2)
+          (toList usedLabels)
 
 emptySymbolTable :: SymbolTable
 emptySymbolTable = SymbolTable {symbolMap = empty, nextOffset = 0, stringLiteralMap = empty, usedLabels = mempty}
@@ -93,11 +105,14 @@ insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffset} =
         then st
         else st {stringLiteralMap = insert str nextOffset stringLiteralMap, nextOffset = newOffset}
 
-insertUsedLabel :: GotoTarget -> SymbolTable -> SymbolTable
-insertUsedLabel label st@SymbolTable {usedLabels} =
-  if label `elem` usedLabels
-    then st
-    else st {usedLabels = Data.Set.insert label usedLabels}
+insertUsedLabel :: GotoTarget -> Bool -> SymbolTable -> SymbolTable
+insertUsedLabel label isFunctionCall st@SymbolTable {usedLabels} =
+  let alreadyInUsedLabels = Data.Map.member label usedLabels
+      newUsedLabels =
+        if alreadyInUsedLabels
+          then usedLabels
+          else insert label (if isFunctionCall then IsFunctionCall else IsBranch) usedLabels
+   in st {usedLabels = newUsedLabels}
 
 lookupSymbol :: Ident -> SymbolTable -> Maybe Variable
 lookupSymbol name SymbolTable {symbolMap} =

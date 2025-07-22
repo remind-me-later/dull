@@ -34,6 +34,7 @@ module Ast.Types
 where
 
 import Data.List (intercalate)
+import Data.Map qualified
 
 data BinOperator where
   AddOp :: BinOperator
@@ -490,11 +491,16 @@ instance Show (Line et) where
     show n ++ " \"" ++ label ++ "\" " ++ intercalate ": " (show <$> stmts)
 
 newtype Program et where
-  Program :: {programLines :: [Line et]} -> Program et
+  Program :: {programLines :: Data.Map.Map LineNumber (Line et)} -> Program et
   deriving (Eq)
 
 instance Show (Program et) where
-  show (Program ls) = intercalate "\n" (show <$> ls)
+  show (Program ls) = intercalate "\n" (show <$> orderedLinesByLineNumber)
+    where
+      orderedLinesByLineNumber =
+        map snd
+          . Data.Map.toList
+          $ ls
 
 type RawProgram = Program ()
 
