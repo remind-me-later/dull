@@ -9,7 +9,8 @@ import TypeSystem (BasicType (..))
 
 data TranslationState = TranslationState
   { labelToInt :: Data.Map.Map GotoTarget Int,
-    nextLabelIdx :: Int
+    nextLabelIdx :: Int,
+    forStartToLabel :: Data.Map.Map NumIdent (Int, Expr BasicType)
   }
 
 lookupLabelInState :: GotoTarget -> TranslationState -> Maybe Int
@@ -35,6 +36,19 @@ lookupLabelPanics label state' =
   case lookupLabelInState label state' of
     Just idx -> idx
     Nothing -> error $ "Label not found: " ++ show label
+
+beginForLoop :: NumIdent -> Expr BasicType -> TranslationState -> (TranslationState, Int)
+beginForLoop ident cond state' =
+  let nextIdx = nextLabelIdx state'
+      newForStartMap = Data.Map.insert ident (nextIdx, cond) (forStartToLabel state')
+      newState = state' {forStartToLabel = newForStartMap, nextLabelIdx = nextIdx + 1}
+   in (newState, nextIdx)
+
+lookupForStartLabel :: NumIdent -> TranslationState -> (Int, Expr BasicType)
+lookupForStartLabel ident state' =
+  case Data.Map.lookup ident (forStartToLabel state') of
+    Just idx -> idx
+    Nothing -> error $ "For loop start label not found for: " ++ show ident
 
 translateStmt :: Stmt BasicType -> State TranslationState [HirStmt]
 translateStmt stmt = case stmt of
@@ -64,6 +78,44 @@ translateStmt stmt = case stmt of
               (newState, labelIdx) <- gets insertGotoLabelInState
               put newState
               return [HirCondGoto newCondition labelIdx, HirStmt s, HirLabel labelIdx]
+  ForStmt {forAssignment, forToExpr} -> do
+    let forIdent = case assignmentLValue forAssignment of
+          LValueIdent (IdentNumIdent ident) -> ident
+          _ -> error "For loop assignment must be an identifier"
+    -- Begin the for loop by inserting a label and storing the start condition
+    (newState, labelIdx) <- gets (beginForLoop forIdent forToExpr)
+    put newState
+
+    return [HirLabel labelIdx, HirAssign forAssignment]
+  NextStmt {nextIdent} -> do
+    (startLabelIdx, startCond) <- gets (lookupForStartLabel nextIdent)
+    let identExpr =
+          Expr
+            { exprInner =
+                LValueExpr (LValueIdent (IdentNumIdent nextIdent)),
+              exprType = BasicNumericType
+            }
+        nextAssignment =
+          Assignment
+            { assignmentLValue = LValueIdent (IdentNumIdent nextIdent),
+              assignmentExpr =
+                Expr
+                  { exprInner =
+                      BinExpr
+                        identExpr
+                        AddOp
+                        (Expr {exprInner = NumLitExpr 1, exprType = BasicNumericType}),
+                    exprType = BasicNumericType
+                  },
+              assignmentType = BasicNumericType
+            }
+        newJumpCondition =
+          Expr
+            { exprInner = BinExpr identExpr LessThanOrEqualOp startCond,
+              exprType = BasicNumericType
+            }
+    -- Create a conditional goto to the start of the for loop
+    return [HirAssign nextAssignment, HirCondGoto newJumpCondition startLabelIdx]
   LetStmt {letAssignments} -> do
     let assignments = map HirAssign letAssignments
     return assignments
@@ -131,7 +183,7 @@ translateProgram :: Program BasicType -> SymbolTable -> HirProgram
 translateProgram (Program programLines) symbolTable =
   let programLines' = Data.Map.elems programLines
       (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable
-      initialState = TranslationState {labelToInt = labelMap, nextLabelIdx = nextIdx}
+      initialState = TranslationState {labelToInt = labelMap, nextLabelIdx = nextIdx, forStartToLabel = Data.Map.empty}
       -- Translate each line of the program
       translatedStmts = evalState (mapM translateLine programLines') initialState
       falttenedStmts = concat translatedStmts
