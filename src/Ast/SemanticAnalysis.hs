@@ -1,10 +1,29 @@
-module Ast.SemanticAnalysis where
+module Ast.SemanticAnalysis
+  ( analyzeProgram,
+  )
+where
 
 import Ast.Types
 import Control.Monad (unless, when)
 import Control.Monad.State
 import SymbolTable
 import TypeSystem
+
+type TypedProgram = Program BasicType
+
+type TypedLine = Line BasicType
+
+type TypedStmt = Stmt BasicType
+
+type TypedExpr = Expr BasicType
+
+type TypedExprInner = ExprInner BasicType
+
+type TypedAssignment = Assignment BasicType
+
+type TypedLValue = LValue BasicType
+
+type TypedFunction = Function BasicType
 
 data SemanticAnalysisState where
   SemanticAnalysisState ::
@@ -41,8 +60,10 @@ analyzePsuedoVar :: PseudoVariable -> State SemanticAnalysisState BasicType
 analyzePsuedoVar TimePseudoVar = return BasicNumericType
 analyzePsuedoVar InkeyPseudoVar = return BasicStringType
 
-analyzeLValue :: LValue -> State SemanticAnalysisState BasicType
-analyzeLValue (LValueIdent ident) = analyzeIdent ident
+analyzeLValue :: RawLValue -> State SemanticAnalysisState (TypedLValue, BasicType)
+analyzeLValue (LValueIdent ident) = do
+  ty <- analyzeIdent ident
+  return (LValueIdent ident, ty)
 analyzeLValue (LValueArrayAccess ident expr) = do
   exprType' <- analyzeExpr expr
   case Ast.Types.exprType exprType' of
@@ -50,66 +71,84 @@ analyzeLValue (LValueArrayAccess ident expr) = do
       -- Arrays must be declared before use with the DIM statement
       symbol <- gets (lookupSymbolInState ident)
       case SymbolTable.exprType symbol of
-        BasicArrType {exprArrType} -> return exprArrType
+        BasicArrType {exprArrType} ->
+          return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, exprArrType)
         _ -> error $ "Symbol " ++ symbolName symbol ++ " is not an array"
     _ -> error "Array index must be numeric"
-analyzeLValue (LValuePseudoVar pseudoVar) = analyzePsuedoVar pseudoVar
+analyzeLValue (LValuePseudoVar pseudoVar) = do
+  ty <- analyzePsuedoVar pseudoVar
+  return (LValuePseudoVar pseudoVar, ty)
 
 analyzeStrVariableOrLiteral :: StringVariableOrLiteral -> State SemanticAnalysisState BasicType
 analyzeStrVariableOrLiteral (StringLiteral _) = return BasicStringType
 analyzeStrVariableOrLiteral (StringVariable ident) = analyzeStrIdent ident
 
-analyzeFunction :: Function -> State SemanticAnalysisState BasicType
-analyzeFunction (MidFun strExpr startExpr lengthExpr) = do
-  strType <- analyzeStrVariableOrLiteral strExpr
-  startType <- analyzeExpr startExpr
-  lengthType <- analyzeExpr lengthExpr
-  if strType == BasicStringType && Ast.Types.exprType startType == BasicNumericType && Ast.Types.exprType lengthType == BasicNumericType
-    then return BasicStringType
-    else error "Mid function requires a string and numeric expressions for start and length"
-analyzeFunction (LeftFun strExpr lengthExpr) = do
-  strType <- analyzeStrVariableOrLiteral strExpr
-  lengthType <- analyzeExpr lengthExpr
-  if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
-    then return BasicStringType
-    else error "Left function requires a string and a numeric expression for length"
-analyzeFunction (RightFun strExpr lengthExpr) = do
-  strType <- analyzeStrVariableOrLiteral strExpr
-  lengthType <- analyzeExpr lengthExpr
-  if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
-    then return BasicStringType
-    else error "Right function requires a string and a numeric expression for length"
-analyzeFunction (AsciiFun arg) = do
-  argType <- analyzeStrVariableOrLiteral arg
-  if argType == BasicStringType
-    then return BasicNumericType
-    else error "Ascii function requires a string argument"
-analyzeFunction (PointFun posExpr) = do
-  posType <- analyzeExpr posExpr
-  if Ast.Types.exprType posType == BasicNumericType
-    then return BasicNumericType
-    else error "Point function requires a numeric expression for position"
-analyzeFunction (RndFun rangeEnd) =
-  if rangeEnd > 0
-    then return BasicNumericType
-    else error "Rnd function requires a positive integer as range end"
-analyzeFunction (IntFun expr) = do
-  exprType <- analyzeExpr expr
-  if Ast.Types.exprType exprType == BasicNumericType
-    then return BasicNumericType
-    else error "Int function requires a numeric expression"
-analyzeFunction (SgnFun expr) = do
-  exprType <- analyzeExpr expr
-  if Ast.Types.exprType exprType == BasicNumericType
-    then return BasicNumericType
-    else error "Sgn function requires a numeric expression"
+analyzeFunction :: RawFunction -> State SemanticAnalysisState (TypedFunction, BasicType)
+analyzeFunction ident = case ident of
+  MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} -> do
+    strType <- analyzeStrVariableOrLiteral midFunStringExpr
+    startType <- analyzeExpr midFunStartExpr
+    lengthType <- analyzeExpr midFunLengthExpr
+    if strType == BasicStringType && Ast.Types.exprType startType == BasicNumericType && Ast.Types.exprType lengthType == BasicNumericType
+      then
+        return
+          ( MidFun
+              { midFunStringExpr,
+                midFunStartExpr = startType,
+                midFunLengthExpr = lengthType
+              },
+            BasicStringType
+          )
+      else error "Mid function requires a string and numeric expressions for start and length"
+  LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
+    strType <- analyzeStrVariableOrLiteral leftFunStringExpr
+    lengthType <- analyzeExpr leftFunLengthExpr
+    if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
+      then
+        return
+          ( LeftFun {leftFunStringExpr, leftFunLengthExpr = lengthType},
+            BasicStringType
+          )
+      else error "Left function requires a string and a numeric expression for length"
+  RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
+    strType <- analyzeStrVariableOrLiteral rightFunStringExpr
+    lengthType <- analyzeExpr rightFunLengthExpr
+    if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
+      then
+        return
+          ( RightFun {rightFunStringExpr, rightFunLengthExpr = lengthType},
+            BasicStringType
+          )
+      else error "Right function requires a string and a numeric expression for length"
+  AsciiFun {asciiFunArgument} -> do
+    argType <- analyzeStrVariableOrLiteral asciiFunArgument
+    if argType == BasicStringType
+      then return (AsciiFun {asciiFunArgument}, BasicNumericType)
+      else error "Ascii function requires a string argument"
+  PointFun {pointFunPositionExpr} -> do
+    posType <- analyzeExpr pointFunPositionExpr
+    if Ast.Types.exprType posType == BasicNumericType
+      then return (PointFun {pointFunPositionExpr = posType}, BasicNumericType)
+      else error "Point function requires a numeric expression for position"
+  RndFun {rndRangeEnd} -> do
+    return (RndFun {rndRangeEnd}, BasicNumericType)
+  IntFun {intFunExpr} -> do
+    exprType <- analyzeExpr intFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (IntFun {intFunExpr = exprType}, BasicNumericType)
+      else error "Int function requires a numeric expression"
+  SgnFun {sgnFunExpr} -> do
+    exprType <- analyzeExpr sgnFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (SgnFun {sgnFunExpr = exprType}, BasicNumericType)
+      else error "Sgn function requires a numeric expression"
 
-analyzeExprInner :: ExprInner -> State SemanticAnalysisState (ExprInner, BasicType)
+analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (NumLitExpr num) = return (NumLitExpr num, BasicNumericType)
 analyzeExprInner (StrLitExpr str) = return (StrLitExpr str, BasicStringType)
 analyzeExprInner (LValueExpr lValue) = do
-  exprType <- analyzeLValue lValue
-  return (LValueExpr lValue, exprType)
+  (typedLValue, ty) <- analyzeLValue lValue
+  return (LValueExpr typedLValue, ty)
 analyzeExprInner (UnaryExpr op expr) = do
   analyzedExpr <- analyzeExpr expr
   let exprType = Ast.Types.exprType analyzedExpr
@@ -189,51 +228,12 @@ analyzeExprInner (BinExpr left op right) = do
     OrOp ->
       if leftType == BasicNumericType && rightType == BasicNumericType
         then return (BinExpr analyzedLeft OrOp analyzedRight, BasicNumericType)
-        else error "Or can only be applied to numeric (bool) expressions"
-analyzeExprInner (FunCallExpr ident) = case ident of
-  MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} -> do
-    strType <- analyzeStrVariableOrLiteral midFunStringExpr
-    startType <- analyzeExpr midFunStartExpr
-    lengthType <- analyzeExpr midFunLengthExpr
-    if strType == BasicStringType && Ast.Types.exprType startType == BasicNumericType && Ast.Types.exprType lengthType == BasicNumericType
-      then return (FunCallExpr ident, BasicStringType)
-      else error "Mid function requires a string and numeric expressions for start and length"
-  LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
-    strType <- analyzeStrVariableOrLiteral leftFunStringExpr
-    lengthType <- analyzeExpr leftFunLengthExpr
-    if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
-      then return (FunCallExpr ident, BasicStringType)
-      else error "Left function requires a string and a numeric expression for length"
-  RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
-    strType <- analyzeStrVariableOrLiteral rightFunStringExpr
-    lengthType <- analyzeExpr rightFunLengthExpr
-    if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
-      then return (FunCallExpr ident, BasicStringType)
-      else error "Right function requires a string and a numeric expression for length"
-  AsciiFun {asciiFunArgument} -> do
-    argType <- analyzeStrVariableOrLiteral asciiFunArgument
-    if argType == BasicStringType
-      then return (FunCallExpr ident, BasicNumericType)
-      else error "Ascii function requires a string argument"
-  PointFun {pointFunPositionExpr} -> do
-    posType <- analyzeExpr pointFunPositionExpr
-    if Ast.Types.exprType posType == BasicNumericType
-      then return (FunCallExpr ident, BasicNumericType)
-      else error "Point function requires a numeric expression for position"
-  RndFun {} -> do
-    return (FunCallExpr ident, BasicNumericType)
-  IntFun {intFunExpr} -> do
-    exprType <- analyzeExpr intFunExpr
-    if Ast.Types.exprType exprType == BasicNumericType
-      then return (FunCallExpr ident, BasicNumericType)
-      else error "Int function requires a numeric expression"
-  SgnFun {sgnFunExpr} -> do
-    exprType <- analyzeExpr sgnFunExpr
-    if Ast.Types.exprType exprType == BasicNumericType
-      then return (FunCallExpr ident, BasicNumericType)
-      else error "Sgn function requires a numeric expression"
+        else error "Or can only be applied to numeric (bTypedExprool) expressions"
+analyzeExprInner (FunCallExpr ident) = do
+  (analyzedFunction, ty) <- analyzeFunction ident
+  return (FunCallExpr analyzedFunction, ty)
 
-analyzeExpr :: Expr -> State SemanticAnalysisState Expr
+analyzeExpr :: RawExpr -> State SemanticAnalysisState TypedExpr
 analyzeExpr Expr {exprInner} = do
   (analyzedInner, innerType) <- analyzeExprInner exprInner
   return Expr {exprInner = analyzedInner, Ast.Types.exprType = innerType}
@@ -261,23 +261,23 @@ analyzeDimKind (DimString varName size length') = do
   modify (insertSymbolInState newIdent exprType)
   return BasicStringType
 
-analyzeAssignment :: Assignment -> State SemanticAnalysisState Assignment
+analyzeAssignment :: RawAssignment -> State SemanticAnalysisState TypedAssignment
 analyzeAssignment (Assignment lValue expr _) = do
-  lValueType <- analyzeLValue lValue
+  (typedLValue, lValueType) <- analyzeLValue lValue
   analyzedExpr <- analyzeExpr expr
   let exprTy = Ast.Types.exprType analyzedExpr
   if lValueType == exprTy
     then
       return
         ( Assignment
-            { assignmentLValue = lValue,
+            { assignmentLValue = typedLValue,
               assignmentExpr = analyzedExpr,
               assignmentType = exprTy
             }
         )
     else error $ "Type mismatch in assignment: " ++ show lValueType ++ " vs " ++ show (Ast.Types.exprType analyzedExpr)
 
-analyzeStmt :: Stmt -> State SemanticAnalysisState Stmt
+analyzeStmt :: RawStmt -> State SemanticAnalysisState TypedStmt
 analyzeStmt (LetStmt assignments) = do
   analyzedAssignments <- mapM analyzeAssignment assignments
   return (LetStmt analyzedAssignments)
@@ -308,7 +308,7 @@ analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
       return (InputStmt {inputPrintExpr = Just analyzedExpr, inputDestination = inputDestination})
     Nothing -> do
       _ <- analyzeIdent inputDestination
-      return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = inputDestination})
+      return (InputStmt {inputPrintExpr = Nothing, inputDestination = inputDestination})
 analyzeStmt EndStmt = return EndStmt
 analyzeStmt Comment = return Comment
 analyzeStmt (ForStmt forAssignment forToExpr) = do
@@ -331,7 +331,7 @@ analyzeStmt (WaitStmt waitForExpr) = do
     Just expr -> do
       exprType <- analyzeExpr expr
       if Ast.Types.exprType exprType == BasicNumericType
-        then return WaitStmt {waitForExpr = Just expr}
+        then return WaitStmt {waitForExpr = Just exprType}
         else error "Wait statement requires a numeric expression"
     Nothing -> return WaitStmt {waitForExpr = Nothing} -- No expression means wait indefinitely
 analyzeStmt ClsStmt = return ClsStmt
@@ -346,14 +346,14 @@ analyzeStmt (GCursorStmt gCursorExpr) = do
   when (Ast.Types.exprType gCursorType /= BasicNumericType) $
     error "GCursor statement requires a numeric expression"
 
-  return (GCursorStmt {gCursorExpr = gCursorExpr})
+  return (GCursorStmt {gCursorExpr = gCursorType})
 analyzeStmt (CursorStmt cursorExpr) = do
   cursorType <- analyzeExpr cursorExpr
 
   when (Ast.Types.exprType cursorType /= BasicNumericType) $
     error "Cursor statement requires a numeric expression"
 
-  return (CursorStmt {cursorExpr = cursorExpr})
+  return (CursorStmt {cursorExpr = cursorType})
 analyzeStmt (BeepStmt beepExprs) = do
   exprTypes <- mapM analyzeExpr beepExprs
 
@@ -374,26 +374,26 @@ analyzeStmt (DimStmt dimKind) = do
   return (DimStmt dimKind)
 -- FIXME: check that data, read and restore are typed correctly
 analyzeStmt (ReadStmt readStmtDestinations) = do
-  mapM_ analyzeLValue readStmtDestinations
-  return (ReadStmt {readStmtDestinations})
+  analyzedLvalues <- mapM analyzeLValue readStmtDestinations
+  return (ReadStmt {readStmtDestinations = fst <$> analyzedLvalues})
 analyzeStmt (DataStmt exprs) = do
-  mapM_ analyzeExpr exprs
-  return (DataStmt exprs)
+  analyzedExprs <- mapM analyzeExpr exprs
+  return (DataStmt analyzedExprs)
 analyzeStmt (RestoreStmt restoreLineOrLabelExpr) = do
-  _ <- analyzeExpr restoreLineOrLabelExpr
-  return (RestoreStmt {restoreLineOrLabelExpr})
+  expr <- analyzeExpr restoreLineOrLabelExpr
+  return (RestoreStmt {restoreLineOrLabelExpr = expr})
 
-analyzeLine :: Line -> State SemanticAnalysisState Line
+analyzeLine :: RawLine -> State SemanticAnalysisState TypedLine
 analyzeLine (Line lineNumber lineLabel lineStmts) = do
   analyzedStmts <- mapM analyzeStmt lineStmts
   return (Line {lineNumber = lineNumber, lineLabel = lineLabel, lineStmts = analyzedStmts})
 
-analyzeProgram' :: Program -> State SemanticAnalysisState Program
+analyzeProgram' :: RawProgram -> State SemanticAnalysisState TypedProgram
 analyzeProgram' (Program lines') = do
   analyzedLines <- mapM analyzeLine lines'
   return (Program {programLines = analyzedLines})
 
-analyzeProgram :: Program -> (Program, SymbolTable)
+analyzeProgram :: RawProgram -> (TypedProgram, SymbolTable)
 analyzeProgram prog =
   let (analyzedProg, finalState) = runState (analyzeProgram' prog) emptySemanticAnalysisState
    in (analyzedProg, symbolTable finalState)

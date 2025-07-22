@@ -19,7 +19,6 @@ import Text.Parsec
     string,
     try,
   )
-import TypeSystem (BasicType (..))
 
 type Parser = ParsecT String () IO
 
@@ -88,7 +87,7 @@ pseudoVariable =
   try (keyword "TIME" $> TimePseudoVar)
     <|> keyword "INKEY$" $> InkeyPseudoVar
 
-lvalue :: Parser LValue
+lvalue :: Parser RawLValue
 lvalue =
   Ast.Parser.lex
     ( try (LValuePseudoVar <$> pseudoVariable)
@@ -106,7 +105,7 @@ stringVariableOrLiteral =
   try (StringLiteral <$> stringLiteral)
     <|> (StringVariable <$> strIdent)
 
-functionCall :: Parser Function
+functionCall :: Parser RawFunction
 functionCall =
   try midFunCall
     <|> try leftFunCall
@@ -189,7 +188,7 @@ commaSeparated p = sepBy1 p (symbol ',')
 newline :: Parser ()
 newline = many (symbol '\n') $> ()
 
-expression :: Parser Expr
+expression :: Parser RawExpr
 expression = logicalExpr
   where
     factor =
@@ -201,17 +200,17 @@ expression = logicalExpr
       where
         numLitExpr = do
           n <- number
-          return Expr {exprInner = NumLitExpr n, exprType = BasicUnknownType}
+          return Expr {exprInner = NumLitExpr n, exprType = ()}
         strLitExpr = do
           str <- stringLiteral
-          return Expr {exprInner = StrLitExpr str, exprType = BasicUnknownType}
+          return Expr {exprInner = StrLitExpr str, exprType = ()}
         lvalueExpr = do
           lvalue' <- lvalue
-          return Expr {exprInner = LValueExpr lvalue', exprType = BasicUnknownType}
+          return Expr {exprInner = LValueExpr lvalue', exprType = ()}
         parenExpr = parens expression
         funCallExpr = do
           fun <- functionCall
-          return Expr {exprInner = FunCallExpr fun, exprType = BasicUnknownType}
+          return Expr {exprInner = FunCallExpr fun, exprType = ()}
 
     exponentExpr = do
       left <- factor
@@ -219,7 +218,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- exponentExpr
-          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = ()}
         Nothing -> return left
 
     unaryOpExpr = do
@@ -232,7 +231,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- unaryOpExpr
-          return Expr {exprInner = UnaryExpr op right, exprType = BasicUnknownType}
+          return Expr {exprInner = UnaryExpr op right, exprType = ()}
         Nothing -> exponentExpr
 
     mulDivExpr = do
@@ -245,7 +244,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- mulDivExpr
-          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = ()}
         Nothing -> return left
 
     addSubExpr = do
@@ -258,7 +257,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- addSubExpr
-          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = ()}
         Nothing -> return left
 
     comparisonExpr = do
@@ -276,7 +275,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- comparisonExpr
-          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = ()}
         Nothing -> return left
 
     unaryLogicalExpr = do
@@ -284,7 +283,7 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- unaryLogicalExpr
-          return Expr {exprInner = UnaryExpr op right, exprType = BasicUnknownType}
+          return Expr {exprInner = UnaryExpr op right, exprType = ()}
         Nothing -> comparisonExpr
 
     logicalExpr = do
@@ -297,10 +296,10 @@ expression = logicalExpr
       case maybeOp of
         Just op -> do
           right <- logicalExpr
-          return Expr {exprInner = BinExpr left op right, exprType = BasicUnknownType}
+          return Expr {exprInner = BinExpr left op right, exprType = ()}
         Nothing -> return left
 
-assignment :: Parser Assignment
+assignment :: Parser RawAssignment
 assignment = do
   v <- lvalue
   _ <- binOperator EqualOp
@@ -309,10 +308,10 @@ assignment = do
     Assignment
       { assignmentLValue = v,
         assignmentExpr = exp',
-        assignmentType = BasicUnknownType
+        assignmentType = ()
       }
 
-letStmt :: Bool -> Parser Stmt
+letStmt :: Bool -> Parser RawStmt
 letStmt mandatoryLet = do
   if mandatoryLet
     then do
@@ -328,7 +327,7 @@ usingClause = do
   _ <- stmtKeyword UsingKeyword
   UsingClause <$> stringVariableOrLiteral
 
-printStmt :: Parser Stmt
+printStmt :: Parser RawStmt
 printStmt = do
   k <- stmtKeyword PrintKeyword <|> stmtKeyword PauseKeyword
   maybeUsing <- optional (usingClause <* symbol ';')
@@ -351,7 +350,7 @@ printStmt = do
         }
     )
 
-gPrintStmt :: Parser Stmt
+gPrintStmt :: Parser RawStmt
 gPrintStmt = do
   _ <- stmtKeyword GprintKeyword
   firstExpr <- expression
@@ -367,27 +366,27 @@ gPrintStmt = do
         }
     )
 
-gCursorStmt :: Parser Stmt
+gCursorStmt :: Parser RawStmt
 gCursorStmt = do
   _ <- stmtKeyword GCursorKeyword
   GCursorStmt <$> expression
 
-cursorStmt :: Parser Stmt
+cursorStmt :: Parser RawStmt
 cursorStmt = do
   _ <- stmtKeyword CursorKeyword
   CursorStmt <$> expression
 
-inputStmt :: Parser Stmt
+inputStmt :: Parser RawStmt
 inputStmt = do
   _ <- stmtKeyword InputKeyword
   maybePrintExpr <- optional (expression <* symbol ';')
   identifier <- ident
   return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 
-endStmt :: Parser Stmt
+endStmt :: Parser RawStmt
 endStmt = stmtKeyword EndKeyword $> EndStmt
 
-ifStmt :: Parser Stmt
+ifStmt :: Parser RawStmt
 ifStmt = do
   _ <- stmtKeyword IfKeyword
   cond <- expression
@@ -400,23 +399,23 @@ ifStmt = do
         ifThenStmt = thenStmt
       }
 
-forStmt :: Parser Stmt
+forStmt :: Parser RawStmt
 forStmt = do
   _ <- stmtKeyword ForKeyword
   a <- assignment
   _ <- stmtKeyword ToKeyword
   ForStmt a <$> expression
 
-nextStmt :: Parser Stmt
+nextStmt :: Parser RawStmt
 nextStmt = stmtKeyword NextKeyword *> (NextStmt <$> numIdent)
 
-clearStmt :: Parser Stmt
+clearStmt :: Parser RawStmt
 clearStmt = stmtKeyword ClearKeyword $> ClearStmt
 
-clsStmt :: Parser Stmt
+clsStmt :: Parser RawStmt
 clsStmt = stmtKeyword ClsKeyword $> ClsStmt
 
-randomStmt :: Parser Stmt
+randomStmt :: Parser RawStmt
 randomStmt = stmtKeyword RandomKeyword $> RandomStmt
 
 gotoTargetStmt :: Parser GotoTarget
@@ -424,37 +423,37 @@ gotoTargetStmt =
   try (GoToLabel <$> stringLiteral)
     <|> GoToLine <$> integer
 
-gotoStmt :: Parser Stmt
+gotoStmt :: Parser RawStmt
 gotoStmt = do
   _ <- stmtKeyword GotoKeyword
   GoToStmt <$> gotoTargetStmt
 
-gosubStmt :: Parser Stmt
+gosubStmt :: Parser RawStmt
 gosubStmt = stmtKeyword GosubKeyword *> (GoSubStmt <$> gotoTargetStmt)
 
-waitStmt :: Parser Stmt
+waitStmt :: Parser RawStmt
 waitStmt = stmtKeyword WaitKeyword *> (WaitStmt <$> optional expression)
 
-usingStmt :: Parser Stmt
+usingStmt :: Parser RawStmt
 usingStmt = do
   UsingStmt <$> usingClause
 
-comment :: Parser Stmt
+comment :: Parser RawStmt
 comment = do
   _ <- stmtKeyword RemarkKeyword
   _ <- many (satisfy (/= '\n'))
   return Comment
 
-beepStmt :: Parser Stmt
+beepStmt :: Parser RawStmt
 beepStmt = do
   _ <- stmtKeyword BeepKeyword
   exprs <- commaSeparated expression
   return (BeepStmt exprs)
 
-returnStmt :: Parser Stmt
+returnStmt :: Parser RawStmt
 returnStmt = stmtKeyword ReturnKeyword $> ReturnStmt
 
-pokeStmt :: Parser Stmt
+pokeStmt :: Parser RawStmt
 pokeStmt = do
   _ <- stmtKeyword PokeKeyword
   kind <- optional (symbol '#')
@@ -468,7 +467,7 @@ pokeStmt = do
         exprs
     )
 
-dimStmt :: Parser Stmt
+dimStmt :: Parser RawStmt
 dimStmt = do
   _ <- stmtKeyword DimKeyword
   identifier <- ident
@@ -495,22 +494,22 @@ dimStmt = do
             )
         )
 
-dataStmt :: Parser Stmt
+dataStmt :: Parser RawStmt
 dataStmt = do
   _ <- stmtKeyword DataKeyword
   DataStmt <$> commaSeparated expression
 
-readStmt :: Parser Stmt
+readStmt :: Parser RawStmt
 readStmt = do
   _ <- stmtKeyword ReadKeyword
   ReadStmt <$> commaSeparated lvalue
 
-restoreStmt :: Parser Stmt
+restoreStmt :: Parser RawStmt
 restoreStmt = do
   _ <- stmtKeyword RestoreKeyword
   RestoreStmt <$> expression
 
-stmt :: Bool -> Parser Stmt
+stmt :: Bool -> Parser RawStmt
 stmt mandatoryLet =
   try endStmt
     <|> try printStmt
@@ -538,7 +537,7 @@ stmt mandatoryLet =
     <|> try usingStmt
     <|> letStmt mandatoryLet
 
-line :: Parser Line
+line :: Parser RawLine
 line = do
   lineNumber <- integer
   lineLabel <- optional stringLiteral
@@ -554,7 +553,7 @@ line = do
             lineStmts =
               [ PrintStmt
                   { printKind = PrintKindPrint,
-                    printExprs = [Expr {exprInner = StrLitExpr label, exprType = BasicUnknownType}],
+                    printExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],
                     printEnding = PrintEndingNewLine,
                     printUsingClause = Nothing
                   }
@@ -564,12 +563,12 @@ line = do
       _ <- newline
       return Line {lineNumber, lineLabel, lineStmts}
 
-program :: Parser Program
+program :: Parser RawProgram
 program = do
   sc
   Program <$> many line
 
-parseProgram :: String -> String -> IO (Either String Program)
+parseProgram :: String -> String -> IO (Either String RawProgram)
 parseProgram fileName contents = do
   result <- runParserT program () fileName contents
   case result of

@@ -10,6 +10,7 @@ import Ast.SemanticAnalysis (analyzeProgram)
 import Ast.Types (Program)
 import Control.Exception (SomeException, try)
 import SymbolTable (SymbolTable)
+import TypeSystem (BasicType)
 
 data CompilationError
   = ParseError String
@@ -18,7 +19,7 @@ data CompilationError
   deriving (Show, Eq)
 
 data CompilationResult = CompilationResult
-  { compiledProgram :: Program,
+  { compiledProgram :: Program BasicType,
     finalSymbolTable :: SymbolTable
   }
   deriving (Show, Eq)

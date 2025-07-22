@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Ast.Types
   ( BinOperator (..),
     StmtKeyword (..),
@@ -24,11 +22,18 @@ module Ast.Types
     StrIdent (..),
     NumIdent (..),
     ExprInner (..),
+    RawProgram,
+    RawLine,
+    RawStmt,
+    RawAssignment,
+    RawExpr,
+    RawLValue,
+    RawFunction,
+    RawExprInner,
   )
 where
 
 import Data.List (intercalate)
-import TypeSystem (BasicType)
 
 data BinOperator where
   AddOp :: BinOperator
@@ -132,48 +137,48 @@ instance Show StringVariableOrLiteral where
   show (StringLiteral str) = "\"" ++ str ++ "\""
   show (StringVariable ident) = show ident
 
-data Function where
+data Function et where
   -- String functions
   MidFun ::
     { midFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
-      midFunStartExpr :: Expr, -- the start position (1-based)
-      midFunLengthExpr :: Expr -- the length of the substring
+      midFunStartExpr :: Expr et, -- the start position (1-based)
+      midFunLengthExpr :: Expr et -- the length of the substring
     } ->
-    Function
+    Function et
   LeftFun ::
     { leftFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
-      leftFunLengthExpr :: Expr -- the length of the substring
+      leftFunLengthExpr :: Expr et -- the length of the substring
     } ->
-    Function
+    Function et
   RightFun ::
     { rightFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
-      rightFunLengthExpr :: Expr -- the length of the substring
+      rightFunLengthExpr :: Expr et -- the length of the substring
     } ->
-    Function
+    Function et
   AsciiFun ::
     { asciiFunArgument :: StringVariableOrLiteral
     } ->
-    Function
+    Function et
   -- Integer functions
   PointFun ::
-    { pointFunPositionExpr :: Expr -- returns the color of the pixel at the position, the expression must be in range 0-155
+    { pointFunPositionExpr :: Expr et -- returns the color of the pixel at the position, the expression must be in range 0-155
     } ->
-    Function
+    Function et
   RndFun ::
     { rndRangeEnd :: Int -- TODO: what is the range of RND?
     } ->
-    Function
+    Function et
   IntFun ::
-    { intFunExpr :: Expr -- returns the integer part of the expression
+    { intFunExpr :: Expr et -- returns the integer part of the expression
     } ->
-    Function
+    Function et
   SgnFun ::
-    { sgnFunExpr :: Expr -- returns 1, 0 or -1
+    { sgnFunExpr :: Expr et -- returns 1, 0 or -1
     } ->
-    Function
+    Function et
   deriving (Eq)
 
-instance Show Function where
+instance Show (Function et) where
   show MidFun {midFunStringExpr = str, midFunStartExpr = start, midFunLengthExpr = len} =
     "(MID " ++ show str ++ " " ++ show start ++ " " ++ show len ++ ")"
   show LeftFun {leftFunStringExpr = str, leftFunLengthExpr = len} =
@@ -230,17 +235,17 @@ instance Show Ident where
   show (IdentNumIdent (NumIdent s)) = s
   show (IdentStrIdent (StrIdent s)) = s
 
-data LValue where
-  LValueIdent :: Ident -> LValue
+data LValue et where
+  LValueIdent :: Ident -> LValue et
   LValueArrayAccess ::
     { lValueArrayIdent :: Ident,
-      lValueArrayIndex :: Expr
+      lValueArrayIndex :: Expr et
     } ->
-    LValue
-  LValuePseudoVar :: PseudoVariable -> LValue
+    LValue et
+  LValuePseudoVar :: PseudoVariable -> LValue et
   deriving (Eq)
 
-instance Show LValue where
+instance Show (LValue et) where
   show (LValueIdent ident) = show ident
   show (LValueArrayAccess ident index) =
     show ident ++ "(" ++ show index ++ ")"
@@ -257,16 +262,16 @@ instance Show UnaryOperator where
   show UnaryPlusOp = "+"
   show UnaryNotOp = "NOT"
 
-data ExprInner where
-  UnaryExpr :: UnaryOperator -> Expr -> ExprInner
-  BinExpr :: Expr -> BinOperator -> Expr -> ExprInner
-  NumLitExpr :: Double -> ExprInner
-  LValueExpr :: LValue -> ExprInner
-  StrLitExpr :: String -> ExprInner
-  FunCallExpr :: Function -> ExprInner
+data ExprInner et where
+  UnaryExpr :: UnaryOperator -> Expr et -> ExprInner et
+  BinExpr :: Expr et -> BinOperator -> Expr et -> ExprInner et
+  NumLitExpr :: Double -> ExprInner et
+  LValueExpr :: LValue et -> ExprInner et
+  StrLitExpr :: String -> ExprInner et
+  FunCallExpr :: Function et -> ExprInner et
   deriving (Eq)
 
-instance Show ExprInner where
+instance Show (ExprInner et) where
   show (UnaryExpr op expr) = show op ++ show expr
   show (BinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
   show (NumLitExpr n) = show n
@@ -274,15 +279,15 @@ instance Show ExprInner where
   show (StrLitExpr s) = "\"" ++ s ++ "\""
   show (FunCallExpr f) = show f
 
-data Expr where
+data Expr et where
   Expr ::
-    { exprInner :: ExprInner,
-      exprType :: BasicType
+    { exprInner :: ExprInner et,
+      exprType :: et
     } ->
-    Expr
+    Expr et
   deriving (Eq)
 
-instance Show Expr where
+instance Show (Expr et) where
   show (Expr {exprInner = inner}) = show inner
 
 data PrintEnding where
@@ -299,16 +304,16 @@ data UsingClause where
   UsingClause :: {usingClauseExpr :: StringVariableOrLiteral} -> UsingClause
   deriving (Eq)
 
-data Assignment where
+data Assignment et where
   Assignment ::
-    { assignmentLValue :: LValue,
-      assignmentExpr :: Expr,
-      assignmentType :: BasicType
+    { assignmentLValue :: LValue et,
+      assignmentExpr :: Expr et,
+      assignmentType :: et
     } ->
-    Assignment
+    Assignment et
   deriving (Eq)
 
-instance Show Assignment where
+instance Show (Assignment et) where
   show (Assignment lValue expr _) =
     show lValue ++ " = " ++ show expr
 
@@ -346,67 +351,67 @@ instance Show DimKind where
   show (DimString var size len) =
     "DIM " ++ show var ++ "(" ++ show size ++ ")*" ++ show len
 
-data Stmt where
-  LetStmt :: {letAssignments :: [Assignment]} -> Stmt
-  IfThenStmt :: {ifCondition :: Expr, ifThenStmt :: Stmt} -> Stmt
+data Stmt et where
+  LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
+  IfThenStmt :: {ifCondition :: Expr et, ifThenStmt :: Stmt et} -> Stmt et
   -- FIXME: the PRINT statement can swparate the screen in two sections, with
   -- the first and second section being comma separated, skip for now
   PrintStmt ::
     { printKind :: PrintKind,
-      printExprs :: [Expr],
+      printExprs :: [Expr et],
       printEnding :: PrintEnding,
       printUsingClause :: Maybe UsingClause
     } ->
-    Stmt
+    Stmt et
   UsingStmt ::
     { usingStmtClause :: UsingClause
     } ->
-    Stmt
+    Stmt et
   InputStmt ::
-    { inputPrintExpr :: Maybe Expr,
+    { inputPrintExpr :: Maybe (Expr et),
       inputDestination :: Ident
     } ->
-    Stmt
-  EndStmt :: Stmt
-  Comment :: Stmt
-  ForStmt :: {forAssignment :: Assignment, forToExpr :: Expr} -> Stmt
-  NextStmt :: {nextIdent :: NumIdent} -> Stmt
-  ClearStmt :: Stmt
-  GoToStmt :: {gotoTarget :: GotoTarget} -> Stmt
-  GoSubStmt :: {gosubTarget :: GotoTarget} -> Stmt
+    Stmt et
+  EndStmt :: Stmt et
+  Comment :: Stmt et
+  ForStmt :: {forAssignment :: Assignment et, forToExpr :: Expr et} -> Stmt et
+  NextStmt :: {nextIdent :: NumIdent} -> Stmt et
+  ClearStmt :: Stmt et
+  GoToStmt :: {gotoTarget :: GotoTarget} -> Stmt et
+  GoSubStmt :: {gosubTarget :: GotoTarget} -> Stmt et
   WaitStmt ::
-    { waitForExpr :: Maybe Expr -- TODO: should be in range 0-65535, how do we enforce this?
+    { waitForExpr :: Maybe (Expr et) -- TODO: should be in range 0-65535, how do we enforce this?
     } ->
-    Stmt
-  ClsStmt :: Stmt
-  RandomStmt :: Stmt
+    Stmt et
+  ClsStmt :: Stmt et
+  RandomStmt :: Stmt et
   GprintStmt ::
-    { gprintExprs :: [Expr],
+    { gprintExprs :: [Expr et],
       gprintEnding :: PrintEnding
     } ->
-    Stmt
-  GCursorStmt :: {gCursorExpr :: Expr} -> Stmt
-  CursorStmt :: {cursorExpr :: Expr} -> Stmt
-  BeepStmt :: {beepExprs :: [Expr]} -> Stmt
-  ReturnStmt :: Stmt
+    Stmt et
+  GCursorStmt :: {gCursorExpr :: Expr et} -> Stmt et
+  CursorStmt :: {cursorExpr :: Expr et} -> Stmt et
+  BeepStmt :: {beepExprs :: [Expr et]} -> Stmt et
+  ReturnStmt :: Stmt et
   PokeStmt ::
     { pokeKind :: PokeKind,
-      pokeExprs :: [Expr]
+      pokeExprs :: [Expr et]
     } ->
-    Stmt
-  DimStmt :: {dimKind :: DimKind} -> Stmt
+    Stmt et
+  DimStmt :: {dimKind :: DimKind} -> Stmt et
   ReadStmt ::
-    { readStmtDestinations :: [LValue]
+    { readStmtDestinations :: [LValue et]
     } ->
-    Stmt
-  DataStmt :: [Expr] -> Stmt
+    Stmt et
+  DataStmt :: [Expr et] -> Stmt et
   RestoreStmt ::
-    { restoreLineOrLabelExpr :: Expr
+    { restoreLineOrLabelExpr :: Expr et
     } ->
-    Stmt
+    Stmt et
   deriving (Eq)
 
-instance Show Stmt where
+instance Show (Stmt et) where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
   show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
   show (PrintStmt k exprs kind maybeUsing) =
@@ -462,23 +467,40 @@ type LineNumber = Int
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5
 -- example: 20 PRINT A: A = 5
-data Line where
+data Line et where
   Line ::
     { lineNumber :: LineNumber,
       lineLabel :: Maybe String,
-      lineStmts :: [Stmt]
+      lineStmts :: [Stmt et]
     } ->
-    Line
-  deriving (Show, Eq)
-
-newtype Program where
-  Program :: {programLines :: [Line]} -> Program
+    Line et
   deriving (Eq)
 
-instance Show Program where
-  show (Program ls) =
-    unlines $
-      \case
-        Line n Nothing stmts -> show n ++ " " ++ intercalate " : " (show <$> stmts)
-        Line n (Just label) stmts -> show n ++ " \"" ++ label ++ "\" " ++ intercalate ": " (show <$> stmts)
-        <$> ls
+instance Show (Line et) where
+  show (Line n Nothing stmts) =
+    show n ++ " " ++ intercalate " : " (show <$> stmts)
+  show (Line n (Just label) stmts) =
+    show n ++ " \"" ++ label ++ "\" " ++ intercalate ": " (show <$> stmts)
+
+newtype Program et where
+  Program :: {programLines :: [Line et]} -> Program et
+  deriving (Eq)
+
+instance Show (Program et) where
+  show (Program ls) = intercalate "\n" (show <$> ls)
+
+type RawProgram = Program ()
+
+type RawLine = Line ()
+
+type RawStmt = Stmt ()
+
+type RawAssignment = Assignment ()
+
+type RawExpr = Expr ()
+
+type RawExprInner = ExprInner ()
+
+type RawLValue = LValue ()
+
+type RawFunction = Function ()
