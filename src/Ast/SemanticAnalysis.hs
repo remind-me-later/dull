@@ -47,10 +47,14 @@ lookupSymbolInState name (SemanticAnalysisState symTable) =
     Nothing -> error $ "Symbol not found: " ++ show name
 
 analyzeStrIdent :: StrIdent -> State SemanticAnalysisState BasicType
-analyzeStrIdent (StrIdent _) = return BasicStringType
+analyzeStrIdent id'@(StrIdent _) = do
+  modify (insertSymbolInState (IdentStrIdent id') BasicStringType)
+  return BasicStringType
 
 analyzeNumericIdent :: NumIdent -> State SemanticAnalysisState BasicType
-analyzeNumericIdent (NumIdent _) = return BasicNumericType
+analyzeNumericIdent id'@(NumIdent _) = do
+  modify (insertSymbolInState (IdentNumIdent id') BasicNumericType)
+  return BasicNumericType
 
 analyzeIdent :: Ident -> State SemanticAnalysisState BasicType
 analyzeIdent (IdentStrIdent id') = analyzeStrIdent id'
@@ -71,9 +75,15 @@ analyzeLValue (LValueArrayAccess ident expr) = do
       -- Arrays must be declared before use with the DIM statement
       symbol <- gets (lookupSymbolInState ident)
       case SymbolTable.exprType symbol of
-        BasicArrType {exprArrType} ->
-          return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, exprArrType)
-        _ -> error $ "Symbol " ++ symbolName symbol ++ " is not an array"
+        BasicNumArrType {numericArrSize} ->
+          if numericArrSize >= 0
+            then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicNumericType)
+            else error $ "Array " ++ show ident ++ " is not declared or has invalid size"
+        BasicStrArrType {strArrLength, strArrSize} ->
+          if strArrSize >= 0 && strArrLength >= 0
+            then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicStringType)
+            else error $ "String array " ++ show ident ++ " is not declared or has invalid size"
+        _ -> error $ "Array " ++ show ident ++ " is not a numeric or string array"
     _ -> error "Array index must be numeric"
 analyzeLValue (LValuePseudoVar pseudoVar) = do
   ty <- analyzePsuedoVar pseudoVar
@@ -240,26 +250,18 @@ analyzeExpr Expr {exprInner} = do
 
 -- We have to add the arrays to the symbol table
 analyzeDimKind :: DimKind -> State SemanticAnalysisState BasicType
-analyzeDimKind (DimNumeric varName size) = do
-  let exprType =
-        BasicArrType
-          { exprArrType = BasicNumericType,
-            exprArrSize = size + 1,
-            exprArrLength = sizeOfTy BasicNumericType
-          }
+analyzeDimKind (DimNumeric varName size) =
+  let exprType = BasicNumArrType {numericArrSize = size}
       newIdent = IdentNumIdent varName
-  modify (insertSymbolInState newIdent exprType)
-  return BasicNumericType
-analyzeDimKind (DimString varName size length') = do
-  let exprType =
-        BasicArrType
-          { exprArrType = BasicStringType,
-            exprArrSize = size + 1,
-            exprArrLength = length'
-          }
+   in do
+        modify (insertSymbolInState newIdent exprType)
+        return BasicNumericType
+analyzeDimKind (DimString varName size length') =
+  let exprType = BasicStrArrType {strArrSize = size, strArrLength = length'}
       newIdent = IdentStrIdent varName
-  modify (insertSymbolInState newIdent exprType)
-  return BasicStringType
+   in do
+        modify (insertSymbolInState newIdent exprType)
+        return BasicStringType
 
 analyzeAssignment :: RawAssignment -> State SemanticAnalysisState TypedAssignment
 analyzeAssignment (Assignment lValue expr _) = do

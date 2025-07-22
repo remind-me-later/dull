@@ -6,11 +6,13 @@ where
 data BasicType where
   BasicStringType :: BasicType
   BasicNumericType :: BasicType
-  BasicUnknownType :: BasicType
-  BasicArrType ::
-    { exprArrType :: BasicType,
-      exprArrSize :: Int,
-      exprArrLength :: Int -- Only valid for strings, for numeric arrays this is always 1
+  BasicNumArrType ::
+    { numericArrSize :: Int
+    } ->
+    BasicType
+  BasicStrArrType ::
+    { strArrSize :: Int,
+      strArrLength :: Int
     } ->
     BasicType
   deriving (Show, Eq)
