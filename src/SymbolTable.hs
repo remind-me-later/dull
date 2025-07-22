@@ -59,12 +59,6 @@ instance Show SymbolTable where
 emptySymbolTable :: SymbolTable
 emptySymbolTable = SymbolTable {symbols = empty, nextStackOffset = 0}
 
-sizeOfTy :: BasicType -> Int
-sizeOfTy BasicStringType = 1
-sizeOfTy BasicNumericType = 1
-sizeOfTy (BasicNumArrType {numericArrSize}) = numericArrSize + 1
-sizeOfTy (BasicStrArrType {strArrSize, strArrLength}) = (strArrSize + 1) * strArrLength
-
 insertSymbol :: Ident -> BasicType -> SymbolTable -> SymbolTable
 insertSymbol sym ty st@SymbolTable {symbols, nextStackOffset} =
   let alreadyInSymbols = Data.Map.member sym symbols

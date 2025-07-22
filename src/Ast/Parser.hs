@@ -6,7 +6,6 @@ where
 import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
-import Data.Maybe (fromMaybe)
 import Text.Parsec
   ( ParsecT,
     char,
@@ -480,7 +479,7 @@ dimStmt = do
             ( DimString
                 { dimStringVarName = strIdent',
                   dimStringSize = size,
-                  dimStringLength = fromMaybe 16 len
+                  dimStringLength = len
                 }
             )
         )

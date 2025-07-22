@@ -341,7 +341,7 @@ data DimKind where
   DimString ::
     { dimStringVarName :: StrIdent,
       dimStringSize :: Int,
-      dimStringLength :: Int
+      dimStringLength :: Maybe Int
     } ->
     DimKind
   deriving (Eq)
@@ -349,7 +349,14 @@ data DimKind where
 instance Show DimKind where
   show (DimNumeric var size) = "DIM " ++ show var ++ "(" ++ show size ++ ")"
   show (DimString var size len) =
-    "DIM " ++ show var ++ "(" ++ show size ++ ")*" ++ show len
+    "DIM "
+      ++ show var
+      ++ "("
+      ++ show size
+      ++ ")"
+      ++ case len of
+        Just l -> "*" ++ show l
+        Nothing -> ""
 
 data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et

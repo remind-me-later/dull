@@ -6,6 +6,7 @@ where
 import Ast.Types
 import Control.Monad (unless, when)
 import Control.Monad.State
+import Data.Maybe (fromMaybe)
 import SymbolTable
 import TypeSystem
 
@@ -257,7 +258,8 @@ analyzeDimKind (DimNumeric varName size) =
         modify (insertSymbolInState newIdent exprType)
         return BasicNumericType
 analyzeDimKind (DimString varName size length') =
-  let exprType = BasicStrArrType {strArrSize = size, strArrLength = length'}
+  let concreteLength = fromMaybe defaultStringLength length'
+      exprType = BasicStrArrType {strArrSize = size, strArrLength = concreteLength}
       newIdent = IdentStrIdent varName
    in do
         modify (insertSymbolInState newIdent exprType)
