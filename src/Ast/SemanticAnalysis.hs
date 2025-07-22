@@ -327,14 +327,8 @@ analyzeStmt (PrintStmt printKind printExprs printEnding printUsingClause) = do
     )
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
-  case inputPrintExpr of
-    Just expr -> do
-      analyzedExpr <- analyzeExpr expr
-      _ <- analyzeIdent inputDestination
-      return (InputStmt {inputPrintExpr = Just analyzedExpr, inputDestination = inputDestination})
-    Nothing -> do
-      _ <- analyzeIdent inputDestination
-      return (InputStmt {inputPrintExpr = Nothing, inputDestination = inputDestination})
+  _ <- analyzeIdent inputDestination
+  return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = inputDestination})
 analyzeStmt EndStmt = return EndStmt
 analyzeStmt Comment = return Comment
 analyzeStmt (ForStmt forAssignment forToExpr) = do

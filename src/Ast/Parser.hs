@@ -376,7 +376,7 @@ cursorStmt = do
 inputStmt :: Parser RawStmt
 inputStmt = do
   _ <- keyword "INPUT"
-  maybePrintExpr <- optional (expression <* symbol ';')
+  maybePrintExpr <- optional (stringLiteral <* symbol ';')
   identifier <- ident
   return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
 

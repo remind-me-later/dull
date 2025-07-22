@@ -11,6 +11,17 @@ data HirStmt where
   HirCondGoto :: Expr BasicType -> Int -> HirStmt
   HirCondGosub :: Expr BasicType -> Int -> HirStmt
   HirAssign :: Assignment BasicType -> HirStmt
+  HirPrint ::
+    { hirPrintKind :: PrintKind,
+      hirPrintExpression :: Expr BasicType,
+      hirPrintEnding :: PrintEnding
+    } ->
+    HirStmt
+  HirUsing :: UsingClause -> HirStmt
+  HirInput ::
+    { hirInputDestination :: Ident
+    } ->
+    HirStmt
   deriving (Eq)
 
 instance Show HirStmt where
@@ -21,6 +32,15 @@ instance Show HirStmt where
   show (HirCondGoto cond idx) = "\tIF " ++ show cond ++ " THEN GOTO L" ++ show idx ++ "\n"
   show (HirCondGosub cond idx) = "\tIF " ++ show cond ++ " THEN GOSUB L" ++ show idx ++ "\n"
   show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
+  show (HirPrint {hirPrintKind, hirPrintExpression, hirPrintEnding}) =
+    case hirPrintEnding of
+      PrintEndingNewLine ->
+        "\t" ++ show hirPrintKind ++ "LN " ++ show hirPrintExpression ++ "\n"
+      PrintEndingNoNewLine ->
+        "\t" ++ show hirPrintKind ++ " " ++ show hirPrintExpression ++ "\n"
+  show (HirUsing usingClause) = "\t" ++ show usingClause ++ "\n"
+  show (HirInput {hirInputDestination}) =
+    "\tINPUT " ++ show hirInputDestination ++ "\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirStmt]

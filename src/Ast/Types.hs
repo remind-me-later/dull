@@ -232,16 +232,27 @@ instance Show (Expr et) where
 data PrintEnding where
   PrintEndingNewLine :: PrintEnding
   PrintEndingNoNewLine :: PrintEnding
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show PrintEnding where
+  show PrintEndingNewLine = ""
+  show PrintEndingNoNewLine = "\\n"
 
 data PrintKind where
   PrintKindPrint :: PrintKind
   PrintKindPause :: PrintKind
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show PrintKind where
+  show PrintKindPrint = "PRINT"
+  show PrintKindPause = "PAUSE"
 
 data UsingClause where
   UsingClause :: {usingClauseExpr :: StringVariableOrLiteral} -> UsingClause
   deriving (Eq)
+
+instance Show UsingClause where
+  show (UsingClause expr) = "USING " ++ show expr
 
 data Assignment et where
   Assignment ::
@@ -322,7 +333,7 @@ data Stmt et where
     } ->
     Stmt et
   InputStmt ::
-    { inputPrintExpr :: Maybe (Expr et),
+    { inputPrintExpr :: Maybe String,
       inputDestination :: Ident
     } ->
     Stmt et
@@ -373,18 +384,16 @@ instance Show (Stmt et) where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
   show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
   show (PrintStmt k exprs kind maybeUsing) =
-    ( case k of
-        PrintKindPrint -> "PRINT "
-        PrintKindPause -> "PAUSE "
-    )
+    show k
+      ++ " "
       ++ case maybeUsing of
-        Just (UsingClause e) -> "USING " ++ show e ++ "; "
+        Just usingClause -> show usingClause ++ "; "
         Nothing -> ""
       ++ intercalate "; " (show <$> exprs)
       ++ case kind of
         PrintEndingNewLine -> ""
         PrintEndingNoNewLine -> ";"
-  show (UsingStmt (UsingClause e)) = "USING " ++ show e
+  show (UsingStmt usingClause) = "USING " ++ show usingClause
   show (InputStmt maybePrintExpr me) =
     "INPUT "
       ++ maybe "" (\e -> show e ++ "; ") maybePrintExpr

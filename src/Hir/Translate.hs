@@ -67,6 +67,47 @@ translateStmt stmt = case stmt of
   LetStmt {letAssignments} -> do
     let assignments = map HirAssign letAssignments
     return assignments
+  PrintStmt {printKind, printExprs, printEnding, printUsingClause} -> do
+    let -- All print expressions have line ending with no newline, except the last one
+        -- which has the specified ending.
+        hirPrints =
+          map
+            ( \expr ->
+                HirPrint
+                  { hirPrintKind = printKind,
+                    hirPrintExpression = expr,
+                    hirPrintEnding = PrintEndingNoNewLine
+                  }
+            )
+            (init printExprs)
+            ++ [ HirPrint
+                   { hirPrintKind = printKind,
+                     hirPrintExpression = last printExprs,
+                     hirPrintEnding = printEnding
+                   }
+               ]
+    let usingClause = case printUsingClause of
+          Just u -> [HirUsing u]
+          Nothing -> []
+    return $ usingClause ++ hirPrints
+  UsingStmt usingClause -> return [HirUsing usingClause]
+  InputStmt {inputPrintExpr, inputDestination} -> do
+    let inputStmt = HirInput {hirInputDestination = inputDestination}
+    case inputPrintExpr of
+      Just expr ->
+        return
+          [ HirPrint
+              { hirPrintKind = PrintKindPrint,
+                hirPrintExpression =
+                  Expr
+                    { exprInner = StrLitExpr expr,
+                      exprType = BasicStringType
+                    },
+                hirPrintEnding = PrintEndingNoNewLine
+              },
+            inputStmt
+          ]
+      Nothing -> return [inputStmt]
   _ -> return [HirStmt stmt]
 
 translateLine :: Line BasicType -> State TranslationState [HirStmt]
