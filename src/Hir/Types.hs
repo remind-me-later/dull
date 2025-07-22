@@ -22,6 +22,16 @@ data HirStmt where
     { hirInputDestination :: Ident
     } ->
     HirStmt
+  HirGPrint ::
+    { hirGPrintExpr :: Expr BasicType,
+      hirGPrintEnding :: PrintEnding
+    } ->
+    HirStmt
+  HirReturn :: HirStmt
+  HirEnd :: HirStmt
+  HirClear :: HirStmt
+  HirCls :: HirStmt
+  HirRandom :: HirStmt
   deriving (Eq)
 
 instance Show HirStmt where
@@ -41,6 +51,17 @@ instance Show HirStmt where
   show (HirUsing usingClause) = "\t" ++ show usingClause ++ "\n"
   show (HirInput {hirInputDestination}) =
     "\tINPUT " ++ show hirInputDestination ++ "\n"
+  show HirReturn = "\tRETURN\n"
+  show HirEnd = "\tEND\n"
+  show HirClear = "\tCLEAR\n"
+  show HirCls = "\tCLS\n"
+  show HirRandom = "\tRANDOM\n"
+  show (HirGPrint {hirGPrintExpr, hirGPrintEnding}) =
+    case hirGPrintEnding of
+      PrintEndingNewLine ->
+        "\tGPRINTLN " ++ show hirGPrintExpr ++ "\n"
+      PrintEndingNoNewLine ->
+        "\tGPRINT " ++ show hirGPrintExpr ++ "\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirStmt]

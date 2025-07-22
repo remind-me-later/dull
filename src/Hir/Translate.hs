@@ -160,6 +160,29 @@ translateStmt stmt = case stmt of
             inputStmt
           ]
       Nothing -> return [inputStmt]
+  GprintStmt {gprintExprs, gprintEnding} -> do
+    let hirGPrints =
+          map
+            ( \expr ->
+                HirGPrint
+                  { hirGPrintExpr = expr,
+                    hirGPrintEnding = PrintEndingNoNewLine
+                  }
+            )
+            (init gprintExprs)
+            ++ [ HirGPrint
+                   { hirGPrintExpr = last gprintExprs,
+                     hirGPrintEnding = gprintEnding
+                   }
+               ]
+    return hirGPrints
+  Comment -> return []
+  ReturnStmt -> return [HirReturn]
+  DimStmt _ -> return [] -- Already in symbol table
+  EndStmt -> return [HirStmt EndStmt]
+  ReadStmt _ -> error "Unimplemented: ReadStmt"
+  DataStmt _ -> error "Unimplemented: DataStmt"
+  RestoreStmt _ -> error "Unimplemented: RestoreStmt"
   _ -> return [HirStmt stmt]
 
 translateLine :: Line BasicType -> State TranslationState [HirStmt]
