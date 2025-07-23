@@ -3,6 +3,7 @@ module Hir.Translate where
 import Ast.Types
 import Control.Monad.State
 import Data.Map qualified
+import Data.Maybe (fromMaybe)
 import Hir.Types
 import SymbolTable
 import TypeSystem (BasicType (..))
@@ -126,60 +127,111 @@ translateStmt stmt = case stmt of
           map
             ( \expr ->
                 HirPrint
-                  { hirPrintKind = printKind,
-                    hirPrintExpression = expr,
-                    hirPrintEnding = PrintEndingNoNewLine
+                  { hirPrintExpression = expr
                   }
             )
             (init printExprs)
             ++ [ HirPrint
-                   { hirPrintKind = printKind,
-                     hirPrintExpression = last printExprs,
-                     hirPrintEnding = printEnding
+                   { hirPrintExpression = last printExprs
                    }
                ]
-    let usingClause = case printUsingClause of
+        usingClause = case printUsingClause of
           Just u -> [HirUsing u]
           Nothing -> []
-    return $ usingClause ++ hirPrints
+        putchar = case printEnding of
+          PrintEndingNewLine -> [HirCls]
+          _ -> []
+        printInstrs = usingClause ++ hirPrints ++ putchar
+        defaultPauseWaitTime =
+          Expr
+            { exprInner = NumLitExpr 64, -- FIXME: 1 second, find out what the default is
+              exprType = BasicNumericType
+            }
+        endResult = case printKind of
+          PrintKindPrint -> printInstrs
+          PrintKindPause ->
+            [HirWait {hirWaitTimeExpr = defaultPauseWaitTime}]
+              ++ printInstrs
+              ++ [ HirWait
+                     { hirWaitTimeExpr =
+                         Expr
+                           { exprInner = LValueExpr $ LValueIdent (IdentNumIdent (NumIdent "userSetWaitTime")),
+                             exprType = BasicNumericType
+                           }
+                     }
+                 ]
+
+    return endResult
   UsingStmt usingClause -> return [HirUsing usingClause]
-  InputStmt {inputPrintExpr, inputDestination} -> do
-    let inputStmt = HirInput {hirInputDestination = inputDestination}
-    case inputPrintExpr of
-      Just expr ->
-        return
-          [ HirPrint
-              { hirPrintKind = PrintKindPrint,
-                hirPrintExpression =
+  InputStmt {inputPrintExpr, inputDestination} ->
+    let infiniteWaitTime =
+          Expr
+            { exprInner =
+                UnaryExpr
+                  UnaryMinusOp
                   Expr
-                    { exprInner = StrLitExpr expr,
-                      exprType = BasicStringType
+                    { exprInner = NumLitExpr 1,
+                      exprType = BasicNumericType
                     },
-                hirPrintEnding = PrintEndingNoNewLine
-              },
-            inputStmt
-          ]
-      Nothing -> return [inputStmt]
+              exprType = BasicNumericType
+            }
+        inputStmt = HirInput {hirInputDestination = inputDestination}
+     in case inputPrintExpr of
+          Just expr ->
+            return
+              [ HirWait {hirWaitTimeExpr = infiniteWaitTime},
+                HirPrint
+                  { hirPrintExpression =
+                      Expr
+                        { exprInner = StrLitExpr expr,
+                          exprType = BasicStringType
+                        }
+                  },
+                inputStmt
+              ]
+          Nothing -> return [inputStmt]
   GprintStmt {gprintExprs, gprintEnding} -> do
     let hirGPrints =
           map
-            ( \expr ->
-                HirGPrint
-                  { hirGPrintExpr = expr,
-                    hirGPrintEnding = PrintEndingNoNewLine
-                  }
-            )
+            (\expr -> HirGPrint {hirGPrintExpr = expr})
             (init gprintExprs)
             ++ [ HirGPrint
-                   { hirGPrintExpr = last gprintExprs,
-                     hirGPrintEnding = gprintEnding
+                   { hirGPrintExpr = last gprintExprs
                    }
                ]
+            ++ case gprintEnding of
+              PrintEndingNewLine -> [HirCls]
+              PrintEndingNoNewLine -> []
     return hirGPrints
   Comment -> return []
   ReturnStmt -> return [HirReturn]
   DimStmt _ -> return [] -- Already in symbol table
   EndStmt -> return [HirStmt EndStmt]
+  WaitStmt {waitForExpr} -> do
+    -- Save the last wait time set by the user in a special variable
+    let infiniteWaitTime =
+          Expr
+            { exprInner =
+                UnaryExpr
+                  UnaryMinusOp
+                  Expr
+                    { exprInner = NumLitExpr 1,
+                      exprType = BasicNumericType
+                    },
+              exprType = BasicNumericType
+            }
+        unmaybeWait = fromMaybe infiniteWaitTime waitForExpr
+        waitTimeStore =
+          [ HirAssign
+              ( Assignment
+                  { assignmentLValue = LValueIdent (IdentNumIdent (NumIdent "userSetWaitTime")),
+                    assignmentExpr = unmaybeWait,
+                    assignmentType = BasicNumericType
+                  }
+              )
+          ]
+
+    return $ waitTimeStore ++ [HirWait {hirWaitTimeExpr = unmaybeWait}]
   ReadStmt _ -> error "Unimplemented: ReadStmt"
   DataStmt _ -> error "Unimplemented: DataStmt"
   RestoreStmt _ -> error "Unimplemented: RestoreStmt"

@@ -12,9 +12,7 @@ data HirStmt where
   HirCondGosub :: Expr BasicType -> Int -> HirStmt
   HirAssign :: Assignment BasicType -> HirStmt
   HirPrint ::
-    { hirPrintKind :: PrintKind,
-      hirPrintExpression :: Expr BasicType,
-      hirPrintEnding :: PrintEnding
+    { hirPrintExpression :: Expr BasicType
     } ->
     HirStmt
   HirUsing :: UsingClause -> HirStmt
@@ -23,8 +21,7 @@ data HirStmt where
     } ->
     HirStmt
   HirGPrint ::
-    { hirGPrintExpr :: Expr BasicType,
-      hirGPrintEnding :: PrintEnding
+    { hirGPrintExpr :: Expr BasicType
     } ->
     HirStmt
   HirReturn :: HirStmt
@@ -32,36 +29,34 @@ data HirStmt where
   HirClear :: HirStmt
   HirCls :: HirStmt
   HirRandom :: HirStmt
+  HirWait ::
+    { hirWaitTimeExpr :: Expr BasicType
+    } ->
+    HirStmt
   deriving (Eq)
 
 instance Show HirStmt where
   show (HirStmt stmt) = "\t" ++ show stmt ++ "\n"
   show (HirLabel idx) = "L" ++ show idx ++ ":\n"
-  show (HirGoto idx) = "\tGOTO L" ++ show idx ++ "\n"
-  show (HirGosub idx) = "\tGOSUB L" ++ show idx ++ "\n"
-  show (HirCondGoto cond idx) = "\tIF " ++ show cond ++ " THEN GOTO L" ++ show idx ++ "\n"
-  show (HirCondGosub cond idx) = "\tIF " ++ show cond ++ " THEN GOSUB L" ++ show idx ++ "\n"
+  show (HirGoto idx) = "\tgoto L" ++ show idx ++ "\n"
+  show (HirGosub idx) = "\tgosub L" ++ show idx ++ "\n"
+  show (HirCondGoto cond idx) = "\tif " ++ show cond ++ " goto L" ++ show idx ++ "\n"
+  show (HirCondGosub cond idx) = "\tif " ++ show cond ++ " gosub L" ++ show idx ++ "\n"
   show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
-  show (HirPrint {hirPrintKind, hirPrintExpression, hirPrintEnding}) =
-    case hirPrintEnding of
-      PrintEndingNewLine ->
-        "\t" ++ show hirPrintKind ++ "LN " ++ show hirPrintExpression ++ "\n"
-      PrintEndingNoNewLine ->
-        "\t" ++ show hirPrintKind ++ " " ++ show hirPrintExpression ++ "\n"
+  show (HirPrint {hirPrintExpression}) =
+    "\tputs(" ++ show hirPrintExpression ++ ")\n"
   show (HirUsing usingClause) = "\t" ++ show usingClause ++ "\n"
   show (HirInput {hirInputDestination}) =
-    "\tINPUT " ++ show hirInputDestination ++ "\n"
-  show HirReturn = "\tRETURN\n"
-  show HirEnd = "\tEND\n"
-  show HirClear = "\tCLEAR\n"
-  show HirCls = "\tCLS\n"
-  show HirRandom = "\tRANDOM\n"
-  show (HirGPrint {hirGPrintExpr, hirGPrintEnding}) =
-    case hirGPrintEnding of
-      PrintEndingNewLine ->
-        "\tGPRINTLN " ++ show hirGPrintExpr ++ "\n"
-      PrintEndingNoNewLine ->
-        "\tGPRINT " ++ show hirGPrintExpr ++ "\n"
+    "\tgets(" ++ show hirInputDestination ++ ")\n"
+  show HirReturn = "\treturn\n"
+  show HirEnd = "\tend\n"
+  show HirClear = "\tclear_vars()\n"
+  show HirCls = "\tcls()\n"
+  show HirRandom = "\tgen_random_seed()\n"
+  show (HirGPrint {hirGPrintExpr}) =
+    "\tgprint(" ++ show hirGPrintExpr ++ ")\n"
+  show (HirWait {hirWaitTimeExpr}) =
+    "\tset_print_wait_time(" ++ show hirWaitTimeExpr ++ ")\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirStmt]
