@@ -4,12 +4,11 @@ import Ast.Types
 import TypeSystem (BasicType)
 
 data HirStmt where
-  HirStmt :: Stmt BasicType -> HirStmt
   HirLabel :: Int -> HirStmt
   HirGoto :: Int -> HirStmt
-  HirGosub :: Int -> HirStmt
+  HirCall :: Int -> HirStmt
   HirCondGoto :: Expr BasicType -> Int -> HirStmt
-  HirCondGosub :: Expr BasicType -> Int -> HirStmt
+  HirCondCall :: Expr BasicType -> Int -> HirStmt
   HirAssign :: Assignment BasicType -> HirStmt
   HirPrint ::
     { hirPrintExpression :: Expr BasicType
@@ -33,23 +32,40 @@ data HirStmt where
     { hirWaitTimeExpr :: Expr BasicType
     } ->
     HirStmt
+  HirPoke ::
+    { hirPokeMemoryArea :: PokeKind,
+      hirPokeValue :: Expr BasicType
+    } ->
+    HirStmt
+  HirCursor ::
+    { hirCursorExpr :: Expr BasicType
+    } ->
+    HirStmt
+  HirGCursor ::
+    { hirGCursorExpr :: Expr BasicType
+    } ->
+    HirStmt
+  HirBeepStmt ::
+    { hirBeepStmtRepetitionsExpr :: Expr BasicType,
+      hirBeepStmtOptionalParams :: Maybe (BeepOptionalParams BasicType)
+    } ->
+    HirStmt
   deriving (Eq)
 
 instance Show HirStmt where
-  show (HirStmt stmt) = "\t" ++ show stmt ++ "\n"
   show (HirLabel idx) = "L" ++ show idx ++ ":\n"
   show (HirGoto idx) = "\tgoto L" ++ show idx ++ "\n"
-  show (HirGosub idx) = "\tgosub L" ++ show idx ++ "\n"
+  show (HirCall idx) = "\tcall L" ++ show idx ++ "\n"
   show (HirCondGoto cond idx) = "\tif " ++ show cond ++ " goto L" ++ show idx ++ "\n"
-  show (HirCondGosub cond idx) = "\tif " ++ show cond ++ " gosub L" ++ show idx ++ "\n"
+  show (HirCondCall cond idx) = "\tif " ++ show cond ++ " call L" ++ show idx ++ "\n"
   show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
   show (HirPrint {hirPrintExpression}) =
     "\tputs(" ++ show hirPrintExpression ++ ")\n"
-  show (HirUsing usingClause) = "\t" ++ show usingClause ++ "\n"
+  show (HirUsing (UsingClause usingClauseVar)) = "\tusing_fmt(" ++ show usingClauseVar ++ ")\n"
   show (HirInput {hirInputDestination}) =
     "\tgets(" ++ show hirInputDestination ++ ")\n"
   show HirReturn = "\treturn\n"
-  show HirEnd = "\tend\n"
+  show HirEnd = "\texit()\n"
   show HirClear = "\tclear_vars()\n"
   show HirCls = "\tcls()\n"
   show HirRandom = "\tgen_random_seed()\n"
@@ -57,6 +73,18 @@ instance Show HirStmt where
     "\tgprint(" ++ show hirGPrintExpr ++ ")\n"
   show (HirWait {hirWaitTimeExpr}) =
     "\tset_print_wait_time(" ++ show hirWaitTimeExpr ++ ")\n"
+  show (HirPoke {hirPokeMemoryArea, hirPokeValue}) =
+    "\tpoke(me=" ++ (if hirPokeMemoryArea == Me1 then "1" else "0") ++ ", " ++ show hirPokeValue ++ ")\n"
+  show (HirCursor {hirCursorExpr}) =
+    "\tcursor(" ++ show hirCursorExpr ++ ")\n"
+  show (HirGCursor {hirGCursorExpr}) =
+    "\tgcursor(" ++ show hirGCursorExpr ++ ")\n"
+  show (HirBeepStmt {hirBeepStmtRepetitionsExpr, hirBeepStmtOptionalParams}) =
+    let params = case hirBeepStmtOptionalParams of
+          Just (BeepOptionalParams {beepFrequency, beepDuration}) ->
+            ", " ++ show beepFrequency ++ ", " ++ show beepDuration
+          Nothing -> ""
+     in "\tbeep(" ++ show hirBeepStmtRepetitionsExpr ++ params ++ ")\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirStmt]

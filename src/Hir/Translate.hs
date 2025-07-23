@@ -8,6 +8,9 @@ import Hir.Types
 import SymbolTable
 import TypeSystem (BasicType (..))
 
+userWaitTimeVarIdent :: Ident
+userWaitTimeVarIdent = IdentNumIdent (NumIdent "_USER_WAIT_TIME")
+
 data TranslationState = TranslationState
   { labelToInt :: Data.Map.Map GotoTarget Int,
     nextLabelIdx :: Int,
@@ -58,7 +61,7 @@ translateStmt stmt = case stmt of
     return [HirGoto labelIdx]
   GoSubStmt target -> do
     labelIdx <- gets (lookupLabelPanics target)
-    return [HirGosub labelIdx]
+    return [HirCall labelIdx]
   IfThenStmt condition stmt' ->
     case stmt' of
       GoToStmt target -> do
@@ -66,7 +69,7 @@ translateStmt stmt = case stmt of
         return [HirCondGoto condition labelIdx]
       GoSubStmt target -> do
         labelIdx <- gets (lookupLabelPanics target)
-        return [HirCondGosub condition labelIdx]
+        return [HirCondCall condition labelIdx]
       s ->
         -- Reverse the condition of the if and transform it into a conditional goto
         let newCondition =
@@ -78,7 +81,8 @@ translateStmt stmt = case stmt of
             do
               (newState, labelIdx) <- gets insertGotoLabelInState
               put newState
-              return [HirCondGoto newCondition labelIdx, HirStmt s, HirLabel labelIdx]
+              translateInner <- translateStmt s
+              return $ HirCondGoto newCondition labelIdx : (translateInner ++ [HirLabel labelIdx])
   ForStmt {forAssignment, forToExpr} -> do
     let forIdent = case assignmentLValue forAssignment of
           LValueIdent (IdentNumIdent ident) -> ident
@@ -87,7 +91,7 @@ translateStmt stmt = case stmt of
     (newState, labelIdx) <- gets (beginForLoop forIdent forToExpr)
     put newState
 
-    return [HirLabel labelIdx, HirAssign forAssignment]
+    return [HirAssign forAssignment, HirLabel labelIdx]
   NextStmt {nextIdent} -> do
     (startLabelIdx, startCond) <- gets (lookupForStartLabel nextIdent)
     let identExpr =
@@ -139,7 +143,12 @@ translateStmt stmt = case stmt of
           Just u -> [HirUsing u]
           Nothing -> []
         putchar = case printEnding of
-          PrintEndingNewLine -> [HirCls]
+          PrintEndingNewLine ->
+            [ HirCls,
+              HirCursor
+                { hirCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+                }
+            ]
           _ -> []
         printInstrs = usingClause ++ hirPrints ++ putchar
         defaultPauseWaitTime =
@@ -155,7 +164,7 @@ translateStmt stmt = case stmt of
               ++ [ HirWait
                      { hirWaitTimeExpr =
                          Expr
-                           { exprInner = LValueExpr $ LValueIdent (IdentNumIdent (NumIdent "userSetWaitTime")),
+                           { exprInner = LValueExpr (LValueIdent userWaitTimeVarIdent),
                              exprType = BasicNumericType
                            }
                      }
@@ -164,23 +173,11 @@ translateStmt stmt = case stmt of
     return endResult
   UsingStmt usingClause -> return [HirUsing usingClause]
   InputStmt {inputPrintExpr, inputDestination} ->
-    let infiniteWaitTime =
-          Expr
-            { exprInner =
-                UnaryExpr
-                  UnaryMinusOp
-                  Expr
-                    { exprInner = NumLitExpr 1,
-                      exprType = BasicNumericType
-                    },
-              exprType = BasicNumericType
-            }
-        inputStmt = HirInput {hirInputDestination = inputDestination}
+    let inputStmt = HirInput {hirInputDestination = inputDestination}
      in case inputPrintExpr of
           Just expr ->
             return
-              [ HirWait {hirWaitTimeExpr = infiniteWaitTime},
-                HirPrint
+              [ HirPrint
                   { hirPrintExpression =
                       Expr
                         { exprInner = StrLitExpr expr,
@@ -200,13 +197,18 @@ translateStmt stmt = case stmt of
                    }
                ]
             ++ case gprintEnding of
-              PrintEndingNewLine -> [HirCls]
+              PrintEndingNewLine ->
+                [ HirCls,
+                  HirGCursor
+                    { hirGCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+                    }
+                ]
               PrintEndingNoNewLine -> []
     return hirGPrints
   Comment -> return []
   ReturnStmt -> return [HirReturn]
   DimStmt _ -> return [] -- Already in symbol table
-  EndStmt -> return [HirStmt EndStmt]
+  EndStmt -> return [HirEnd]
   WaitStmt {waitForExpr} -> do
     -- Save the last wait time set by the user in a special variable
     let infiniteWaitTime =
@@ -224,7 +226,7 @@ translateStmt stmt = case stmt of
         waitTimeStore =
           [ HirAssign
               ( Assignment
-                  { assignmentLValue = LValueIdent (IdentNumIdent (NumIdent "userSetWaitTime")),
+                  { assignmentLValue = LValueIdent userWaitTimeVarIdent,
                     assignmentExpr = unmaybeWait,
                     assignmentType = BasicNumericType
                   }
@@ -232,10 +234,35 @@ translateStmt stmt = case stmt of
           ]
 
     return $ waitTimeStore ++ [HirWait {hirWaitTimeExpr = unmaybeWait}]
+  PokeStmt {pokeKind, pokeExprs} -> do
+    let hirPokes =
+          map
+            ( \expr ->
+                HirPoke
+                  { hirPokeMemoryArea = pokeKind,
+                    hirPokeValue = expr
+                  }
+            )
+            pokeExprs
+    return hirPokes
+  RandomStmt -> return [HirRandom]
+  ClsStmt -> return [HirCls]
+  ClearStmt -> return [HirClear]
+  CursorStmt {cursorExpr} -> return [HirCursor {hirCursorExpr = cursorExpr}]
+  GCursorStmt {gCursorExpr} -> return [HirGCursor {hirGCursorExpr = gCursorExpr}]
   ReadStmt _ -> error "Unimplemented: ReadStmt"
   DataStmt _ -> error "Unimplemented: DataStmt"
   RestoreStmt _ -> error "Unimplemented: RestoreStmt"
-  _ -> return [HirStmt stmt]
+  BeepStmt
+    { beepStmtRepetitionsExpr,
+      beepStmtOptionalParams
+    } ->
+      return
+        [ HirBeepStmt
+            { hirBeepStmtRepetitionsExpr = beepStmtRepetitionsExpr,
+              hirBeepStmtOptionalParams = beepStmtOptionalParams
+            }
+        ]
 
 translateLine :: Line BasicType -> State TranslationState [HirStmt]
 translateLine Line {lineNumber, lineLabel, lineStmts} = do
@@ -261,5 +288,20 @@ translateProgram (Program programLines) symbolTable =
       initialState = TranslationState {labelToInt = labelMap, nextLabelIdx = nextIdx, forStartToLabel = Data.Map.empty}
       -- Translate each line of the program
       translatedStmts = evalState (mapM translateLine programLines') initialState
-      falttenedStmts = concat translatedStmts
-   in HirProgram falttenedStmts
+      flattenedStmts =
+        HirAssign
+          ( Assignment
+              { assignmentLValue = LValueIdent userWaitTimeVarIdent,
+                assignmentExpr =
+                  Expr
+                    { exprInner =
+                        UnaryExpr
+                          UnaryMinusOp
+                          (Expr {exprInner = NumLitExpr 1, exprType = BasicNumericType}),
+                      exprType = BasicNumericType
+                    },
+                assignmentType = BasicNumericType
+              }
+          )
+          : concat translatedStmts
+   in HirProgram flattenedStmts
