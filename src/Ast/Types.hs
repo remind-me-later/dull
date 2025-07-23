@@ -247,8 +247,9 @@ instance Show PrintKind where
   show PrintKindPrint = "PRINT"
   show PrintKindPause = "PAUSE"
 
+-- FIXME: maybe this should allow also variables
 data UsingClause where
-  UsingClause :: {usingClauseExpr :: StringVariableOrLiteral} -> UsingClause
+  UsingClause :: {usingClauseExpr :: String} -> UsingClause
   deriving (Eq)
 
 instance Show UsingClause where

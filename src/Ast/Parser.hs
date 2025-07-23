@@ -323,7 +323,7 @@ letStmt mandatoryLet = do
 usingClause :: Parser UsingClause
 usingClause = do
   _ <- keyword "USING"
-  UsingClause <$> stringVariableOrLiteral
+  UsingClause <$> stringLiteral
 
 printStmt :: Parser RawStmt
 printStmt = do
