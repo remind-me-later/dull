@@ -17,7 +17,6 @@ data HirIntrinsic where
     { hirGPrintExpr :: Expr BasicType
     } ->
     HirIntrinsic
-  HirReturn :: HirIntrinsic
   HirEnd :: HirIntrinsic
   HirClear :: HirIntrinsic
   HirCls :: HirIntrinsic
@@ -51,7 +50,6 @@ instance Show HirIntrinsic where
   show (HirUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
   show (HirInput dest) = "gets(" ++ show dest ++ ")"
   show (HirGPrint expr) = "gprint(" ++ show expr ++ ")"
-  show HirReturn = "return"
   show HirEnd = "exit()"
   show HirClear = "clear_vars()"
   show HirCls = "cls()"
@@ -68,15 +66,37 @@ instance Show HirIntrinsic where
           Nothing -> ""
      in "beep(" ++ show repetitions ++ params ++ ")"
 
+data HirIntrinsicFun where
+  HirMidFun :: HirIntrinsicFun
+  HirLeftFun :: HirIntrinsicFun
+  HirRightFun :: HirIntrinsicFun
+  HirAsciiFun :: HirIntrinsicFun
+  HirPointFun :: HirIntrinsicFun
+  HirRndFun :: HirIntrinsicFun
+  HirIntFun :: HirIntrinsicFun
+  HirSgnFun :: HirIntrinsicFun
+  deriving (Eq)
 
+instance Show HirIntrinsicFun where
+  show HirMidFun = "mid()"
+  show HirLeftFun = "left()"
+  show HirRightFun = "right()"
+  show HirAsciiFun = "ascii()"
+  show HirPointFun = "point()"
+  show HirRndFun = "rnd()"
+  show HirIntFun = "int()"
+  show HirSgnFun = "sgn()"
 
 data HirInst where
   -- Stack operations
-  HirPushIdent :: Ident -> HirInst
+  HirPushLValue :: LValue BasicType -> HirInst
   HirPushStrLit :: String -> HirInst
   HirPushNumLit :: Double -> HirInst
   HirPopStr :: HirInst
   HirPopNum :: HirInst
+  HirBinOp :: BinOperator -> HirInst
+  HirUnaryOp :: UnaryOperator -> HirInst
+  HirIntrinsicFun :: HirIntrinsicFun -> HirInst
   -- Assignment
   HirAssign :: Assignment BasicType -> HirInst
   -- Labels
@@ -84,8 +104,9 @@ data HirInst where
   -- Jumps
   HirGoto :: Int -> HirInst
   HirCall :: Int -> HirInst
-  HirCondGoto :: Expr BasicType -> Int -> HirInst
-  HirCondCall :: Expr BasicType -> Int -> HirInst
+  HirCondGoto :: Int -> HirInst
+  HirCondCall :: Int -> HirInst
+  HirReturn :: HirInst
   -- Intrinsics
   HirIntrinsicCall :: HirIntrinsic -> HirInst
   deriving (Eq)
@@ -94,10 +115,19 @@ instance Show HirInst where
   show (HirLabel idx) = "L" ++ show idx ++ ":\n"
   show (HirGoto idx) = "\tgoto L" ++ show idx ++ "\n"
   show (HirCall idx) = "\tcall L" ++ show idx ++ "\n"
-  show (HirCondGoto cond idx) = "\tif " ++ show cond ++ " goto L" ++ show idx ++ "\n"
-  show (HirCondCall cond idx) = "\tif " ++ show cond ++ " call L" ++ show idx ++ "\n"
+  show (HirCondGoto idx) = "\tcgoto L" ++ show idx ++ "\n"
+  show (HirCondCall idx) = "\tccall L" ++ show idx ++ "\n"
+  show HirReturn = "\treturn\n"
   show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
   show (HirIntrinsicCall intrinsic) = "\tintrinsic " ++ show intrinsic ++ "\n"
+  show (HirPushLValue lvalue) = "\tpush " ++ show lvalue ++ "\n"
+  show (HirPushStrLit str) = "\tpush \"" ++ str ++ "\"" ++ "\n"
+  show (HirPushNumLit num) = "\tpush " ++ show num ++ "\n"
+  show HirPopStr = "\tpop str\n"
+  show HirPopNum = "\tpop num\n"
+  show (HirBinOp op) = "\tbinop " ++ show op ++ "\n"
+  show (HirUnaryOp op) = "\tunaryop " ++ show op ++ "\n"
+  show (HirIntrinsicFun fun) = "\t" ++ show fun ++ "\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirInst]

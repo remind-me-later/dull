@@ -54,6 +54,56 @@ lookupForStartLabel ident state' =
     Just idx -> idx
     Nothing -> error $ "For loop start label not found for: " ++ show ident
 
+translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
+translateStringVariableOrLiteral (StringVariable var) =
+  return [HirPushLValue (LValueIdent (IdentStrIdent var))]
+translateStringVariableOrLiteral (StringLiteral str) =
+  return [HirPushStrLit str]
+
+translateFunction :: Function BasicType -> State TranslationState [HirInst]
+translateFunction function = case function of
+  MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} -> do
+    stringInsts <- translateStringVariableOrLiteral midFunStringExpr
+    startInsts <- translateExpr midFunStartExpr
+    lengthInsts <- translateExpr midFunLengthExpr
+    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirIntrinsicFun HirMidFun]
+  LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
+    stringInsts <- translateStringVariableOrLiteral leftFunStringExpr
+    lengthInsts <- translateExpr leftFunLengthExpr
+    return $ stringInsts ++ lengthInsts ++ [HirIntrinsicFun HirLeftFun]
+  RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
+    stringInsts <- translateStringVariableOrLiteral rightFunStringExpr
+    lengthInsts <- translateExpr rightFunLengthExpr
+    return $ stringInsts ++ lengthInsts ++ [HirIntrinsicFun HirRightFun]
+  AsciiFun {asciiFunArgument} -> do
+    argInsts <- translateStringVariableOrLiteral asciiFunArgument
+    return $ argInsts ++ [HirIntrinsicFun HirAsciiFun]
+  PointFun {pointFunPositionExpr} -> do
+    posInsts <- translateExpr pointFunPositionExpr
+    return $ posInsts ++ [HirIntrinsicFun HirPointFun]
+  RndFun {rndRangeEnd} -> do
+    return [HirPushNumLit (fromIntegral rndRangeEnd), HirIntrinsicFun HirRndFun]
+  IntFun {intFunExpr} -> do
+    exprInsts <- translateExpr intFunExpr
+    return $ exprInsts ++ [HirIntrinsicFun HirIntFun]
+  SgnFun {sgnFunExpr} -> do
+    exprInsts <- translateExpr sgnFunExpr
+    return $ exprInsts ++ [HirIntrinsicFun HirSgnFun]
+
+translateExpr :: Expr BasicType -> State TranslationState [HirInst]
+translateExpr Expr {exprInner, exprType = _} = case exprInner of
+  NumLitExpr n -> return [HirPushNumLit n]
+  StrLitExpr s -> return [HirPushStrLit s]
+  LValueExpr lvalue -> return [HirPushLValue lvalue]
+  BinExpr left op right -> do
+    leftInsts <- translateExpr left
+    rightInsts <- translateExpr right
+    return $ leftInsts ++ rightInsts ++ [HirBinOp op]
+  UnaryExpr op expr' -> do
+    exprInsts <- translateExpr expr'
+    return $ exprInsts ++ [HirUnaryOp op]
+  FunCallExpr function -> translateFunction function
+
 translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
   GoToStmt target -> do
@@ -66,10 +116,12 @@ translateStmt stmt = case stmt of
     case stmt' of
       GoToStmt target -> do
         labelIdx <- gets (lookupLabelPanics target)
-        return [HirCondGoto condition labelIdx]
+        conditionInsts <- translateExpr condition
+        return $ conditionInsts ++ [HirCondGoto labelIdx]
       GoSubStmt target -> do
         labelIdx <- gets (lookupLabelPanics target)
-        return [HirCondCall condition labelIdx]
+        conditionInsts <- translateExpr condition
+        return $ conditionInsts ++ [HirCondCall labelIdx]
       s ->
         -- Reverse the condition of the if and transform it into a conditional goto
         let newCondition =
@@ -82,7 +134,8 @@ translateStmt stmt = case stmt of
               (newState, labelIdx) <- gets insertGotoLabelInState
               put newState
               translateInner <- translateStmt s
-              return $ HirCondGoto newCondition labelIdx : (translateInner ++ [HirLabel labelIdx])
+              conditionInsts <- translateExpr newCondition
+              return $ conditionInsts ++ (HirCondGoto labelIdx : (translateInner ++ [HirLabel labelIdx]))
   ForStmt {forAssignment, forToExpr} -> do
     let forIdent = case assignmentLValue forAssignment of
           LValueIdent (IdentNumIdent ident) -> ident
@@ -120,7 +173,8 @@ translateStmt stmt = case stmt of
               exprType = BasicNumericType
             }
     -- Create a conditional goto to the start of the for loop
-    return [HirAssign nextAssignment, HirCondGoto newJumpCondition startLabelIdx]
+    conditionInsts <- translateExpr newJumpCondition
+    return $ HirAssign nextAssignment : (conditionInsts ++ [HirCondGoto startLabelIdx])
   LetStmt {letAssignments} -> do
     let assignments = map HirAssign letAssignments
     return assignments
@@ -213,7 +267,7 @@ translateStmt stmt = case stmt of
               PrintEndingNoNewLine -> []
     return hirGPrints
   Comment -> return []
-  ReturnStmt -> return [HirIntrinsicCall HirReturn]
+  ReturnStmt -> return [HirReturn]
   DimStmt _ -> return [] -- Already in symbol table
   EndStmt -> return [HirIntrinsicCall HirEnd]
   WaitStmt {waitForExpr} -> do
