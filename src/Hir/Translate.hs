@@ -54,7 +54,7 @@ lookupForStartLabel ident state' =
     Just idx -> idx
     Nothing -> error $ "For loop start label not found for: " ++ show ident
 
-translateStmt :: Stmt BasicType -> State TranslationState [HirStmt]
+translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
   GoToStmt target -> do
     labelIdx <- gets (lookupLabelPanics target)
@@ -130,24 +130,27 @@ translateStmt stmt = case stmt of
         hirPrints =
           map
             ( \expr ->
-                HirPrint
-                  { hirPrintExpression = expr
-                  }
+                HirIntrinsicCall $
+                  HirPrint
+                    { hirPrintExpression = expr
+                    }
             )
             (init printExprs)
-            ++ [ HirPrint
-                   { hirPrintExpression = last printExprs
-                   }
+            ++ [ HirIntrinsicCall $
+                   HirPrint
+                     { hirPrintExpression = last printExprs
+                     }
                ]
         usingClause = case printUsingClause of
-          Just u -> [HirUsing u]
+          Just u -> [HirIntrinsicCall $ HirUsing u]
           Nothing -> []
         putchar = case printEnding of
           PrintEndingNewLine ->
-            [ HirCls,
-              HirCursor
-                { hirCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
-                }
+            [ HirIntrinsicCall HirCls,
+              HirIntrinsicCall $
+                HirCursor
+                  { hirCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+                  }
             ]
           _ -> []
         printInstrs = usingClause ++ hirPrints ++ putchar
@@ -159,56 +162,60 @@ translateStmt stmt = case stmt of
         endResult = case printKind of
           PrintKindPrint -> printInstrs
           PrintKindPause ->
-            [HirWait {hirWaitTimeExpr = defaultPauseWaitTime}]
+            [HirIntrinsicCall HirWait {hirWaitTimeExpr = defaultPauseWaitTime}]
               ++ printInstrs
-              ++ [ HirWait
-                     { hirWaitTimeExpr =
-                         Expr
-                           { exprInner = LValueExpr (LValueIdent userWaitTimeVarIdent),
-                             exprType = BasicNumericType
-                           }
-                     }
+              ++ [ HirIntrinsicCall
+                     HirWait
+                       { hirWaitTimeExpr =
+                           Expr
+                             { exprInner = LValueExpr (LValueIdent userWaitTimeVarIdent),
+                               exprType = BasicNumericType
+                             }
+                       }
                  ]
 
-    return endResult
-  UsingStmt usingClause -> return [HirUsing usingClause]
+    return $ endResult
+  UsingStmt usingClause -> return [HirIntrinsicCall $ HirUsing usingClause]
   InputStmt {inputPrintExpr, inputDestination} ->
-    let inputStmt = HirInput {hirInputDestination = inputDestination}
+    let inputStmt = HirIntrinsicCall HirInput {hirInputDestination = inputDestination}
      in case inputPrintExpr of
           Just expr ->
             return
-              [ HirPrint
-                  { hirPrintExpression =
-                      Expr
-                        { exprInner = StrLitExpr expr,
-                          exprType = BasicStringType
-                        }
-                  },
+              [ HirIntrinsicCall
+                  HirPrint
+                    { hirPrintExpression =
+                        Expr
+                          { exprInner = StrLitExpr expr,
+                            exprType = BasicStringType
+                          }
+                    },
                 inputStmt
               ]
           Nothing -> return [inputStmt]
   GprintStmt {gprintExprs, gprintEnding} -> do
     let hirGPrints =
           map
-            (\expr -> HirGPrint {hirGPrintExpr = expr})
+            (\expr -> HirIntrinsicCall HirGPrint {hirGPrintExpr = expr})
             (init gprintExprs)
-            ++ [ HirGPrint
-                   { hirGPrintExpr = last gprintExprs
-                   }
+            ++ [ HirIntrinsicCall
+                   HirGPrint
+                     { hirGPrintExpr = last gprintExprs
+                     }
                ]
             ++ case gprintEnding of
               PrintEndingNewLine ->
-                [ HirCls,
-                  HirGCursor
-                    { hirGCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
-                    }
+                [ HirIntrinsicCall HirCls,
+                  HirIntrinsicCall
+                    HirGCursor
+                      { hirGCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+                      }
                 ]
               PrintEndingNoNewLine -> []
     return hirGPrints
   Comment -> return []
-  ReturnStmt -> return [HirReturn]
+  ReturnStmt -> return [HirIntrinsicCall HirReturn]
   DimStmt _ -> return [] -- Already in symbol table
-  EndStmt -> return [HirEnd]
+  EndStmt -> return [HirIntrinsicCall HirEnd]
   WaitStmt {waitForExpr} -> do
     -- Save the last wait time set by the user in a special variable
     let infiniteWaitTime =
@@ -233,23 +240,24 @@ translateStmt stmt = case stmt of
               )
           ]
 
-    return $ waitTimeStore ++ [HirWait {hirWaitTimeExpr = unmaybeWait}]
+    return $ waitTimeStore ++ [HirIntrinsicCall HirWait {hirWaitTimeExpr = unmaybeWait}]
   PokeStmt {pokeKind, pokeExprs} -> do
     let hirPokes =
           map
             ( \expr ->
-                HirPoke
-                  { hirPokeMemoryArea = pokeKind,
-                    hirPokeValue = expr
-                  }
+                HirIntrinsicCall
+                  HirPoke
+                    { hirPokeMemoryArea = pokeKind,
+                      hirPokeValue = expr
+                    }
             )
             pokeExprs
     return hirPokes
-  RandomStmt -> return [HirRandom]
-  ClsStmt -> return [HirCls]
-  ClearStmt -> return [HirClear]
-  CursorStmt {cursorExpr} -> return [HirCursor {hirCursorExpr = cursorExpr}]
-  GCursorStmt {gCursorExpr} -> return [HirGCursor {hirGCursorExpr = gCursorExpr}]
+  RandomStmt -> return [HirIntrinsicCall HirRandom]
+  ClsStmt -> return [HirIntrinsicCall HirCls]
+  ClearStmt -> return [HirIntrinsicCall HirClear]
+  CursorStmt {cursorExpr} -> return [HirIntrinsicCall HirCursor {hirCursorExpr = cursorExpr}]
+  GCursorStmt {gCursorExpr} -> return [HirIntrinsicCall HirGCursor {hirGCursorExpr = gCursorExpr}]
   ReadStmt _ -> error "Unimplemented: ReadStmt"
   DataStmt _ -> error "Unimplemented: DataStmt"
   RestoreStmt _ -> error "Unimplemented: RestoreStmt"
@@ -258,13 +266,14 @@ translateStmt stmt = case stmt of
       beepStmtOptionalParams
     } ->
       return
-        [ HirBeepStmt
-            { hirBeepStmtRepetitionsExpr = beepStmtRepetitionsExpr,
-              hirBeepStmtOptionalParams = beepStmtOptionalParams
-            }
+        [ HirIntrinsicCall
+            HirBeepStmt
+              { hirBeepStmtRepetitionsExpr = beepStmtRepetitionsExpr,
+                hirBeepStmtOptionalParams = beepStmtOptionalParams
+              }
         ]
 
-translateLine :: Line BasicType -> State TranslationState [HirStmt]
+translateLine :: Line BasicType -> State TranslationState [HirInst]
 translateLine Line {lineNumber, lineLabel, lineStmts} = do
   label <- case lineLabel of
     Just lbl -> do

@@ -3,91 +3,104 @@ module Hir.Types where
 import Ast.Types
 import TypeSystem (BasicType)
 
-data HirStmt where
-  HirLabel :: Int -> HirStmt
-  HirGoto :: Int -> HirStmt
-  HirCall :: Int -> HirStmt
-  HirCondGoto :: Expr BasicType -> Int -> HirStmt
-  HirCondCall :: Expr BasicType -> Int -> HirStmt
-  HirAssign :: Assignment BasicType -> HirStmt
+data HirIntrinsic where
   HirPrint ::
     { hirPrintExpression :: Expr BasicType
     } ->
-    HirStmt
-  HirUsing :: UsingClause -> HirStmt
+    HirIntrinsic
+  HirUsing :: UsingClause -> HirIntrinsic
   HirInput ::
     { hirInputDestination :: Ident
     } ->
-    HirStmt
+    HirIntrinsic
   HirGPrint ::
     { hirGPrintExpr :: Expr BasicType
     } ->
-    HirStmt
-  HirReturn :: HirStmt
-  HirEnd :: HirStmt
-  HirClear :: HirStmt
-  HirCls :: HirStmt
-  HirRandom :: HirStmt
+    HirIntrinsic
+  HirReturn :: HirIntrinsic
+  HirEnd :: HirIntrinsic
+  HirClear :: HirIntrinsic
+  HirCls :: HirIntrinsic
+  HirRandom :: HirIntrinsic
   HirWait ::
     { hirWaitTimeExpr :: Expr BasicType
     } ->
-    HirStmt
+    HirIntrinsic
   HirPoke ::
     { hirPokeMemoryArea :: PokeKind,
       hirPokeValue :: Expr BasicType
     } ->
-    HirStmt
+    HirIntrinsic
   HirCursor ::
     { hirCursorExpr :: Expr BasicType
     } ->
-    HirStmt
+    HirIntrinsic
   HirGCursor ::
     { hirGCursorExpr :: Expr BasicType
     } ->
-    HirStmt
+    HirIntrinsic
   HirBeepStmt ::
     { hirBeepStmtRepetitionsExpr :: Expr BasicType,
       hirBeepStmtOptionalParams :: Maybe (BeepOptionalParams BasicType)
     } ->
-    HirStmt
+    HirIntrinsic
   deriving (Eq)
 
-instance Show HirStmt where
+instance Show HirIntrinsic where
+  show (HirPrint expr) = "puts(" ++ show expr ++ ")"
+  show (HirUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
+  show (HirInput dest) = "gets(" ++ show dest ++ ")"
+  show (HirGPrint expr) = "gprint(" ++ show expr ++ ")"
+  show HirReturn = "return"
+  show HirEnd = "exit()"
+  show HirClear = "clear_vars()"
+  show HirCls = "cls()"
+  show HirRandom = "gen_random_seed()"
+  show (HirWait expr) = "set_print_wait_time(" ++ show expr ++ ")"
+  show (HirPoke memArea value) =
+    "poke(me=" ++ (if memArea == Me1 then "1" else "0") ++ ", " ++ show value ++ ")"
+  show (HirCursor expr) = "cursor(" ++ show expr ++ ")"
+  show (HirGCursor expr) = "gcursor(" ++ show expr ++ ")"
+  show (HirBeepStmt repetitions optionalParams) =
+    let params = case optionalParams of
+          Just (BeepOptionalParams {beepFrequency, beepDuration}) ->
+            ", " ++ show beepFrequency ++ ", " ++ show beepDuration
+          Nothing -> ""
+     in "beep(" ++ show repetitions ++ params ++ ")"
+
+
+
+data HirInst where
+  -- Stack operations
+  HirPushIdent :: Ident -> HirInst
+  HirPushStrLit :: String -> HirInst
+  HirPushNumLit :: Double -> HirInst
+  HirPopStr :: HirInst
+  HirPopNum :: HirInst
+  -- Assignment
+  HirAssign :: Assignment BasicType -> HirInst
+  -- Labels
+  HirLabel :: Int -> HirInst
+  -- Jumps
+  HirGoto :: Int -> HirInst
+  HirCall :: Int -> HirInst
+  HirCondGoto :: Expr BasicType -> Int -> HirInst
+  HirCondCall :: Expr BasicType -> Int -> HirInst
+  -- Intrinsics
+  HirIntrinsicCall :: HirIntrinsic -> HirInst
+  deriving (Eq)
+
+instance Show HirInst where
   show (HirLabel idx) = "L" ++ show idx ++ ":\n"
   show (HirGoto idx) = "\tgoto L" ++ show idx ++ "\n"
   show (HirCall idx) = "\tcall L" ++ show idx ++ "\n"
   show (HirCondGoto cond idx) = "\tif " ++ show cond ++ " goto L" ++ show idx ++ "\n"
   show (HirCondCall cond idx) = "\tif " ++ show cond ++ " call L" ++ show idx ++ "\n"
   show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
-  show (HirPrint {hirPrintExpression}) =
-    "\tputs(" ++ show hirPrintExpression ++ ")\n"
-  show (HirUsing (UsingClause usingClauseVar)) = "\tusing_fmt(" ++ show usingClauseVar ++ ")\n"
-  show (HirInput {hirInputDestination}) =
-    "\tgets(" ++ show hirInputDestination ++ ")\n"
-  show HirReturn = "\treturn\n"
-  show HirEnd = "\texit()\n"
-  show HirClear = "\tclear_vars()\n"
-  show HirCls = "\tcls()\n"
-  show HirRandom = "\tgen_random_seed()\n"
-  show (HirGPrint {hirGPrintExpr}) =
-    "\tgprint(" ++ show hirGPrintExpr ++ ")\n"
-  show (HirWait {hirWaitTimeExpr}) =
-    "\tset_print_wait_time(" ++ show hirWaitTimeExpr ++ ")\n"
-  show (HirPoke {hirPokeMemoryArea, hirPokeValue}) =
-    "\tpoke(me=" ++ (if hirPokeMemoryArea == Me1 then "1" else "0") ++ ", " ++ show hirPokeValue ++ ")\n"
-  show (HirCursor {hirCursorExpr}) =
-    "\tcursor(" ++ show hirCursorExpr ++ ")\n"
-  show (HirGCursor {hirGCursorExpr}) =
-    "\tgcursor(" ++ show hirGCursorExpr ++ ")\n"
-  show (HirBeepStmt {hirBeepStmtRepetitionsExpr, hirBeepStmtOptionalParams}) =
-    let params = case hirBeepStmtOptionalParams of
-          Just (BeepOptionalParams {beepFrequency, beepDuration}) ->
-            ", " ++ show beepFrequency ++ ", " ++ show beepDuration
-          Nothing -> ""
-     in "\tbeep(" ++ show hirBeepStmtRepetitionsExpr ++ params ++ ")\n"
+  show (HirIntrinsicCall intrinsic) = "\tintrinsic " ++ show intrinsic ++ "\n"
 
 newtype HirProgram = HirProgram
-  { hirProgramStatements :: [HirStmt]
+  { hirProgramStatements :: [HirInst]
   }
   deriving (Eq)
 
