@@ -30,6 +30,7 @@ module Ast.Types
     RawFunction,
     RawExprInner,
     BeepOptionalParams (..),
+    getIdentName,
   )
 where
 
@@ -152,18 +153,18 @@ instance Show PseudoVariable where
   show InkeyPseudoVar = "INKEY$"
 
 data StrIdent where
-  StrIdent :: String -> StrIdent
+  StrIdent :: Char -> StrIdent
   deriving (Eq, Ord)
 
 instance Show StrIdent where
-  show (StrIdent s) = s ++ "$"
+  show (StrIdent s) = s : "$"
 
 data NumIdent where
-  NumIdent :: String -> NumIdent
+  NumIdent :: Char -> NumIdent
   deriving (Eq, Ord)
 
 instance Show NumIdent where
-  show (NumIdent s) = s
+  show (NumIdent s) = [s]
 
 data Ident where
   IdentNumIdent :: NumIdent -> Ident
@@ -171,8 +172,12 @@ data Ident where
   deriving (Eq, Ord)
 
 instance Show Ident where
-  show (IdentNumIdent (NumIdent s)) = s
-  show (IdentStrIdent (StrIdent s)) = s
+  show (IdentNumIdent ident) = show ident
+  show (IdentStrIdent ident) = show ident
+
+getIdentName :: Ident -> Char
+getIdentName (IdentNumIdent (NumIdent c)) = c
+getIdentName (IdentStrIdent (StrIdent c)) = c
 
 data LValue et where
   LValueIdent :: Ident -> LValue et

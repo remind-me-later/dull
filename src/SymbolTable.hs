@@ -10,14 +10,14 @@ module SymbolTable
   )
 where
 
-import Ast.Types (GotoTarget, Ident (..))
+import Ast.Types (GotoTarget, Ident (..), getIdentName)
 import Data.List (intercalate, sortBy)
 import Data.Map
 import TypeSystem
 
 data Variable where
   Variable ::
-    { variableName :: String,
+    { variableName :: Char,
       variableOffset :: Int,
       variableType :: BasicType
     } ->
@@ -26,7 +26,7 @@ data Variable where
 
 instance Show Variable where
   show Variable {variableName, variableOffset, variableType} =
-    variableName ++ case variableType of
+    variableName : case variableType of
       BasicStringType -> "$ : " ++ show variableOffset
       BasicNumericType -> " : " ++ show variableOffset
       BasicNumArrType {numericArrSize} ->
@@ -89,7 +89,7 @@ emptySymbolTable = SymbolTable {symbolMap = empty, nextOffset = 0, stringLiteral
 insertSymbol :: Ident -> BasicType -> SymbolTable -> SymbolTable
 insertSymbol sym ty st@SymbolTable {symbolMap, nextOffset} =
   let alreadyInSymbols = Data.Map.member sym symbolMap
-      newSymbolName = show sym
+      newSymbolName = getIdentName sym
       newSymbol = Variable {variableName = newSymbolName, variableOffset = nextOffset, variableType = ty}
       newSymbols = insert sym newSymbol symbolMap
       newOffset = nextOffset + sizeOfTy ty

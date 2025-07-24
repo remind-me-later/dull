@@ -65,17 +65,13 @@ symbol sym = Ast.Parser.lex $ char sym
 numIdent :: Parser NumIdent
 numIdent = Ast.Parser.lex $ do
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
-  secondChar <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
-  let varName = firstChar : maybe "" (: []) secondChar
-  return (NumIdent varName)
+  return (NumIdent firstChar)
 
 strIdent :: Parser StrIdent
 strIdent = Ast.Parser.lex $ do
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
-  secondChar <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
   _ <- char '$'
-  let varName = firstChar : maybe "" (: []) secondChar
-  return (StrIdent varName)
+  return (StrIdent firstChar)
 
 -- try strIdent first, then numIdent, since we have to match the longest identifier first
 ident :: Parser Ident
