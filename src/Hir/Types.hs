@@ -4,101 +4,72 @@ import Ast.Types
 import TypeSystem (BasicType)
 
 data HirIntrinsic where
-  HirPrint ::
-    { hirPrintExpression :: Expr BasicType
-    } ->
-    HirIntrinsic
-  HirUsing :: UsingClause -> HirIntrinsic
-  HirInput ::
-    { hirInputDestination :: Ident
-    } ->
-    HirIntrinsic
-  HirGPrint ::
-    { hirGPrintExpr :: Expr BasicType
-    } ->
-    HirIntrinsic
+  HirPrint :: HirIntrinsic
+  HirPause :: HirIntrinsic
+  HirUsing :: String -> HirIntrinsic
+  HirInput :: {hirInputDestination :: Ident} -> HirIntrinsic
+  HirGPrint :: HirIntrinsic
   HirEnd :: HirIntrinsic
   HirClear :: HirIntrinsic
   HirCls :: HirIntrinsic
   HirRandom :: HirIntrinsic
-  HirWait ::
-    { hirWaitTimeExpr :: Expr BasicType
-    } ->
-    HirIntrinsic
-  HirPoke ::
-    { hirPokeMemoryArea :: PokeKind,
-      hirPokeValue :: Expr BasicType
-    } ->
-    HirIntrinsic
-  HirCursor ::
-    { hirCursorExpr :: Expr BasicType
-    } ->
-    HirIntrinsic
-  HirGCursor ::
-    { hirGCursorExpr :: Expr BasicType
-    } ->
-    HirIntrinsic
-  HirBeepStmt ::
-    { hirBeepStmtRepetitionsExpr :: Expr BasicType,
-      hirBeepStmtOptionalParams :: Maybe (BeepOptionalParams BasicType)
-    } ->
-    HirIntrinsic
+  HirWait :: HirIntrinsic
+  HirSetPokeAddress :: HirIntrinsic
+  HirPoke :: {hirPokeMemoryArea :: PokeKind} -> HirIntrinsic
+  HirCursor :: HirIntrinsic
+  HirGCursor :: HirIntrinsic
+  HirBeepStmt :: {hirBeepHasOptParams :: Bool} -> HirIntrinsic
   deriving (Eq)
 
 instance Show HirIntrinsic where
-  show (HirPrint expr) = "puts(" ++ show expr ++ ")"
+  show HirPrint = "print"
+  show HirPause = "print_with_pause"
   show (HirUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
-  show (HirInput dest) = "gets(" ++ show dest ++ ")"
-  show (HirGPrint expr) = "gprint(" ++ show expr ++ ")"
-  show HirEnd = "exit()"
-  show HirClear = "clear_vars()"
-  show HirCls = "cls()"
-  show HirRandom = "gen_random_seed()"
-  show (HirWait expr) = "set_print_wait_time(" ++ show expr ++ ")"
-  show (HirPoke memArea value) =
-    "poke(me=" ++ (if memArea == Me1 then "1" else "0") ++ ", " ++ show value ++ ")"
-  show (HirCursor expr) = "cursor(" ++ show expr ++ ")"
-  show (HirGCursor expr) = "gcursor(" ++ show expr ++ ")"
-  show (HirBeepStmt repetitions optionalParams) =
-    let params = case optionalParams of
-          Just (BeepOptionalParams {beepFrequency, beepDuration}) ->
-            ", " ++ show beepFrequency ++ ", " ++ show beepDuration
-          Nothing -> ""
-     in "beep(" ++ show repetitions ++ params ++ ")"
+  show (HirInput dest) = "input " ++ show dest
+  show HirGPrint = "gprint"
+  show HirEnd = "exit"
+  show HirClear = "clear_vars"
+  show HirCls = "cls"
+  show HirRandom = "gen_random_seed"
+  show HirWait = "set_print_wait_time"
+  show (HirPoke memArea) =
+    "poke_memory_area_" ++ (if memArea == Me1 then "1" else "0")
+  show HirSetPokeAddress = "set_poke_address"
+  show HirCursor = "cursor"
+  show HirGCursor = "gcursor"
+  show (HirBeepStmt hasOptParams) =
+    "beep" ++ (if hasOptParams then "_with_params" else "")
 
-data HirIntrinsicFun where
-  HirMidFun :: HirIntrinsicFun
-  HirLeftFun :: HirIntrinsicFun
-  HirRightFun :: HirIntrinsicFun
-  HirAsciiFun :: HirIntrinsicFun
-  HirPointFun :: HirIntrinsicFun
-  HirRndFun :: HirIntrinsicFun
-  HirIntFun :: HirIntrinsicFun
-  HirSgnFun :: HirIntrinsicFun
+data HirStackOps where
+  HirMidFun :: HirStackOps
+  HirLeftFun :: HirStackOps
+  HirRightFun :: HirStackOps
+  HirAsciiFun :: HirStackOps
+  HirPointFun :: HirStackOps
+  HirRndFun :: HirStackOps
+  HirIntFun :: HirStackOps
+  HirSgnFun :: HirStackOps
   deriving (Eq)
 
-instance Show HirIntrinsicFun where
-  show HirMidFun = "mid()"
-  show HirLeftFun = "left()"
-  show HirRightFun = "right()"
-  show HirAsciiFun = "ascii()"
-  show HirPointFun = "point()"
-  show HirRndFun = "rnd()"
-  show HirIntFun = "int()"
-  show HirSgnFun = "sgn()"
+instance Show HirStackOps where
+  show HirMidFun = "mid"
+  show HirLeftFun = "left"
+  show HirRightFun = "right"
+  show HirAsciiFun = "ascii"
+  show HirPointFun = "point"
+  show HirRndFun = "rnd"
+  show HirIntFun = "int"
+  show HirSgnFun = "sgn"
 
 data HirInst where
   -- Stack operations
   HirPushLValue :: LValue BasicType -> HirInst
   HirPushStrLit :: String -> HirInst
   HirPushNumLit :: Double -> HirInst
-  HirPopStr :: HirInst
-  HirPopNum :: HirInst
+  HirPop :: LValue BasicType -> HirInst
   HirBinOp :: BinOperator -> HirInst
   HirUnaryOp :: UnaryOperator -> HirInst
-  HirIntrinsicFun :: HirIntrinsicFun -> HirInst
-  -- Assignment
-  HirAssign :: Assignment BasicType -> HirInst
+  HirStackOps :: HirStackOps -> HirInst
   -- Labels
   HirLabel :: Int -> HirInst
   -- Jumps
@@ -118,16 +89,14 @@ instance Show HirInst where
   show (HirCondGoto idx) = "\tcgoto L" ++ show idx ++ "\n"
   show (HirCondCall idx) = "\tccall L" ++ show idx ++ "\n"
   show HirReturn = "\treturn\n"
-  show (HirAssign assignment) = "\t" ++ show assignment ++ "\n"
+  show (HirPop lvalue) = "\tpop " ++ show lvalue ++ "\n"
   show (HirIntrinsicCall intrinsic) = "\tintrinsic " ++ show intrinsic ++ "\n"
   show (HirPushLValue lvalue) = "\tpush " ++ show lvalue ++ "\n"
   show (HirPushStrLit str) = "\tpush \"" ++ str ++ "\"" ++ "\n"
   show (HirPushNumLit num) = "\tpush " ++ show num ++ "\n"
-  show HirPopStr = "\tpop str\n"
-  show HirPopNum = "\tpop num\n"
-  show (HirBinOp op) = "\tbinop " ++ show op ++ "\n"
-  show (HirUnaryOp op) = "\tunaryop " ++ show op ++ "\n"
-  show (HirIntrinsicFun fun) = "\t" ++ show fun ++ "\n"
+  show (HirBinOp op) = "\t" ++ show op ++ "%2\n"
+  show (HirUnaryOp op) = "\t" ++ show op ++ "%1\n"
+  show (HirStackOps fun) = "\t" ++ show fun ++ "\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirInst]

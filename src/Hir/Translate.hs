@@ -8,9 +8,6 @@ import Hir.Types
 import SymbolTable
 import TypeSystem (BasicType (..))
 
-userWaitTimeVarIdent :: Ident
-userWaitTimeVarIdent = IdentNumIdent (NumIdent "_USER_WAIT_TIME")
-
 data TranslationState = TranslationState
   { labelToInt :: Data.Map.Map GotoTarget Int,
     nextLabelIdx :: Int,
@@ -66,29 +63,29 @@ translateFunction function = case function of
     stringInsts <- translateStringVariableOrLiteral midFunStringExpr
     startInsts <- translateExpr midFunStartExpr
     lengthInsts <- translateExpr midFunLengthExpr
-    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirIntrinsicFun HirMidFun]
+    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirStackOps HirMidFun]
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral leftFunStringExpr
     lengthInsts <- translateExpr leftFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirIntrinsicFun HirLeftFun]
+    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirLeftFun]
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral rightFunStringExpr
     lengthInsts <- translateExpr rightFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirIntrinsicFun HirRightFun]
+    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirRightFun]
   AsciiFun {asciiFunArgument} -> do
     argInsts <- translateStringVariableOrLiteral asciiFunArgument
-    return $ argInsts ++ [HirIntrinsicFun HirAsciiFun]
+    return $ argInsts ++ [HirStackOps HirAsciiFun]
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
-    return $ posInsts ++ [HirIntrinsicFun HirPointFun]
+    return $ posInsts ++ [HirStackOps HirPointFun]
   RndFun {rndRangeEnd} -> do
-    return [HirPushNumLit (fromIntegral rndRangeEnd), HirIntrinsicFun HirRndFun]
+    return [HirPushNumLit (fromIntegral rndRangeEnd), HirStackOps HirRndFun]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
-    return $ exprInsts ++ [HirIntrinsicFun HirIntFun]
+    return $ exprInsts ++ [HirStackOps HirIntFun]
   SgnFun {sgnFunExpr} -> do
     exprInsts <- translateExpr sgnFunExpr
-    return $ exprInsts ++ [HirIntrinsicFun HirSgnFun]
+    return $ exprInsts ++ [HirStackOps HirSgnFun]
 
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
@@ -103,6 +100,11 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
     exprInsts <- translateExpr expr'
     return $ exprInsts ++ [HirUnaryOp op]
   FunCallExpr function -> translateFunction function
+
+translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
+translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
+  exprInsts <- translateExpr assignmentExpr
+  return $ exprInsts ++ [HirPop assignmentLValue]
 
 translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
@@ -143,8 +145,9 @@ translateStmt stmt = case stmt of
     -- Begin the for loop by inserting a label and storing the start condition
     (newState, labelIdx) <- gets (beginForLoop forIdent forToExpr)
     put newState
+    hirAssignInsts <- translateAssignment forAssignment
 
-    return [HirAssign forAssignment, HirLabel labelIdx]
+    return $ hirAssignInsts ++ [HirLabel labelIdx]
   NextStmt {nextIdent} -> do
     (startLabelIdx, startCond) <- gets (lookupForStartLabel nextIdent)
     let identExpr =
@@ -174,98 +177,68 @@ translateStmt stmt = case stmt of
             }
     -- Create a conditional goto to the start of the for loop
     conditionInsts <- translateExpr newJumpCondition
-    return $ HirAssign nextAssignment : (conditionInsts ++ [HirCondGoto startLabelIdx])
+    assignInsts <- translateAssignment nextAssignment
+    return $ assignInsts ++ conditionInsts ++ [HirCondGoto startLabelIdx]
   LetStmt {letAssignments} -> do
-    let assignments = map HirAssign letAssignments
-    return assignments
+    assignments <- mapM translateAssignment letAssignments
+    return $ concat assignments
   PrintStmt {printKind, printExprs, printEnding, printUsingClause} -> do
-    let -- All print expressions have line ending with no newline, except the last one
-        -- which has the specified ending.
-        hirPrints =
-          map
-            ( \expr ->
-                HirIntrinsicCall $
-                  HirPrint
-                    { hirPrintExpression = expr
-                    }
-            )
-            (init printExprs)
-            ++ [ HirIntrinsicCall $
-                   HirPrint
-                     { hirPrintExpression = last printExprs
-                     }
-               ]
-        usingClause = case printUsingClause of
-          Just u -> [HirIntrinsicCall $ HirUsing u]
-          Nothing -> []
-        putchar = case printEnding of
-          PrintEndingNewLine ->
-            [ HirIntrinsicCall HirCls,
-              HirIntrinsicCall $
-                HirCursor
-                  { hirCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
-                  }
-            ]
-          _ -> []
-        printInstrs = usingClause ++ hirPrints ++ putchar
-        defaultPauseWaitTime =
-          Expr
-            { exprInner = NumLitExpr 64, -- FIXME: 1 second, find out what the default is
-              exprType = BasicNumericType
-            }
-        endResult = case printKind of
-          PrintKindPrint -> printInstrs
-          PrintKindPause ->
-            [HirIntrinsicCall HirWait {hirWaitTimeExpr = defaultPauseWaitTime}]
-              ++ printInstrs
-              ++ [ HirIntrinsicCall
-                     HirWait
-                       { hirWaitTimeExpr =
-                           Expr
-                             { exprInner = LValueExpr (LValueIdent userWaitTimeVarIdent),
-                               exprType = BasicNumericType
-                             }
-                       }
-                 ]
+    -- All print expressions have line ending with no newline, except the last one
+    -- which has the specified ending.
 
-    return $ endResult
-  UsingStmt usingClause -> return [HirIntrinsicCall $ HirUsing usingClause]
-  InputStmt {inputPrintExpr, inputDestination} ->
+    let printInst = case printKind of
+          PrintKindPrint -> [HirIntrinsicCall HirPrint]
+          PrintKindPause -> [HirIntrinsicCall HirPause]
+    hirPrints <-
+      mapM
+        ( \expr -> do
+            exprInsts <- translateExpr expr
+            return $ exprInsts ++ printInst
+        )
+        (init printExprs)
+
+    lastExprInsts <- translateExpr (last printExprs)
+    let hirPrints' = concat hirPrints ++ lastExprInsts ++ printInst
+    let usingClause = case printUsingClause of
+          Just (UsingClause u) -> [HirIntrinsicCall $ HirUsing u]
+          Nothing -> []
+    putchar <- case printEnding of
+      PrintEndingNewLine -> do
+        cursorInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+        return $
+          [HirIntrinsicCall HirCls]
+            ++ cursorInsts
+            ++ [HirIntrinsicCall HirCursor]
+      _ -> return []
+
+    return $ usingClause ++ hirPrints' ++ putchar
+  UsingStmt (UsingClause u) -> return [HirIntrinsicCall $ HirUsing u]
+  InputStmt {inputPrintExpr, inputDestination} -> do
     let inputStmt = HirIntrinsicCall HirInput {hirInputDestination = inputDestination}
-     in case inputPrintExpr of
-          Just expr ->
-            return
-              [ HirIntrinsicCall
-                  HirPrint
-                    { hirPrintExpression =
-                        Expr
-                          { exprInner = StrLitExpr expr,
-                            exprType = BasicStringType
-                          }
-                    },
-                inputStmt
-              ]
-          Nothing -> return [inputStmt]
+
+    case inputPrintExpr of
+      Just expr -> do
+        printExprInsts <-
+          translateExpr
+            Expr
+              { exprInner = StrLitExpr expr,
+                exprType = BasicStringType
+              }
+        return $ printExprInsts ++ [HirIntrinsicCall HirPrint] ++ [inputStmt]
+      Nothing -> return [inputStmt]
   GprintStmt {gprintExprs, gprintEnding} -> do
-    let hirGPrints =
-          map
-            (\expr -> HirIntrinsicCall HirGPrint {hirGPrintExpr = expr})
-            (init gprintExprs)
-            ++ [ HirIntrinsicCall
-                   HirGPrint
-                     { hirGPrintExpr = last gprintExprs
-                     }
-               ]
-            ++ case gprintEnding of
-              PrintEndingNewLine ->
-                [ HirIntrinsicCall HirCls,
-                  HirIntrinsicCall
-                    HirGCursor
-                      { hirGCursorExpr = Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
-                      }
-                ]
-              PrintEndingNoNewLine -> []
-    return hirGPrints
+    gprintInsts <- mapM translateExpr gprintExprs
+    let gprintsInsts' = concat gprintInsts ++ [HirIntrinsicCall HirGPrint]
+    ending <- case gprintEnding of
+      PrintEndingNewLine -> do
+        exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+        return $
+          [HirIntrinsicCall HirCls]
+            ++ exprInsts
+            ++ [HirIntrinsicCall HirGCursor]
+      PrintEndingNoNewLine -> return []
+
+    return $ gprintsInsts' ++ ending
   Comment -> return []
   ReturnStmt -> return [HirReturn]
   DimStmt _ -> return [] -- Already in symbol table
@@ -283,35 +256,32 @@ translateStmt stmt = case stmt of
                     },
               exprType = BasicNumericType
             }
-        unmaybeWait = fromMaybe infiniteWaitTime waitForExpr
-        waitTimeStore =
-          [ HirAssign
-              ( Assignment
-                  { assignmentLValue = LValueIdent userWaitTimeVarIdent,
-                    assignmentExpr = unmaybeWait,
-                    assignmentType = BasicNumericType
-                  }
-              )
-          ]
 
-    return $ waitTimeStore ++ [HirIntrinsicCall HirWait {hirWaitTimeExpr = unmaybeWait}]
+    unmaybeWait <- translateExpr (fromMaybe infiniteWaitTime waitForExpr)
+
+    return $ unmaybeWait ++ [HirIntrinsicCall HirWait]
   PokeStmt {pokeKind, pokeExprs} -> do
-    let hirPokes =
-          map
-            ( \expr ->
-                HirIntrinsicCall
-                  HirPoke
-                    { hirPokeMemoryArea = pokeKind,
-                      hirPokeValue = expr
-                    }
-            )
-            pokeExprs
-    return hirPokes
+    -- The first expression is the address to begin poking
+    -- The rest are the values to poke
+    pokeAddressInsts <- translateExpr (head pokeExprs)
+    pokeValuesInsts <- mapM translateExpr (tail pokeExprs)
+    let pokeValuesInsts' =
+          concatMap
+            (\inst -> inst ++ [HirIntrinsicCall (HirPoke pokeKind)])
+            pokeValuesInsts
+    return $
+      pokeAddressInsts
+        ++ [HirIntrinsicCall HirSetPokeAddress]
+        ++ pokeValuesInsts'
   RandomStmt -> return [HirIntrinsicCall HirRandom]
   ClsStmt -> return [HirIntrinsicCall HirCls]
   ClearStmt -> return [HirIntrinsicCall HirClear]
-  CursorStmt {cursorExpr} -> return [HirIntrinsicCall HirCursor {hirCursorExpr = cursorExpr}]
-  GCursorStmt {gCursorExpr} -> return [HirIntrinsicCall HirGCursor {hirGCursorExpr = gCursorExpr}]
+  CursorStmt {cursorExpr} -> do
+    exprInsts <- translateExpr cursorExpr
+    return $ exprInsts ++ [HirIntrinsicCall HirCursor]
+  GCursorStmt {gCursorExpr} -> do
+    gCursorExprInsts <- translateExpr gCursorExpr
+    return $ gCursorExprInsts ++ [HirIntrinsicCall HirGCursor]
   ReadStmt _ -> error "Unimplemented: ReadStmt"
   DataStmt _ -> error "Unimplemented: DataStmt"
   RestoreStmt _ -> error "Unimplemented: RestoreStmt"
@@ -319,13 +289,19 @@ translateStmt stmt = case stmt of
     { beepStmtRepetitionsExpr,
       beepStmtOptionalParams
     } ->
-      return
-        [ HirIntrinsicCall
-            HirBeepStmt
-              { hirBeepStmtRepetitionsExpr = beepStmtRepetitionsExpr,
-                hirBeepStmtOptionalParams = beepStmtOptionalParams
-              }
-        ]
+      case beepStmtOptionalParams of
+        Just (BeepOptionalParams {beepFrequency, beepDuration}) -> do
+          repetitionsInsts <- translateExpr beepStmtRepetitionsExpr
+          frequencyInsts <- translateExpr beepFrequency
+          durationInsts <- translateExpr beepDuration
+          return $
+            repetitionsInsts
+              ++ frequencyInsts
+              ++ durationInsts
+              ++ [HirIntrinsicCall $ HirBeepStmt True]
+        Nothing -> do
+          repetitionsInsts <- translateExpr beepStmtRepetitionsExpr
+          return $ repetitionsInsts ++ [HirIntrinsicCall $ HirBeepStmt False]
 
 translateLine :: Line BasicType -> State TranslationState [HirInst]
 translateLine Line {lineNumber, lineLabel, lineStmts} = do
@@ -344,27 +320,21 @@ translateLine Line {lineNumber, lineLabel, lineStmts} = do
   stmts <- mapM translateStmt lineStmts
   return $ number ++ label ++ concat stmts
 
-translateProgram :: Program BasicType -> SymbolTable -> HirProgram
-translateProgram (Program programLines) symbolTable =
+translateProgram' :: Program BasicType -> State TranslationState HirProgram
+translateProgram' (Program programLines) = do
   let programLines' = Data.Map.elems programLines
-      (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable
-      initialState = TranslationState {labelToInt = labelMap, nextLabelIdx = nextIdx, forStartToLabel = Data.Map.empty}
-      -- Translate each line of the program
-      translatedStmts = evalState (mapM translateLine programLines') initialState
-      flattenedStmts =
-        HirAssign
-          ( Assignment
-              { assignmentLValue = LValueIdent userWaitTimeVarIdent,
-                assignmentExpr =
-                  Expr
-                    { exprInner =
-                        UnaryExpr
-                          UnaryMinusOp
-                          (Expr {exprInner = NumLitExpr 1, exprType = BasicNumericType}),
-                      exprType = BasicNumericType
-                    },
-                assignmentType = BasicNumericType
-              }
-          )
-          : concat translatedStmts
-   in HirProgram flattenedStmts
+
+  translatedLines <- mapM translateLine programLines'
+
+  return HirProgram {hirProgramStatements = concat translatedLines}
+
+translateProgram :: Program BasicType -> SymbolTable -> HirProgram
+translateProgram program symbolTable =
+  let (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable
+      initialState =
+        TranslationState
+          { labelToInt = labelMap,
+            nextLabelIdx = nextIdx,
+            forStartToLabel = Data.Map.empty
+          }
+   in evalState (translateProgram' program) initialState
