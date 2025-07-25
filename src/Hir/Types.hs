@@ -49,7 +49,6 @@ instance Show HirIntrinsic where
     "beep" ++ (if hasOptParams then "_with_params" else "")
 
 data HirStackOps where
-  -- "Normal" operations
   -- Arithmetic operations
   HirAddOp :: HirStackOps
   HirSubOp :: HirStackOps
@@ -102,7 +101,10 @@ instance Show HirStackOps where
 data HirInst where
   -- Stack operations
   HirPushLValue :: LValue BasicType -> HirInst
-  HirPushStrLit :: String -> HirInst
+  HirPushStrLit ::
+    { hirStrLiteralOffset :: Int
+    } ->
+    HirInst
   HirPushNumLit :: Double -> HirInst
   HirPop :: LValue BasicType -> HirInst
   HirOp :: HirStackOps -> HirInst
@@ -129,7 +131,8 @@ instance Show HirInst where
   show (HirPop lvalue) = "\tpop " ++ show lvalue ++ "\n"
   show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic ++ "\n"
   show (HirPushLValue lvalue) = "\tpush " ++ show lvalue ++ "\n"
-  show (HirPushStrLit str) = "\tpush \"" ++ str ++ "\"" ++ "\n"
+  show HirPushStrLit {hirStrLiteralOffset} =
+    "\tpush *(str_base + " ++ show hirStrLiteralOffset ++ ")\n"
   show (HirPushNumLit num) = "\tpush " ++ show num ++ "\n"
   show (HirOp op) = "\t" ++ show op ++ "\n"
   show (HirStackOps fun) = "\t" ++ show fun ++ "\n"

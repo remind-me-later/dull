@@ -6,6 +6,7 @@ where
 import Ast.Types
 import Control.Monad (unless, when)
 import Control.Monad.State
+import Data.Functor (void)
 import Data.Maybe (fromMaybe, isJust)
 import SymbolTable
 import TypeSystem
@@ -206,9 +207,10 @@ analyzeExprInner (BinExpr left op right) = do
       if leftType == BasicNumericType && rightType == BasicNumericType
         then return (BinExpr analyzedLeft AddOp analyzedRight, BasicNumericType)
         else
-          if leftType == BasicStringType && rightType == BasicStringType
-            then return (BinExpr analyzedLeft AddOp analyzedRight, BasicStringType)
-            else error "Addition can only be applied to numeric or string expressions"
+          -- if leftType == BasicStringType && rightType == BasicStringType
+          --   then return (BinExpr analyzedLeft AddOp analyzedRight, BasicStringType)
+          --   else error "Addition can only be applied to numeric or string expressions"
+          error "Unimplemented string concatenation"
     SubtractOp ->
       if leftType == BasicNumericType && rightType == BasicNumericType
         then return (BinExpr analyzedLeft SubtractOp analyzedRight, BasicNumericType)
@@ -335,6 +337,10 @@ analyzeStmt (PrintStmt printKind printExprs printEnding printUsingClause) = do
     )
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
+  -- add string literals to the symbol table
+  case inputPrintExpr of
+    Just s -> void $ analyzeStrVariableOrLiteral (StringLiteral s)
+    Nothing -> return ()
   (analyzedLValue, _) <- analyzeLValue inputDestination
   return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = analyzedLValue})
 analyzeStmt EndStmt = return EndStmt

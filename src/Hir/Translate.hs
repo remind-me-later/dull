@@ -11,7 +11,8 @@ import TypeSystem (BasicType (..))
 data TranslationState = TranslationState
   { labelToInt :: Data.Map.Map GotoTarget Int,
     nextLabelIdx :: Int,
-    forStartToLabel :: Data.Map.Map Ident (Int, Expr BasicType)
+    forStartToLabel :: Data.Map.Map Ident (Int, Expr BasicType),
+    symbolTable :: SymbolTable
   }
 
 lookupLabelInState :: GotoTarget -> TranslationState -> Maybe Int
@@ -51,11 +52,18 @@ lookupForStartLabel ident state' =
     Just idx -> idx
     Nothing -> error $ "For loop start label not found for: " ++ show ident
 
+lookupStringLiteralOffset :: String -> TranslationState -> Int
+lookupStringLiteralOffset str state' =
+  case Data.Map.lookup str (stringLiteralMap (symbolTable state')) of
+    Just offset -> offset
+    Nothing -> error $ "String literal not found: " ++ str
+
 translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
 translateStringVariableOrLiteral (StringVariable var) =
   return [HirPushLValue (LValueIdent var)]
-translateStringVariableOrLiteral (StringLiteral str) =
-  return [HirPushStrLit str]
+translateStringVariableOrLiteral (StringLiteral str) = do
+  strOffset <- gets (lookupStringLiteralOffset str)
+  return [HirPushStrLit {hirStrLiteralOffset = strOffset}]
 
 translateFunction :: Function BasicType -> State TranslationState [HirInst]
 translateFunction function = case function of
@@ -115,7 +123,9 @@ translateUnaryOp UnaryPlusOp = do
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
   NumLitExpr n -> return [HirPushNumLit n]
-  StrLitExpr s -> return [HirPushStrLit s]
+  StrLitExpr s -> do
+    strOffset <- gets (lookupStringLiteralOffset s)
+    return [HirPushStrLit {hirStrLiteralOffset = strOffset}]
   LValueExpr lvalue -> return [HirPushLValue lvalue]
   BinExpr left op right -> do
     leftInsts <- translateExpr left
@@ -375,6 +385,7 @@ translateProgram program symbolTable =
         TranslationState
           { labelToInt = labelMap,
             nextLabelIdx = nextIdx,
-            forStartToLabel = Data.Map.empty
+            forStartToLabel = Data.Map.empty,
+            symbolTable = symbolTable
           }
    in evalState (translateProgram' program) initialState
