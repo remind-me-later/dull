@@ -274,31 +274,23 @@ data PokeKind where
   deriving (Eq)
 
 -- FIXME: allow 2 dimensions
--- FIXME: check types in type checker not in parser
 data DimKind where
-  DimNumeric ::
-    { dimNumericVarName :: Ident,
-      dimNumericSize :: Int
-    } ->
-    DimKind
-  DimString ::
-    { dimStringVarName :: Ident,
-      dimStringSize :: Int,
-      dimStringLength :: Maybe Int
+  DimKind ::
+    { dimIdent :: Ident,
+      dimSize :: Int,
+      dimStringLength :: Maybe Int -- if Nothing, the default string length is used, only used for string arrays
     } ->
     DimKind
   deriving (Eq)
 
 instance Show DimKind where
-  show (DimNumeric var size) = "DIM " ++ show var ++ "(" ++ show size ++ ")"
-  show (DimString var size len) =
-    "DIM "
-      ++ show var
+  show (DimKind {dimIdent, dimSize, dimStringLength}) =
+    show dimIdent
       ++ "("
-      ++ show size
+      ++ show dimSize
       ++ ")"
-      ++ case len of
-        Just l -> "*" ++ show l
+      ++ case dimStringLength of
+        Just len -> "*" ++ show len
         Nothing -> ""
 
 data BeepOptionalParams et where

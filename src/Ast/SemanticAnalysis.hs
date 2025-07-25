@@ -6,7 +6,7 @@ where
 import Ast.Types
 import Control.Monad (unless, when)
 import Control.Monad.State
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import SymbolTable
 import TypeSystem
 
@@ -55,8 +55,8 @@ insertUsedLabelInState :: GotoTarget -> Bool -> SemanticAnalysisState -> Semanti
 insertUsedLabelInState label isFunctionCall (SemanticAnalysisState symTable) =
   SemanticAnalysisState {symbolTable = insertUsedLabel label isFunctionCall symTable}
 
-analyzeIdent :: Ident -> State SemanticAnalysisState BasicType
-analyzeIdent id'@Ident {identHasDollar} =
+analyzeIdentAndInsertIntoTable :: Ident -> State SemanticAnalysisState BasicType
+analyzeIdentAndInsertIntoTable id'@Ident {identHasDollar} =
   let ty = if identHasDollar then BasicStringType else BasicNumericType
    in do
         modify (insertSymbolInState id' ty)
@@ -68,7 +68,7 @@ analyzePsuedoVar InkeyPseudoVar = return BasicStringType
 
 analyzeLValue :: RawLValue -> State SemanticAnalysisState (TypedLValue, BasicType)
 analyzeLValue (LValueIdent ident) = do
-  ty <- analyzeIdent ident
+  ty <- analyzeIdentAndInsertIntoTable ident
   return (LValueIdent ident, ty)
 analyzeLValue (LValueArrayAccess ident expr) = do
   exprType' <- analyzeExpr expr
@@ -76,16 +76,24 @@ analyzeLValue (LValueArrayAccess ident expr) = do
     BasicNumericType -> do
       -- Arrays must be declared before use with the DIM statement
       symbol <- gets (lookupSymbolInState ident)
-      case SymbolTable.variableType symbol of
+      let ty = SymbolTable.variableType symbol
+      case ty of
         BasicNumArrType {numericArrSize} ->
           if numericArrSize >= 0
             then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicNumericType)
-            else error $ "Array " ++ show ident ++ " is not declared or has invalid size"
+            else error $ "Array " ++ show ident ++ " has invalid size: " ++ show numericArrSize
         BasicStrArrType {strArrLength, strArrSize} ->
           if strArrSize >= 0 && strArrLength >= 0
             then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicStringType)
-            else error $ "String array " ++ show ident ++ " is not declared or has invalid size"
-        _ -> error $ "Array " ++ show ident ++ " is not a numeric or string array"
+            else
+              error $
+                "String array "
+                  ++ show ident
+                  ++ " has invalid size or length: "
+                  ++ show strArrSize
+                  ++ ", "
+                  ++ show strArrLength
+        t -> error $ "Array " ++ show ident ++ " is not a numeric or string array: " ++ show t
     _ -> error "Array index must be numeric"
 analyzeLValue (LValuePseudoVar pseudoVar) = do
   ty <- analyzePsuedoVar pseudoVar
@@ -96,7 +104,7 @@ analyzeStrVariableOrLiteral (StringLiteral lit) = do
   modify (insertStringLiteralInState lit)
   return BasicStringType
 analyzeStrVariableOrLiteral (StringVariable ident) = do
-  analyzedId <- analyzeIdent ident
+  analyzedId <- analyzeIdentAndInsertIntoTable ident
   case analyzedId of
     BasicStringType -> return BasicStringType
     BasicNumericType -> error "String variable expected, but numeric variable found"
@@ -262,17 +270,21 @@ analyzeExpr Expr {exprInner} = do
 
 -- We have to add the arrays to the symbol table
 analyzeDimKind :: DimKind -> State SemanticAnalysisState BasicType
-analyzeDimKind (DimNumeric varName size) =
-  let exprType = BasicNumArrType {numericArrSize = size}
-   in do
-        modify (insertSymbolInState varName exprType)
-        return BasicNumericType
-analyzeDimKind (DimString varName size length') =
-  let concreteLength = fromMaybe defaultStringLength length'
-      exprType = BasicStrArrType {strArrSize = size, strArrLength = concreteLength}
-   in do
-        modify (insertSymbolInState varName exprType)
-        return BasicStringType
+analyzeDimKind (DimKind {dimIdent, dimSize, dimStringLength}) = do
+  case identHasDollar dimIdent of
+    False -> do
+      let exprType = BasicNumArrType {numericArrSize = dimSize}
+
+      when (isJust dimStringLength) $
+        error "Numeric arrays cannot have a string length"
+
+      modify (insertSymbolInState dimIdent exprType)
+      return exprType
+    True -> do
+      let concreteLength = fromMaybe defaultStringLength dimStringLength
+          exprType = BasicStrArrType {strArrSize = dimSize, strArrLength = concreteLength}
+      modify (insertSymbolInState dimIdent exprType)
+      return exprType
 
 analyzeAssignment :: RawAssignment -> State SemanticAnalysisState TypedAssignment
 analyzeAssignment (Assignment lValue expr _) = do
@@ -323,7 +335,7 @@ analyzeStmt (PrintStmt printKind printExprs printEnding printUsingClause) = do
     )
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
-  _ <- analyzeIdent inputDestination
+  _ <- analyzeIdentAndInsertIntoTable inputDestination
   return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = inputDestination})
 analyzeStmt EndStmt = return EndStmt
 analyzeStmt Comment = return Comment

@@ -472,27 +472,16 @@ dimStmt = do
   _ <- keyword "DIM"
   identifier <- ident
   size <- parens integer
-  case identifier of
-    Ident _ True -> do
-      len <- optional (binOperator MultiplyOp *> integer)
-      return
-        ( DimStmt
-            ( DimString
-                { dimStringVarName = identifier,
-                  dimStringSize = size,
-                  dimStringLength = len
-                }
-            )
+  strLen <- optional (binOperator MultiplyOp *> integer)
+  return
+    ( DimStmt
+        ( DimKind
+            { dimIdent = identifier,
+              dimSize = size,
+              dimStringLength = strLen
+            }
         )
-    Ident _ False ->
-      return
-        ( DimStmt
-            ( DimNumeric
-                { dimNumericVarName = identifier,
-                  dimNumericSize = size
-                }
-            )
-        )
+    )
 
 dataStmt :: Parser RawStmt
 dataStmt = do
