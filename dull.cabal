@@ -21,6 +21,8 @@ library
                       CompilationPipeline
                       Hir.Types
                       Hir.Translate
+                      Asm.Types
+                      Asm.Translate
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
