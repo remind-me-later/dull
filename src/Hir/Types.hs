@@ -1,4 +1,10 @@
-module Hir.Types where
+module Hir.Types
+  ( HirIntrinsic (..),
+    HirStackOps (..),
+    HirInst (..),
+    HirProgram (..),
+  )
+where
 
 import Ast.Types
 import TypeSystem (BasicType)
@@ -13,7 +19,8 @@ data HirIntrinsic where
   HirClear :: HirIntrinsic
   HirCls :: HirIntrinsic
   HirRandom :: HirIntrinsic
-  HirWait :: HirIntrinsic
+  HirSetWait :: HirIntrinsic
+  HirDoWait :: HirIntrinsic
   HirSetPokeAddress :: HirIntrinsic
   HirPoke :: {hirPokeMemoryArea :: PokeKind} -> HirIntrinsic
   HirCursor :: HirIntrinsic
@@ -25,13 +32,14 @@ instance Show HirIntrinsic where
   show HirPrint = "print"
   show HirPause = "print_with_pause"
   show (HirUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
-  show (HirInput dest) = "input " ++ show dest
+  show (HirInput dest) = "wait_for_input " ++ show dest
   show HirGPrint = "gprint"
   show HirEnd = "exit"
   show HirClear = "clear_vars"
   show HirCls = "cls"
   show HirRandom = "gen_random_seed"
-  show HirWait = "set_print_wait_time"
+  show HirSetWait = "set_print_wait_time"
+  show HirDoWait = "do_wait"
   show (HirPoke memArea) =
     "poke_memory_area_" ++ (if memArea == Me1 then "1" else "0")
   show HirSetPokeAddress = "set_poke_address"
@@ -90,7 +98,7 @@ instance Show HirInst where
   show (HirCondCall idx) = "\tccall L" ++ show idx ++ "\n"
   show HirReturn = "\treturn\n"
   show (HirPop lvalue) = "\tpop " ++ show lvalue ++ "\n"
-  show (HirIntrinsicCall intrinsic) = "\tintrinsic " ++ show intrinsic ++ "\n"
+  show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic ++ "\n"
   show (HirPushLValue lvalue) = "\tpush " ++ show lvalue ++ "\n"
   show (HirPushStrLit str) = "\tpush \"" ++ str ++ "\"" ++ "\n"
   show (HirPushNumLit num) = "\tpush " ++ show num ++ "\n"

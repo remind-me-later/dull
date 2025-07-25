@@ -205,7 +205,9 @@ translateStmt stmt = case stmt of
       PrintEndingNewLine -> do
         cursorInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
         return $
-          [HirIntrinsicCall HirCls]
+          [ HirIntrinsicCall HirDoWait,
+            HirIntrinsicCall HirCls
+          ]
             ++ cursorInsts
             ++ [HirIntrinsicCall HirCursor]
       _ -> return []
@@ -232,7 +234,9 @@ translateStmt stmt = case stmt of
       PrintEndingNewLine -> do
         exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
         return $
-          [HirIntrinsicCall HirCls]
+          [ HirIntrinsicCall HirDoWait,
+            HirIntrinsicCall HirCls
+          ]
             ++ exprInsts
             ++ [HirIntrinsicCall HirGCursor]
       PrintEndingNoNewLine -> return []
@@ -258,7 +262,7 @@ translateStmt stmt = case stmt of
 
     unmaybeWait <- translateExpr (fromMaybe infiniteWaitTime waitForExpr)
 
-    return $ unmaybeWait ++ [HirIntrinsicCall HirWait]
+    return $ unmaybeWait ++ [HirIntrinsicCall HirSetWait]
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
     -- The rest are the values to poke
