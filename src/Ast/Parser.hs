@@ -369,8 +369,8 @@ inputStmt :: Parser RawStmt
 inputStmt = do
   _ <- keyword "INPUT"
   maybePrintExpr <- optional (stringLiteral <* symbol ';')
-  identifier <- ident
-  return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = identifier}
+  dest <- lvalue
+  return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = dest}
 
 endStmt :: Parser RawStmt
 endStmt = keyword "END" $> EndStmt
@@ -475,7 +475,7 @@ dimStmt = do
   strLen <- optional (binOperator MultiplyOp *> integer)
   return
     ( DimStmt
-        ( DimKind
+        ( DimInner
             { dimIdent = identifier,
               dimSize = size,
               dimStringLength = strLen

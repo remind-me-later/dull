@@ -63,28 +63,54 @@ translateFunction function = case function of
     stringInsts <- translateStringVariableOrLiteral midFunStringExpr
     startInsts <- translateExpr midFunStartExpr
     lengthInsts <- translateExpr midFunLengthExpr
-    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirStackOps HirMidFun]
+    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirStackOps HirMidOp]
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral leftFunStringExpr
     lengthInsts <- translateExpr leftFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirLeftFun]
+    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirLeftOp]
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral rightFunStringExpr
     lengthInsts <- translateExpr rightFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirRightFun]
+    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirRightOp]
   AsciiFun {asciiFunArgument} -> do
     argInsts <- translateStringVariableOrLiteral asciiFunArgument
-    return $ argInsts ++ [HirStackOps HirAsciiFun]
+    return $ argInsts ++ [HirStackOps HirAsciiOp]
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
-    return $ posInsts ++ [HirStackOps HirPointFun]
-  RndFun {rndRangeEnd} -> return [HirPushNumLit (fromIntegral rndRangeEnd), HirStackOps HirRndFun]
+    return $ posInsts ++ [HirStackOps HirPointOp]
+  RndFun {rndRangeEnd} -> return [HirPushNumLit (fromIntegral rndRangeEnd), HirStackOps HirRndOp]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
-    return $ exprInsts ++ [HirStackOps HirIntFun]
+    return $ exprInsts ++ [HirStackOps HirIntOp]
   SgnFun {sgnFunExpr} -> do
     exprInsts <- translateExpr sgnFunExpr
-    return $ exprInsts ++ [HirStackOps HirSgnFun]
+    return $ exprInsts ++ [HirStackOps HirSgnOp]
+
+translateBinOp :: BinOperator -> HirInst
+translateBinOp AddOp = HirStackOps HirAddOp
+translateBinOp SubtractOp = HirStackOps HirSubOp
+translateBinOp MultiplyOp = HirStackOps HirMulOp
+translateBinOp DivideOp = HirStackOps HirDivOp
+translateBinOp CaretOp = HirStackOps HirExponentOp
+translateBinOp AndOp = HirStackOps HirAndOp
+translateBinOp OrOp = HirStackOps HirOrOp
+translateBinOp EqualOp = HirStackOps HirEqOp
+translateBinOp NotEqualOp = HirStackOps HirNeqOp
+translateBinOp LessThanOp = HirStackOps HirLtOp
+translateBinOp LessThanOrEqualOp = HirStackOps HirLeqOp
+translateBinOp GreaterThanOp = HirStackOps HirGtOp
+translateBinOp GreaterThanOrEqualOp = HirStackOps HirGeqOp
+
+translateUnaryOp :: UnaryOperator -> [HirInst]
+translateUnaryOp UnaryMinusOp = do
+  -- 0 - x
+  [HirPushNumLit 0, HirStackOps HirSubOp]
+translateUnaryOp UnaryNotOp = do
+  -- 0 is false, anything else is true
+  [HirPushNumLit 0, HirStackOps HirEqOp]
+translateUnaryOp UnaryPlusOp = do
+  -- x
+  []
 
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
@@ -94,10 +120,10 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
   BinExpr left op right -> do
     leftInsts <- translateExpr left
     rightInsts <- translateExpr right
-    return $ leftInsts ++ rightInsts ++ [HirBinOp op]
+    return $ leftInsts ++ rightInsts ++ [translateBinOp op]
   UnaryExpr op expr' -> do
     exprInsts <- translateExpr expr'
-    return $ exprInsts ++ [HirUnaryOp op]
+    return $ exprInsts ++ translateUnaryOp op
   FunCallExpr function -> translateFunction function
 
 translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
@@ -270,7 +296,18 @@ translateStmt stmt = case stmt of
     pokeValuesInsts <- mapM translateExpr (tail pokeExprs)
     let pokeValuesInsts' =
           concatMap
-            (\inst -> inst ++ [HirIntrinsicCall (HirPoke pokeKind)])
+            ( \inst ->
+                inst
+                  ++ [ HirIntrinsicCall
+                         ( HirPoke
+                             { hirPokeMemoryArea =
+                                 case pokeKind of
+                                   Me0 -> 0
+                                   Me1 -> 1
+                             }
+                         )
+                     ]
+            )
             pokeValuesInsts
     return $
       pokeAddressInsts

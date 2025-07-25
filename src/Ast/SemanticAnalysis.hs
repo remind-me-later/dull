@@ -37,9 +37,9 @@ emptySemanticAnalysisState :: SemanticAnalysisState
 emptySemanticAnalysisState =
   SemanticAnalysisState {symbolTable = emptySymbolTable}
 
-insertSymbolInState :: Ident -> BasicType -> SemanticAnalysisState -> SemanticAnalysisState
-insertSymbolInState sym ty (SemanticAnalysisState symTable) =
-  SemanticAnalysisState {symbolTable = insertSymbol sym ty symTable}
+insertVariableInState :: Ident -> BasicType -> SemanticAnalysisState -> SemanticAnalysisState
+insertVariableInState sym ty (SemanticAnalysisState symTable) =
+  SemanticAnalysisState {symbolTable = insertVariable sym ty symTable}
 
 insertStringLiteralInState :: String -> SemanticAnalysisState -> SemanticAnalysisState
 insertStringLiteralInState str (SemanticAnalysisState symTable) =
@@ -59,7 +59,7 @@ analyzeIdentAndInsertIntoTable :: Ident -> State SemanticAnalysisState BasicType
 analyzeIdentAndInsertIntoTable id'@Ident {identHasDollar} =
   let ty = if identHasDollar then BasicStringType else BasicNumericType
    in do
-        modify (insertSymbolInState id' ty)
+        modify (insertVariableInState id' ty)
         return ty
 
 analyzePsuedoVar :: PseudoVariable -> State SemanticAnalysisState BasicType
@@ -269,8 +269,8 @@ analyzeExpr Expr {exprInner} = do
   return Expr {exprInner = analyzedInner, Ast.Types.exprType = innerType}
 
 -- We have to add the arrays to the symbol table
-analyzeDimKind :: DimKind -> State SemanticAnalysisState BasicType
-analyzeDimKind (DimKind {dimIdent, dimSize, dimStringLength}) = do
+analyzeDimAndInsertIntoTable :: DimInner -> State SemanticAnalysisState BasicType
+analyzeDimAndInsertIntoTable (DimInner {dimIdent, dimSize, dimStringLength}) = do
   case identHasDollar dimIdent of
     False -> do
       let exprType = BasicNumArrType {numericArrSize = dimSize}
@@ -278,12 +278,12 @@ analyzeDimKind (DimKind {dimIdent, dimSize, dimStringLength}) = do
       when (isJust dimStringLength) $
         error "Numeric arrays cannot have a string length"
 
-      modify (insertSymbolInState dimIdent exprType)
+      modify (insertVariableInState dimIdent exprType)
       return exprType
     True -> do
       let concreteLength = fromMaybe defaultStringLength dimStringLength
           exprType = BasicStrArrType {strArrSize = dimSize, strArrLength = concreteLength}
-      modify (insertSymbolInState dimIdent exprType)
+      modify (insertVariableInState dimIdent exprType)
       return exprType
 
 analyzeAssignment :: RawAssignment -> State SemanticAnalysisState TypedAssignment
@@ -335,8 +335,8 @@ analyzeStmt (PrintStmt printKind printExprs printEnding printUsingClause) = do
     )
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
-  _ <- analyzeIdentAndInsertIntoTable inputDestination
-  return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = inputDestination})
+  (analyzedLValue, _) <- analyzeLValue inputDestination
+  return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = analyzedLValue})
 analyzeStmt EndStmt = return EndStmt
 analyzeStmt Comment = return Comment
 analyzeStmt (ForStmt forAssignment forToExpr) = do
@@ -349,7 +349,7 @@ analyzeStmt (ForStmt forAssignment forToExpr) = do
   return (ForStmt forType toType)
 analyzeStmt (NextStmt nextIdent) = do
   let nextType = BasicNumericType -- Next always refers to a numeric identifier
-  modify (insertSymbolInState nextIdent nextType)
+  modify (insertVariableInState nextIdent nextType)
   return NextStmt {nextIdent = nextIdent}
 analyzeStmt ClearStmt = return ClearStmt
 analyzeStmt (GoToStmt gotoTarget) = do
@@ -406,7 +406,7 @@ analyzeStmt (PokeStmt pokeKind pokeExprs) = do
 
   return (PokeStmt {pokeKind = pokeKind, pokeExprs = exprTypes})
 analyzeStmt (DimStmt dimKind) = do
-  _ <- analyzeDimKind dimKind
+  _ <- analyzeDimAndInsertIntoTable dimKind
   return (DimStmt dimKind)
 -- FIXME: check that data, read and restore are typed correctly
 analyzeStmt (ReadStmt readStmtDestinations) = do

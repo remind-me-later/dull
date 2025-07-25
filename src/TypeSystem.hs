@@ -5,6 +5,7 @@ module TypeSystem
     doubleToDecimalNumberRepr8,
     sizeOfTy,
     defaultStringLength,
+    stringHeaderSize,
   )
 where
 
@@ -28,17 +29,17 @@ data BasicType where
 defaultStringLength :: Int
 defaultStringLength = 16
 
+stringHeaderSize :: Int
+stringHeaderSize = 8 -- header size for string
+
 sizeOfTy :: BasicType -> Int
-sizeOfTy BasicStringType =
-  let stringHeaderSize = 8 -- header size for string
-   in stringHeaderSize + defaultStringLength
+sizeOfTy BasicStringType = stringHeaderSize + defaultStringLength
 sizeOfTy BasicNumericType = 8 -- see decimal number representation
 sizeOfTy (BasicNumArrType {numericArrSize}) =
   let arraySize = numericArrSize + 1
    in sizeOfTy BasicNumericType * arraySize
 sizeOfTy (BasicStrArrType {strArrSize, strArrLength}) =
-  let stringHeaderSize = 8
-      arraySize = strArrSize + 1
+  let arraySize = strArrSize + 1
    in (stringHeaderSize + strArrLength) * arraySize
 
 data MantissaSign = Positive | Negative

@@ -2,7 +2,7 @@ module SymbolTable
   ( Variable (..),
     SymbolTable (..),
     emptySymbolTable,
-    insertSymbol,
+    insertVariable,
     lookupSymbol,
     sizeOfTy,
     insertStringLiteral,
@@ -52,7 +52,8 @@ data SymbolTable where
   SymbolTable ::
     { symbolMap :: Map Ident Variable,
       stringLiteralMap :: Map String Int,
-      nextOffset :: Int,
+      nextOffsetVar :: Int,
+      nextOffsetString :: Int,
       usedLabels :: Map GotoTarget GotoTargetData
     } ->
     SymbolTable
@@ -84,26 +85,33 @@ instance Show SymbolTable where
           (toList usedLabels)
 
 emptySymbolTable :: SymbolTable
-emptySymbolTable = SymbolTable {symbolMap = empty, nextOffset = 0, stringLiteralMap = empty, usedLabels = mempty}
+emptySymbolTable =
+  SymbolTable
+    { symbolMap = empty,
+      nextOffsetVar = 0,
+      nextOffsetString = 0,
+      stringLiteralMap = empty,
+      usedLabels = mempty
+    }
 
-insertSymbol :: Ident -> BasicType -> SymbolTable -> SymbolTable
-insertSymbol sym ty st@SymbolTable {symbolMap, nextOffset} =
+insertVariable :: Ident -> BasicType -> SymbolTable -> SymbolTable
+insertVariable sym ty st@SymbolTable {symbolMap, nextOffsetVar} =
   let alreadyInSymbols = Data.Map.member sym symbolMap
       newSymbolName = getIdentName sym
-      newSymbol = Variable {variableName = newSymbolName, variableOffset = nextOffset, variableType = ty}
+      newSymbol = Variable {variableName = newSymbolName, variableOffset = nextOffsetVar, variableType = ty}
       newSymbols = insert sym newSymbol symbolMap
-      newOffset = nextOffset + sizeOfTy ty
+      newOffset = nextOffsetVar + sizeOfTy ty
    in if alreadyInSymbols
         then st
-        else st {symbolMap = newSymbols, nextOffset = newOffset}
+        else st {symbolMap = newSymbols, nextOffsetVar = newOffset}
 
 insertStringLiteral :: String -> SymbolTable -> SymbolTable
-insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffset} =
+insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffsetString} =
   let alreadyInLiterals = Data.Map.member str stringLiteralMap
-      newOffset = nextOffset + length str
+      newOffset = nextOffsetString + length str + stringHeaderSize
    in if alreadyInLiterals
         then st
-        else st {stringLiteralMap = insert str nextOffset stringLiteralMap, nextOffset = newOffset}
+        else st {stringLiteralMap = insert str nextOffsetString stringLiteralMap, nextOffsetString = newOffset}
 
 insertUsedLabel :: GotoTarget -> Bool -> SymbolTable -> SymbolTable
 insertUsedLabel label isFunctionCall st@SymbolTable {usedLabels} =

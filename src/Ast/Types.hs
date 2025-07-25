@@ -12,7 +12,7 @@ module Ast.Types
     LineNumber,
     Line (..),
     Program (..),
-    DimKind (..),
+    DimInner (..),
     LValue (..),
     PseudoVariable (..),
     UnaryOperator (..),
@@ -274,17 +274,17 @@ data PokeKind where
   deriving (Eq)
 
 -- FIXME: allow 2 dimensions
-data DimKind where
-  DimKind ::
+data DimInner where
+  DimInner ::
     { dimIdent :: Ident,
       dimSize :: Int,
       dimStringLength :: Maybe Int -- if Nothing, the default string length is used, only used for string arrays
     } ->
-    DimKind
+    DimInner
   deriving (Eq)
 
-instance Show DimKind where
-  show (DimKind {dimIdent, dimSize, dimStringLength}) =
+instance Show DimInner where
+  show (DimInner {dimIdent, dimSize, dimStringLength}) =
     show dimIdent
       ++ "("
       ++ show dimSize
@@ -319,7 +319,7 @@ data Stmt et where
     Stmt et
   InputStmt ::
     { inputPrintExpr :: Maybe String,
-      inputDestination :: Ident
+      inputDestination :: LValue et
     } ->
     Stmt et
   EndStmt :: Stmt et
@@ -353,7 +353,7 @@ data Stmt et where
       pokeExprs :: [Expr et]
     } ->
     Stmt et
-  DimStmt :: {dimKind :: DimKind} -> Stmt et
+  DimStmt :: {dimKind :: DimInner} -> Stmt et
   ReadStmt ::
     { readStmtDestinations :: [LValue et]
     } ->
