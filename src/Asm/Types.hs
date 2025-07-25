@@ -101,6 +101,7 @@ instance Show AsmOperand8 where
   show (AsmOperandIndirect access) = show access
 
 data AsmInst where
+  AsmLabel :: Int -> AsmInst
   AsmAdc :: AsmOperand8 -> AsmInst
   AsmAdi :: AsmOperand8 -> Int8 -> AsmInst
   AsmDca :: AsmIndirectReg16Access -> AsmInst
@@ -146,10 +147,15 @@ data AsmInst where
   AsmPopA :: AsmInst
   AsmPopReg16 :: AsmGeneralReg16 -> AsmInst
   -- Jumps
-  AsmSjp :: Word16 -> AsmInst
+  AsmSjp :: Int -> AsmInst
+  AsmBcs :: Int -> AsmInst -- if C=1 jump
+  AsmBcr :: Int -> AsmInst -- if C=0 jump
+  AsmBzs :: Int -> AsmInst -- if Z=1 jump
+  AsmBzr :: Int -> AsmInst -- if Z=0 jump
   deriving (Eq)
 
 instance Show AsmInst where
+  show (AsmLabel addr) = "L" ++ show addr ++ ":\n"
   show (AsmAdc op) = "\tadc " ++ show op ++ "\n"
   show (AsmAdi op imm) = "\tadi " ++ show op ++ ", " ++ show imm ++ "\n"
   show (AsmDca access) = "\tdca " ++ show access ++ "\n"

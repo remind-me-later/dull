@@ -221,19 +221,19 @@ translateStmt stmt = case stmt of
     -- All print expressions have line ending with no newline, except the last one
     -- which has the specified ending.
 
-    let printInst = case printKind of
+    let lastPrintInst = case printKind of
           PrintKindPrint -> [HirIntrinsicCall HirPrint]
           PrintKindPause -> [HirIntrinsicCall HirPause]
     hirPrints <-
       mapM
         ( \expr -> do
             exprInsts <- translateExpr expr
-            return $ exprInsts ++ printInst
+            return $ exprInsts ++ [HirIntrinsicCall HirPrint]
         )
         (init printExprs)
 
     lastExprInsts <- translateExpr (last printExprs)
-    let hirPrints' = concat hirPrints ++ lastExprInsts ++ printInst
+    let hirPrints' = concat hirPrints ++ lastExprInsts ++ lastPrintInst
     let usingClause = case printUsingClause of
           Just (UsingClause u) -> [HirIntrinsicCall $ HirUsing u]
           Nothing -> []
