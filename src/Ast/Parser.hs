@@ -60,24 +60,20 @@ symbol :: Char -> Parser Char
 symbol sym = Ast.Parser.lex $ char sym
 
 -- Variables consist of the following:
--- \[A-Z][A-Z\d]$?
+-- \[A-Z]$?
 -- the dollar indicates a string variable
-numIdent :: Parser NumIdent
-numIdent = Ast.Parser.lex $ do
-  firstChar <- satisfy (`elem` ['A' .. 'Z'])
-  return (NumIdent firstChar)
 
-strIdent :: Parser StrIdent
-strIdent = Ast.Parser.lex $ do
-  firstChar <- satisfy (`elem` ['A' .. 'Z'])
-  _ <- char '$'
-  return (StrIdent firstChar)
-
--- try strIdent first, then numIdent, since we have to match the longest identifier first
 ident :: Parser Ident
-ident =
-  try (IdentStrIdent <$> strIdent)
-    <|> try (IdentNumIdent <$> numIdent)
+ident = Ast.Parser.lex $ do
+  firstChar <- satisfy (`elem` ['A' .. 'Z'])
+  dollar <- optional (char '$')
+  return
+    Ident
+      { identName = firstChar,
+        identHasDollar = case dollar of
+          Just _ -> True
+          Nothing -> False
+      }
 
 pseudoVariable :: Parser PseudoVariable
 pseudoVariable =
@@ -100,7 +96,7 @@ lvalue =
 stringVariableOrLiteral :: Parser StringVariableOrLiteral
 stringVariableOrLiteral =
   try (StringLiteral <$> stringLiteral)
-    <|> (StringVariable <$> strIdent)
+    <|> (StringVariable <$> ident)
 
 functionCall :: Parser RawFunction
 functionCall =
@@ -400,7 +396,7 @@ forStmt = do
   ForStmt a <$> expression
 
 nextStmt :: Parser RawStmt
-nextStmt = keyword "NEXT" *> (NextStmt <$> numIdent)
+nextStmt = keyword "NEXT" *> (NextStmt <$> ident)
 
 clearStmt :: Parser RawStmt
 clearStmt = keyword "CLEAR" $> ClearStmt
@@ -477,22 +473,22 @@ dimStmt = do
   identifier <- ident
   size <- parens integer
   case identifier of
-    IdentStrIdent strIdent' -> do
+    Ident _ True -> do
       len <- optional (binOperator MultiplyOp *> integer)
       return
         ( DimStmt
             ( DimString
-                { dimStringVarName = strIdent',
+                { dimStringVarName = identifier,
                   dimStringSize = size,
                   dimStringLength = len
                 }
             )
         )
-    IdentNumIdent numIdent' ->
+    Ident _ False ->
       return
         ( DimStmt
             ( DimNumeric
-                { dimNumericVarName = numIdent',
+                { dimNumericVarName = identifier,
                   dimNumericSize = size
                 }
             )

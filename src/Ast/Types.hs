@@ -18,8 +18,6 @@ module Ast.Types
     UnaryOperator (..),
     StringVariableOrLiteral (..),
     UsingClause (..),
-    StrIdent (..),
-    NumIdent (..),
     ExprInner (..),
     RawProgram,
     RawLine,
@@ -70,7 +68,7 @@ instance Show BinOperator where
 
 data StringVariableOrLiteral where
   StringLiteral :: String -> StringVariableOrLiteral
-  StringVariable :: StrIdent -> StringVariableOrLiteral
+  StringVariable :: Ident -> StringVariableOrLiteral
   deriving (Eq)
 
 instance Show StringVariableOrLiteral where
@@ -152,32 +150,20 @@ instance Show PseudoVariable where
   show TimePseudoVar = "TIME"
   show InkeyPseudoVar = "INKEY$"
 
-data StrIdent where
-  StrIdent :: Char -> StrIdent
-  deriving (Eq, Ord)
-
-instance Show StrIdent where
-  show (StrIdent s) = s : "$"
-
-data NumIdent where
-  NumIdent :: Char -> NumIdent
-  deriving (Eq, Ord)
-
-instance Show NumIdent where
-  show (NumIdent s) = [s]
-
 data Ident where
-  IdentNumIdent :: NumIdent -> Ident
-  IdentStrIdent :: StrIdent -> Ident
+  Ident ::
+    { identName :: Char,
+      identHasDollar :: Bool -- True if the identifier ends with a dollar sign, indicating a string variable
+    } ->
+    Ident
   deriving (Eq, Ord)
 
 instance Show Ident where
-  show (IdentNumIdent ident) = show ident
-  show (IdentStrIdent ident) = show ident
+  show (Ident c True) = c : "$"
+  show (Ident c False) = [c]
 
 getIdentName :: Ident -> Char
-getIdentName (IdentNumIdent (NumIdent c)) = c
-getIdentName (IdentStrIdent (StrIdent c)) = c
+getIdentName (Ident c _) = c
 
 data LValue et where
   LValueIdent :: Ident -> LValue et
@@ -288,14 +274,15 @@ data PokeKind where
   deriving (Eq)
 
 -- FIXME: allow 2 dimensions
+-- FIXME: check types in type checker not in parser
 data DimKind where
   DimNumeric ::
-    { dimNumericVarName :: NumIdent,
+    { dimNumericVarName :: Ident,
       dimNumericSize :: Int
     } ->
     DimKind
   DimString ::
-    { dimStringVarName :: StrIdent,
+    { dimStringVarName :: Ident,
       dimStringSize :: Int,
       dimStringLength :: Maybe Int
     } ->
@@ -346,7 +333,7 @@ data Stmt et where
   EndStmt :: Stmt et
   Comment :: Stmt et
   ForStmt :: {forAssignment :: Assignment et, forToExpr :: Expr et} -> Stmt et
-  NextStmt :: {nextIdent :: NumIdent} -> Stmt et
+  NextStmt :: {nextIdent :: Ident} -> Stmt et
   ClearStmt :: Stmt et
   GoToStmt :: {gotoTarget :: GotoTarget} -> Stmt et
   GoSubStmt :: {gosubTarget :: GotoTarget} -> Stmt et

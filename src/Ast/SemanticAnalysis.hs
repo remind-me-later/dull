@@ -55,19 +55,12 @@ insertUsedLabelInState :: GotoTarget -> Bool -> SemanticAnalysisState -> Semanti
 insertUsedLabelInState label isFunctionCall (SemanticAnalysisState symTable) =
   SemanticAnalysisState {symbolTable = insertUsedLabel label isFunctionCall symTable}
 
-analyzeStrIdent :: StrIdent -> State SemanticAnalysisState BasicType
-analyzeStrIdent id'@(StrIdent _) = do
-  modify (insertSymbolInState (IdentStrIdent id') BasicStringType)
-  return BasicStringType
-
-analyzeNumericIdent :: NumIdent -> State SemanticAnalysisState BasicType
-analyzeNumericIdent id'@(NumIdent _) = do
-  modify (insertSymbolInState (IdentNumIdent id') BasicNumericType)
-  return BasicNumericType
-
 analyzeIdent :: Ident -> State SemanticAnalysisState BasicType
-analyzeIdent (IdentStrIdent id') = analyzeStrIdent id'
-analyzeIdent (IdentNumIdent id') = analyzeNumericIdent id'
+analyzeIdent id'@Ident {identHasDollar} =
+  let ty = if identHasDollar then BasicStringType else BasicNumericType
+   in do
+        modify (insertSymbolInState id' ty)
+        return ty
 
 analyzePsuedoVar :: PseudoVariable -> State SemanticAnalysisState BasicType
 analyzePsuedoVar TimePseudoVar = return BasicNumericType
@@ -102,7 +95,12 @@ analyzeStrVariableOrLiteral :: StringVariableOrLiteral -> State SemanticAnalysis
 analyzeStrVariableOrLiteral (StringLiteral lit) = do
   modify (insertStringLiteralInState lit)
   return BasicStringType
-analyzeStrVariableOrLiteral (StringVariable ident) = analyzeStrIdent ident
+analyzeStrVariableOrLiteral (StringVariable ident) = do
+  analyzedId <- analyzeIdent ident
+  case analyzedId of
+    BasicStringType -> return BasicStringType
+    BasicNumericType -> error "String variable expected, but numeric variable found"
+    _ -> error "Unexpected type for string variable"
 
 analyzeFunction :: RawFunction -> State SemanticAnalysisState (TypedFunction, BasicType)
 analyzeFunction ident = case ident of
@@ -266,16 +264,14 @@ analyzeExpr Expr {exprInner} = do
 analyzeDimKind :: DimKind -> State SemanticAnalysisState BasicType
 analyzeDimKind (DimNumeric varName size) =
   let exprType = BasicNumArrType {numericArrSize = size}
-      newIdent = IdentNumIdent varName
    in do
-        modify (insertSymbolInState newIdent exprType)
+        modify (insertSymbolInState varName exprType)
         return BasicNumericType
 analyzeDimKind (DimString varName size length') =
   let concreteLength = fromMaybe defaultStringLength length'
       exprType = BasicStrArrType {strArrSize = size, strArrLength = concreteLength}
-      newIdent = IdentStrIdent varName
    in do
-        modify (insertSymbolInState newIdent exprType)
+        modify (insertSymbolInState varName exprType)
         return BasicStringType
 
 analyzeAssignment :: RawAssignment -> State SemanticAnalysisState TypedAssignment
@@ -341,7 +337,7 @@ analyzeStmt (ForStmt forAssignment forToExpr) = do
   return (ForStmt forType toType)
 analyzeStmt (NextStmt nextIdent) = do
   let nextType = BasicNumericType -- Next always refers to a numeric identifier
-  modify (insertSymbolInState (IdentNumIdent nextIdent) nextType)
+  modify (insertSymbolInState nextIdent nextType)
   return NextStmt {nextIdent = nextIdent}
 analyzeStmt ClearStmt = return ClearStmt
 analyzeStmt (GoToStmt gotoTarget) = do

@@ -11,7 +11,7 @@ import TypeSystem (BasicType (..))
 data TranslationState = TranslationState
   { labelToInt :: Data.Map.Map GotoTarget Int,
     nextLabelIdx :: Int,
-    forStartToLabel :: Data.Map.Map NumIdent (Int, Expr BasicType)
+    forStartToLabel :: Data.Map.Map Ident (Int, Expr BasicType)
   }
 
 lookupLabelInState :: GotoTarget -> TranslationState -> Maybe Int
@@ -38,14 +38,14 @@ lookupLabelPanics label state' =
     Just idx -> idx
     Nothing -> error $ "Label not found: " ++ show label
 
-beginForLoop :: NumIdent -> Expr BasicType -> TranslationState -> (TranslationState, Int)
+beginForLoop :: Ident -> Expr BasicType -> TranslationState -> (TranslationState, Int)
 beginForLoop ident cond state' =
   let nextIdx = nextLabelIdx state'
       newForStartMap = Data.Map.insert ident (nextIdx, cond) (forStartToLabel state')
       newState = state' {forStartToLabel = newForStartMap, nextLabelIdx = nextIdx + 1}
    in (newState, nextIdx)
 
-lookupForStartLabel :: NumIdent -> TranslationState -> (Int, Expr BasicType)
+lookupForStartLabel :: Ident -> TranslationState -> (Int, Expr BasicType)
 lookupForStartLabel ident state' =
   case Data.Map.lookup ident (forStartToLabel state') of
     Just idx -> idx
@@ -53,7 +53,7 @@ lookupForStartLabel ident state' =
 
 translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
 translateStringVariableOrLiteral (StringVariable var) =
-  return [HirPushLValue (LValueIdent (IdentStrIdent var))]
+  return [HirPushLValue (LValueIdent var)]
 translateStringVariableOrLiteral (StringLiteral str) =
   return [HirPushStrLit str]
 
@@ -78,8 +78,7 @@ translateFunction function = case function of
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
     return $ posInsts ++ [HirStackOps HirPointFun]
-  RndFun {rndRangeEnd} -> do
-    return [HirPushNumLit (fromIntegral rndRangeEnd), HirStackOps HirRndFun]
+  RndFun {rndRangeEnd} -> return [HirPushNumLit (fromIntegral rndRangeEnd), HirStackOps HirRndFun]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
     return $ exprInsts ++ [HirStackOps HirIntFun]
@@ -140,7 +139,7 @@ translateStmt stmt = case stmt of
               return $ conditionInsts ++ (HirCondGoto labelIdx : (translateInner ++ [HirLabel labelIdx]))
   ForStmt {forAssignment, forToExpr} -> do
     let forIdent = case assignmentLValue forAssignment of
-          LValueIdent (IdentNumIdent ident) -> ident
+          LValueIdent ident -> ident
           _ -> error "For loop assignment must be an identifier"
     -- Begin the for loop by inserting a label and storing the start condition
     (newState, labelIdx) <- gets (beginForLoop forIdent forToExpr)
@@ -153,12 +152,12 @@ translateStmt stmt = case stmt of
     let identExpr =
           Expr
             { exprInner =
-                LValueExpr (LValueIdent (IdentNumIdent nextIdent)),
+                LValueExpr (LValueIdent nextIdent),
               exprType = BasicNumericType
             }
         nextAssignment =
           Assignment
-            { assignmentLValue = LValueIdent (IdentNumIdent nextIdent),
+            { assignmentLValue = LValueIdent nextIdent,
               assignmentExpr =
                 Expr
                   { exprInner =
