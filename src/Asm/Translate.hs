@@ -5,6 +5,10 @@ module Asm.Translate where
 import Asm.Types
 import Data.Word (Word16)
 
+-- NOTE: do not confuse X and Y with AL-X and AL-Y
+-- X and Y are CPU registers, while AL-X and AL-Y are 8 byte memory registers
+-- used for arithmetic and logical operations
+
 -- Get a value (8 bytes) from a stack address and put it into the stack
 addrIntoVarInStack :: [AsmInst]
 addrIntoVarInStack =
@@ -44,13 +48,13 @@ binOpNums binopFunAddr =
   [ AsmLabel 1002,
     -- Save the return address in X
     AsmPopReg16 AsmRegX,
-    -- Push the address of Y=7A10H into the stack
+    -- Push the address of AL-Y=7A10H into the stack
     AsmLdiReg8 AsmRegYH 0x7A,
     AsmLdiReg8 AsmRegYL 0x10,
     AsmPshReg16 AsmRegY,
     -- Call the function to move the number from the stack into the address
     AsmSjp 1001,
-    -- Push the address of X=7A00H into the stack
+    -- Push the address of AL-X=7A00H into the stack
     AsmLdiReg8 AsmRegYH 0x7A,
     AsmLdiReg8 AsmRegYL 0x00,
     AsmPshReg16 AsmRegY,
@@ -59,7 +63,7 @@ binOpNums binopFunAddr =
     AsmPshReg16 AsmRegX, -- Push the return address
     -- Call the binary operation function
     AsmSjp binopFunAddr,
-    -- Move the contents of register X into the stack
+    -- Move the contents of register AL-X into the stack
     AsmLdiReg8 AsmRegYH 0x7A,
     AsmLdiReg8 AsmRegYL 0x00,
     AsmPshReg16 AsmRegY,
@@ -67,13 +71,13 @@ binOpNums binopFunAddr =
     AsmRtn
   ]
 
--- Like before, but we only use memory register X
+-- Like before, but we only use memory register AL-X
 unaryOpNums :: Word16 -> [AsmInst]
 unaryOpNums unaryOpFunAddr =
   [ AsmLabel 1003,
-    -- Save the return address in X
+    -- Save the return address in AL-X
     AsmPopReg16 AsmRegX,
-    -- Push the address of X=7A00H into the stack
+    -- Push the address of AL-X=7A00H into the stack
     AsmLdiReg8 AsmRegYH 0x7A,
     AsmLdiReg8 AsmRegYL 0x00,
     AsmPshReg16 AsmRegY,
@@ -81,7 +85,7 @@ unaryOpNums unaryOpFunAddr =
     AsmSjp 1001,
     -- Call the unary operation function
     AsmSjp unaryOpFunAddr,
-    -- Move the contents of register X into the stack
+    -- Move the contents of register AL-X into the stack
     AsmLdiReg8 AsmRegYH 0x7A,
     AsmLdiReg8 AsmRegYL 0x00,
     AsmPshReg16 AsmRegY,
