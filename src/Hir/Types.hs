@@ -3,17 +3,48 @@ module Hir.Types
     HirStackOps (..),
     HirInst (..),
     HirProgram (..),
+    HirIdent (..),
+    HirOperand (..),
   )
 where
 
-import Ast.Types (LValue)
-import TypeSystem (BasicType)
+import Data.Word (Word16)
+
+data HirIdent where
+  HirBasicIdent ::
+    { hirIdentName :: Char,
+      hirIdentHasDollar :: Bool
+    } ->
+    HirIdent
+  -- These are identifiers that we include in the Hir code but that
+  -- don't exist in the original source code.
+  HirFakeIdent ::
+    { hirFakeIdentName :: String
+    } ->
+    HirIdent
+  deriving (Eq)
+
+instance Show HirIdent where
+  show (HirBasicIdent name hasDollar) =
+    if hasDollar then [name, '$'] else [name]
+  show (HirFakeIdent name) = '!' : name
+
+data HirOperand where
+  HirOperandNumLit :: Double -> HirOperand
+  HirOperandStrLitHeaderAt :: Word16 -> HirOperand
+  HirOperandVarAddr :: HirIdent -> HirOperand
+  deriving (Eq)
+
+instance Show HirOperand where
+  show (HirOperandNumLit num) = show num
+  show (HirOperandStrLitHeaderAt offset) = show offset
+  show (HirOperandVarAddr ident) = "&" ++ show ident
 
 data HirIntrinsic where
   HirPrint :: HirIntrinsic
   HirPause :: HirIntrinsic
   HirUsing :: String -> HirIntrinsic
-  HirInput :: {hirInputDestination :: LValue BasicType} -> HirIntrinsic
+  HirInput :: HirIntrinsic
   HirGPrint :: HirIntrinsic
   HirEnd :: HirIntrinsic
   HirClear :: HirIntrinsic
@@ -32,7 +63,7 @@ instance Show HirIntrinsic where
   show HirPrint = "print"
   show HirPause = "print_with_pause"
   show (HirUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
-  show (HirInput dest) = "wait_for_input " ++ show dest
+  show HirInput = "wait_for_input "
   show HirGPrint = "gprint"
   show HirEnd = "exit"
   show HirClear = "clear_vars"
@@ -98,24 +129,21 @@ instance Show HirStackOps where
   show HirGtOp = "gt"
   show HirGeqOp = "geq"
 
+type Label = Int
+
 data HirInst where
   -- Stack operations
-  HirPushLValue :: LValue BasicType -> HirInst
-  HirPushStrLit ::
-    { hirStrLiteralOffset :: Int
-    } ->
-    HirInst
-  HirPushNumLit :: Double -> HirInst
-  HirPop :: LValue BasicType -> HirInst
+  HirPush :: HirOperand -> HirInst
+  HirAssign :: HirInst
   HirOp :: HirStackOps -> HirInst
-  HirStackOps :: HirStackOps -> HirInst
+  HirDeref :: HirInst
   -- Labels
-  HirLabel :: Int -> HirInst
+  HirLabel :: Label -> HirInst
   -- Jumps
-  HirGoto :: Int -> HirInst
-  HirCall :: Int -> HirInst
-  HirCondGoto :: Int -> HirInst
-  HirCondCall :: Int -> HirInst
+  HirGoto :: Label -> HirInst
+  HirCall :: Label -> HirInst
+  HirCondGoto :: Label -> HirInst
+  HirCondCall :: Label -> HirInst
   HirReturn :: HirInst
   -- Intrinsics
   HirIntrinsicCall :: HirIntrinsic -> HirInst
@@ -128,14 +156,12 @@ instance Show HirInst where
   show (HirCondGoto idx) = "\tgoto? L" ++ show idx ++ "\n"
   show (HirCondCall idx) = "\tcall? L" ++ show idx ++ "\n"
   show HirReturn = "\treturn\n"
-  show (HirPop lvalue) = "\tpop " ++ show lvalue ++ "\n"
+  show HirAssign = "\tassign\n"
   show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic ++ "\n"
-  show (HirPushLValue lvalue) = "\tpush " ++ show lvalue ++ "\n"
-  show HirPushStrLit {hirStrLiteralOffset} =
-    "\tpush *(str_base + " ++ show hirStrLiteralOffset ++ ")\n"
-  show (HirPushNumLit num) = "\tpush " ++ show num ++ "\n"
+  show (HirPush operand) =
+    "\tpush " ++ show operand ++ "\n"
   show (HirOp op) = "\t" ++ show op ++ "\n"
-  show (HirStackOps fun) = "\t" ++ show fun ++ "\n"
+  show HirDeref = "\tderef\n"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirInst]

@@ -159,7 +159,7 @@ data Ident where
   deriving (Eq, Ord)
 
 instance Show Ident where
-  show (Ident c True) = c : "$"
+  show (Ident c True) = [c, '$']
   show (Ident c False) = [c]
 
 getIdentName :: Ident -> Char

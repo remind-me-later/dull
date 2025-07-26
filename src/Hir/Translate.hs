@@ -4,6 +4,7 @@ import Ast.Types
 import Control.Monad.State
 import Data.Map qualified
 import Data.Maybe (fromMaybe)
+import Data.Word (Word16)
 import Hir.Types
 import SymbolTable
 import TypeSystem (BasicType (..))
@@ -52,18 +53,46 @@ lookupForStartLabel ident state' =
     Just idx -> idx
     Nothing -> error $ "For loop start label not found for: " ++ show ident
 
-lookupStringLiteralOffset :: String -> TranslationState -> Int
+lookupStringLiteralOffset :: String -> TranslationState -> Word16
 lookupStringLiteralOffset str state' =
   case Data.Map.lookup str (stringLiteralMap (symbolTable state')) of
     Just offset -> offset
     Nothing -> error $ "String literal not found: " ++ str
 
+translateIdent :: Ident -> State TranslationState [HirInst]
+translateIdent Ident {identName, identHasDollar} =
+  let newIdent =
+        HirBasicIdent
+          { hirIdentName = identName,
+            hirIdentHasDollar = identHasDollar
+          }
+   in return [HirPush $ HirOperandVarAddr newIdent]
+
+translateLValue :: LValue BasicType -> State TranslationState [HirInst]
+translateLValue (LValueIdent ident) = translateIdent ident
+translateLValue LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
+  newIdent <- translateIdent lValueArrayIdent
+  indexInsts <- translateExpr lValueArrayIndex
+
+  return $
+    indexInsts
+      ++ newIdent
+      ++ [ HirOp HirAddOp,
+           HirDeref
+         ]
+translateLValue (LValuePseudoVar pseudoVar) =
+  -- TODO: fix this, we should translate psuedo vars into intrinsic calls
+  case pseudoVar of
+    TimePseudoVar ->
+      return [HirPush $ HirOperandVarAddr (HirFakeIdent "time")]
+    InkeyPseudoVar ->
+      return [HirPush $ HirOperandVarAddr (HirFakeIdent "inkey")]
+
 translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
-translateStringVariableOrLiteral (StringVariable var) =
-  return [HirPushLValue (LValueIdent var)]
+translateStringVariableOrLiteral (StringVariable var) = translateIdent var
 translateStringVariableOrLiteral (StringLiteral str) = do
   strOffset <- gets (lookupStringLiteralOffset str)
-  return [HirPushStrLit {hirStrLiteralOffset = strOffset}]
+  return [HirPush $ HirOperandStrLitHeaderAt strOffset]
 
 translateFunction :: Function BasicType -> State TranslationState [HirInst]
 translateFunction function = case function of
@@ -71,62 +100,65 @@ translateFunction function = case function of
     stringInsts <- translateStringVariableOrLiteral midFunStringExpr
     startInsts <- translateExpr midFunStartExpr
     lengthInsts <- translateExpr midFunLengthExpr
-    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirStackOps HirMidOp]
+    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirOp HirMidOp]
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral leftFunStringExpr
     lengthInsts <- translateExpr leftFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirLeftOp]
+    return $ stringInsts ++ lengthInsts ++ [HirOp HirLeftOp]
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral rightFunStringExpr
     lengthInsts <- translateExpr rightFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirStackOps HirRightOp]
+    return $ stringInsts ++ lengthInsts ++ [HirOp HirRightOp]
   AsciiFun {asciiFunArgument} -> do
     argInsts <- translateStringVariableOrLiteral asciiFunArgument
-    return $ argInsts ++ [HirStackOps HirAsciiOp]
+    return $ argInsts ++ [HirOp HirAsciiOp]
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
-    return $ posInsts ++ [HirStackOps HirPointOp]
-  RndFun {rndRangeEnd} -> return [HirPushNumLit (fromIntegral rndRangeEnd), HirStackOps HirRndOp]
+    return $ posInsts ++ [HirOp HirPointOp]
+  RndFun {rndRangeEnd} ->
+    return [HirPush $ HirOperandNumLit (fromIntegral rndRangeEnd), HirOp HirRndOp]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
-    return $ exprInsts ++ [HirStackOps HirIntOp]
+    return $ exprInsts ++ [HirOp HirIntOp]
   SgnFun {sgnFunExpr} -> do
     exprInsts <- translateExpr sgnFunExpr
-    return $ exprInsts ++ [HirStackOps HirSgnOp]
+    return $ exprInsts ++ [HirOp HirSgnOp]
 
 translateBinOp :: BinOperator -> HirInst
-translateBinOp AddOp = HirStackOps HirAddOp
-translateBinOp SubtractOp = HirStackOps HirSubOp
-translateBinOp MultiplyOp = HirStackOps HirMulOp
-translateBinOp DivideOp = HirStackOps HirDivOp
-translateBinOp CaretOp = HirStackOps HirExponentOp
-translateBinOp AndOp = HirStackOps HirAndOp
-translateBinOp OrOp = HirStackOps HirOrOp
-translateBinOp EqualOp = HirStackOps HirEqOp
-translateBinOp NotEqualOp = HirStackOps HirNeqOp
-translateBinOp LessThanOp = HirStackOps HirLtOp
-translateBinOp LessThanOrEqualOp = HirStackOps HirLeqOp
-translateBinOp GreaterThanOp = HirStackOps HirGtOp
-translateBinOp GreaterThanOrEqualOp = HirStackOps HirGeqOp
+translateBinOp AddOp = HirOp HirAddOp
+translateBinOp SubtractOp = HirOp HirSubOp
+translateBinOp MultiplyOp = HirOp HirMulOp
+translateBinOp DivideOp = HirOp HirDivOp
+translateBinOp CaretOp = HirOp HirExponentOp
+translateBinOp AndOp = HirOp HirAndOp
+translateBinOp OrOp = HirOp HirOrOp
+translateBinOp EqualOp = HirOp HirEqOp
+translateBinOp NotEqualOp = HirOp HirNeqOp
+translateBinOp LessThanOp = HirOp HirLtOp
+translateBinOp LessThanOrEqualOp = HirOp HirLeqOp
+translateBinOp GreaterThanOp = HirOp HirGtOp
+translateBinOp GreaterThanOrEqualOp = HirOp HirGeqOp
 
 translateUnaryOp :: UnaryOperator -> [HirInst]
 translateUnaryOp UnaryMinusOp = do
   -- 0 - x
-  [HirPushNumLit 0, HirStackOps HirSubOp]
+  [HirPush $ HirOperandNumLit 0, HirOp HirSubOp]
 translateUnaryOp UnaryNotOp = do
   -- 0 is false, anything else is true
-  [HirPushNumLit 0, HirStackOps HirEqOp]
+  [HirPush $ HirOperandNumLit 0, HirOp HirEqOp]
 translateUnaryOp UnaryPlusOp = do
   -- x
   []
 
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
-  NumLitExpr n -> return [HirPushNumLit n]
+  NumLitExpr n -> return [HirPush $ HirOperandNumLit n]
   StrLitExpr s -> do
     strOffset <- gets (lookupStringLiteralOffset s)
-    return [HirPushStrLit {hirStrLiteralOffset = strOffset}]
-  LValueExpr lvalue -> return [HirPushLValue lvalue]
+    return [HirPush $ HirOperandStrLitHeaderAt strOffset]
+  LValueExpr lvalue -> do
+    lvalueAddr <- translateLValue lvalue
+    return $ lvalueAddr ++ [HirDeref]
   BinExpr left op right -> do
     leftInsts <- translateExpr left
     rightInsts <- translateExpr right
@@ -138,8 +170,9 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
 
 translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
+  lvalueAddr <- translateLValue assignmentLValue
   exprInsts <- translateExpr assignmentExpr
-  return $ exprInsts ++ [HirPop assignmentLValue]
+  return $ lvalueAddr ++ exprInsts ++ [HirAssign]
 
 translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
@@ -251,7 +284,8 @@ translateStmt stmt = case stmt of
     return $ usingClause ++ hirPrints' ++ putchar
   UsingStmt (UsingClause u) -> return [HirIntrinsicCall $ HirUsing u]
   InputStmt {inputPrintExpr, inputDestination} -> do
-    let inputStmt = HirIntrinsicCall HirInput {hirInputDestination = inputDestination}
+    inputDestAddr <- translateLValue inputDestination
+    let inputStmt = inputDestAddr ++ [HirIntrinsicCall HirInput]
 
     case inputPrintExpr of
       Just expr -> do
@@ -261,8 +295,8 @@ translateStmt stmt = case stmt of
               { exprInner = StrLitExpr expr,
                 exprType = BasicStringType
               }
-        return $ printExprInsts ++ [HirIntrinsicCall HirPrint] ++ [inputStmt]
-      Nothing -> return [inputStmt]
+        return $ printExprInsts ++ [HirIntrinsicCall HirPrint] ++ inputStmt
+      Nothing -> return inputStmt
   GprintStmt {gprintExprs, gprintEnding} -> do
     gprintInsts <- mapM translateExpr gprintExprs
     let gprintsInsts' = concat gprintInsts ++ [HirIntrinsicCall HirGPrint]

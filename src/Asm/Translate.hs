@@ -52,10 +52,10 @@ printCharAndAdvanceCursorInsts =
   ]
 
 -- The variable address is in U
-accIntoNumVarInsts :: [AsmInst]
-accIntoNumVarInsts reg =
-  [ 
-  ]
+-- accIntoNumVarInsts :: [AsmInst]
+-- accIntoNumVarInsts reg =
+--   [ 
+--   ]
 
 -- FIXME: for no only works up to 255, should be fixed
 -- Result is in the accumulator

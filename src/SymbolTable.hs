@@ -13,12 +13,13 @@ where
 import Ast.Types (GotoTarget, Ident (..), getIdentName)
 import Data.List (intercalate, sortBy)
 import Data.Map
+import Data.Word (Word16)
 import TypeSystem
 
 data Variable where
   Variable ::
     { variableName :: Char,
-      variableOffset :: Int,
+      variableOffset :: Word16,
       variableType :: BasicType
     } ->
     Variable
@@ -51,9 +52,9 @@ instance Show GotoTargetData where
 data SymbolTable where
   SymbolTable ::
     { symbolMap :: Map Ident Variable,
-      stringLiteralMap :: Map String Int,
-      nextOffsetVar :: Int,
-      nextOffsetString :: Int,
+      stringLiteralMap :: Map String Word16,
+      nextOffsetVar :: Word16,
+      nextOffsetString :: Word16,
       usedLabels :: Map GotoTarget GotoTargetData
     } ->
     SymbolTable
@@ -100,7 +101,7 @@ insertVariable sym ty st@SymbolTable {symbolMap, nextOffsetVar} =
       newSymbolName = getIdentName sym
       newSymbol = Variable {variableName = newSymbolName, variableOffset = nextOffsetVar, variableType = ty}
       newSymbols = insert sym newSymbol symbolMap
-      newOffset = nextOffsetVar + sizeOfTy ty
+      newOffset = nextOffsetVar + fromIntegral (sizeOfTy ty)
    in if alreadyInSymbols
         then st
         else st {symbolMap = newSymbols, nextOffsetVar = newOffset}
@@ -108,7 +109,7 @@ insertVariable sym ty st@SymbolTable {symbolMap, nextOffsetVar} =
 insertStringLiteral :: String -> SymbolTable -> SymbolTable
 insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffsetString} =
   let alreadyInLiterals = Data.Map.member str stringLiteralMap
-      newOffset = nextOffsetString + length str + stringHeaderSize
+      newOffset = nextOffsetString + fromIntegral (length str + stringHeaderSize)
    in if alreadyInLiterals
         then st
         else st {stringLiteralMap = insert str nextOffsetString stringLiteralMap, nextOffsetString = newOffset}
