@@ -75,7 +75,7 @@ translateIdent Ident {identName, identHasDollar} =
             hirIdentHasDollar = identHasDollar
           }
    in return
-        ( [HirPush $ HirOperandVarAddr newIdent],
+        ( [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandVarAddr newIdent)],
           if identHasDollar then BasicStringType else BasicNumericType
         )
 
@@ -97,15 +97,32 @@ translateLValue (LValuePseudoVar pseudoVar) =
   -- TODO: fix this, we should translate psuedo vars into intrinsic calls
   case pseudoVar of
     TimePseudoVar ->
-      return ([HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "time"}], BasicNumericType)
+      return
+        ( [ HirAssign
+              (HirOperandVarAddr HirArithXReg)
+              (HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "time"})
+          ],
+          BasicNumericType
+        )
     InkeyPseudoVar ->
-      return ([HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "inkey"}], BasicStringType)
+      return
+        ( [ HirAssign
+              (HirOperandVarAddr HirArithXReg)
+              (HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "inkey"})
+          ],
+          BasicStringType
+        )
 
 translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
 translateStringVariableOrLiteral (StringVariable var) = do
   (r, _) <- translateIdent var
   return r
-translateStringVariableOrLiteral (StringLiteral str) = return [HirPush $ HirOperandStrLitAddr str]
+translateStringVariableOrLiteral (StringLiteral str) =
+  return
+    [ HirAssign
+        (HirOperandVarAddr HirArithXReg)
+        (HirOperandStrLitAddr str)
+    ]
 
 translateFunction :: Function BasicType -> State TranslationState [HirInst]
 translateFunction function = case function of
@@ -129,7 +146,12 @@ translateFunction function = case function of
     posInsts <- translateExpr pointFunPositionExpr
     return $ posInsts ++ [HirOp HirPointOp]
   RndFun {rndRangeEnd} ->
-    return [HirPush $ HirOperandNumLit (fromIntegral rndRangeEnd), HirOp HirRndOp]
+    return
+      [ HirAssign
+          (HirOperandVarAddr HirArithXReg)
+          (HirOperandNumLit (fromIntegral rndRangeEnd)),
+        HirOp HirRndOp
+      ]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
     return $ exprInsts ++ [HirOp HirIntOp]
@@ -155,18 +177,28 @@ translateBinOp GreaterThanOrEqualOp = HirOp HirGeqOp
 translateUnaryOp :: UnaryOperator -> [HirInst]
 translateUnaryOp UnaryMinusOp = do
   -- 0 - x
-  [HirPush $ HirOperandNumLit 0, HirOp HirSubOp]
+  [ -- AL-Y = AL-X
+    HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandVarAddr HirArithXReg),
+    -- AL-X = 0
+    HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandNumLit 0),
+    -- AL-X = AL-X - AL-Y
+    HirOp HirSubOp
+    ]
 translateUnaryOp UnaryNotOp = do
   -- 0 is false, anything else is true
-  [HirPush $ HirOperandNumLit 0, HirOp HirEqOp]
+  [ HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandNumLit 0),
+    HirOp HirEqOp
+    ]
 translateUnaryOp UnaryPlusOp = do
   -- x
   []
 
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
-  NumLitExpr n -> return [HirPush $ HirOperandNumLit n]
-  StrLitExpr s -> return [HirPush $ HirOperandStrLitAddr s]
+  NumLitExpr n ->
+    return [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandNumLit n)]
+  StrLitExpr s ->
+    return [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandStrLitAddr s)]
   LValueExpr lvalue -> do
     (lvalueAddr, _) <- translateLValue lvalue
     return $ lvalueAddr ++ [HirDeref]
@@ -183,7 +215,14 @@ translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
   (lvalueAddr, _) <- translateLValue assignmentLValue
   exprInsts <- translateExpr assignmentExpr
-  return $ exprInsts ++ lvalueAddr ++ [HirAssign]
+  -- return $ exprInsts ++ lvalueAddr ++ [HirAssign]
+  return $
+    lvalueAddr
+      ++ [HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandVarAddr HirArithXReg)]
+      ++ exprInsts
+      ++ [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandVarAddr HirArithYReg)]
+      -- Address is now in AL-X, dereference it
+      ++ [HirDeref]
 
 translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
@@ -292,13 +331,23 @@ translateStmt stmt = case stmt of
         cursorInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
 
         let sleepInsts = case printKind of
-              PrintKindPrint -> HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = hirUserSetSleepTimeFakeVarName}
-              PrintKindPause -> HirPush $ HirOperandNumLit 64 -- FIXME: more or less a second, research true value
+              PrintKindPrint ->
+                [ HirAssign
+                    (HirOperandVarAddr HirArithXReg)
+                    ( HirOperandVarAddr
+                        HirFakeIdent
+                          { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                          }
+                    )
+                ]
+              PrintKindPause ->
+                -- FIXME: more or less a second, research true value
+                [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandNumLit 64)]
         return $
-          [ sleepInsts,
-            HirIntrinsicCall HirSleep,
-            HirIntrinsicCall HirCls
-          ]
+          sleepInsts
+            ++ [ HirIntrinsicCall HirSleep,
+                 HirIntrinsicCall HirCls
+               ]
             ++ cursorInsts
             ++ [HirIntrinsicCall HirCursor]
       _ -> return []
@@ -343,7 +392,13 @@ translateStmt stmt = case stmt of
       PrintEndingNewLine -> do
         exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
         return $
-          [ HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = hirUserSetSleepTimeFakeVarName},
+          [ HirAssign
+              (HirOperandVarAddr HirArithXReg)
+              ( HirOperandVarAddr
+                  HirFakeIdent
+                    { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                    }
+              ),
             HirIntrinsicCall HirSleep,
             HirIntrinsicCall HirCls
           ]
@@ -374,13 +429,15 @@ translateStmt stmt = case stmt of
 
     return $
       unmaybeWait
-        ++ [ HirPush $
-               HirOperandVarAddr
-                 HirFakeIdent
-                   { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                   }
+        ++ [ HirAssign
+               (HirOperandVarAddr HirArithXReg)
+               ( HirOperandVarAddr
+                   HirFakeIdent
+                     { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                     }
+               ),
+             HirIntrinsicCall HirSleep
            ]
-        ++ [HirAssign]
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
     -- The rest are the values to poke

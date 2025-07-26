@@ -23,12 +23,17 @@ data HirIdent where
     { hirFakeIdentName :: String
     } ->
     HirIdent
+  -- Arithmetic internal registers
+  HirArithXReg :: HirIdent
+  HirArithYReg :: HirIdent
   deriving (Eq)
 
 instance Show HirIdent where
   show (HirBasicIdent name hasDollar) =
     if hasDollar then [name, '$'] else [name]
   show (HirFakeIdent name) = '!' : name
+  show HirArithXReg = "AL-X"
+  show HirArithYReg = "AL-Y"
 
 data HirOperand where
   HirOperandNumLit :: Double -> HirOperand
@@ -108,35 +113,32 @@ data HirStackOps where
   deriving (Eq)
 
 instance Show HirStackOps where
-  show HirMidOp = "mid"
-  show HirLeftOp = "left"
-  show HirRightOp = "right"
-  show HirAsciiOp = "ascii"
-  show HirPointOp = "point"
-  show HirRndOp = "rnd"
-  show HirIntOp = "int"
-  show HirSgnOp = "sgn"
-  show HirAddOp = "add"
-  show HirSubOp = "sub"
-  show HirMulOp = "mul"
-  show HirDivOp = "div"
-  show HirExponentOp = "exp"
-  show HirAndOp = "and"
-  show HirOrOp = "or"
-  show HirEqOp = "eq"
-  show HirNeqOp = "neq"
-  show HirLtOp = "lt"
-  show HirLeqOp = "leq"
-  show HirGtOp = "gt"
-  show HirGeqOp = "geq"
+  show HirMidOp = "mid" -- TODO: docs page 126 wtf does that mean?
+  show HirLeftOp = "left AL-X, 7890H"
+  show HirRightOp = "right AL-X, 7890H"
+  show HirAsciiOp = "ascii AL-X"
+  show HirPointOp = "point" -- TODO:
+  show HirRndOp = "rnd" -- TODO:
+  show HirIntOp = "int AL-X"
+  show HirSgnOp = "sgn AL-X"
+  show HirAddOp = "add AL-X AL-Y"
+  show HirSubOp = "sub AL-X AL-Y"
+  show HirMulOp = "mul AL-X AL-Y"
+  show HirDivOp = "div AL-X AL-Y"
+  show HirExponentOp = "exp AL-X AL-Y"
+  show HirAndOp = "and AL-X AL-Y"
+  show HirOrOp = "or AL-X AL-Y"
+  show HirEqOp = "eq AL-X AL-Y"
+  show HirNeqOp = "neq AL-X AL-Y"
+  show HirLtOp = "lt AL-X AL-Y"
+  show HirLeqOp = "leq AL-X AL-Y"
+  show HirGtOp = "gt AL-X AL-Y"
+  show HirGeqOp = "geq AL-X AL-Y"
 
 type Label = Int
 
 data HirInst where
-  -- Stack operations
-  HirPush :: HirOperand -> HirInst
-  -- Takes a direction and an operand and assigns it to that direction
-  HirAssign :: HirInst
+  HirAssign :: HirOperand -> HirOperand -> HirInst
   HirOp :: HirStackOps -> HirInst
   HirDeref :: HirInst
   -- Labels
@@ -158,12 +160,11 @@ instance Show HirInst where
   show (HirCondGoto idx) = "\tgoto? L" ++ show idx
   show (HirCondCall idx) = "\tcall? L" ++ show idx
   show HirReturn = "\treturn"
-  show HirAssign = "\tassign"
+  show (HirAssign a b) =
+    "\t" ++ show a ++ " = " ++ show b
   show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic
-  show (HirPush operand) =
-    "\tpush " ++ show operand
   show (HirOp op) = "\t" ++ show op
-  show HirDeref = "\tderef"
+  show HirDeref = "\tAL-X = (AL-X)"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirInst]
