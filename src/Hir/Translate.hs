@@ -59,40 +59,48 @@ lookupStringLiteralOffset str state' =
     Just offset -> offset
     Nothing -> error $ "String literal not found: " ++ str
 
-translateIdent :: Ident -> State TranslationState [HirInst]
+hirUserSetSleepTimeFakeVarName :: String
+hirUserSetSleepTimeFakeVarName = "user_set_sleep_time"
+
+translateIdent :: Ident -> State TranslationState ([HirInst], BasicType)
 translateIdent Ident {identName, identHasDollar} =
   let newIdent =
         HirBasicIdent
           { hirIdentName = identName,
             hirIdentHasDollar = identHasDollar
           }
-   in return [HirPush $ HirOperandVarAddr newIdent]
+   in return
+        ( [HirPush $ HirOperandVarAddr newIdent],
+          if identHasDollar then BasicStringType else BasicNumericType
+        )
 
-translateLValue :: LValue BasicType -> State TranslationState [HirInst]
+translateLValue :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
 translateLValue (LValueIdent ident) = translateIdent ident
 translateLValue LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
-  newIdent <- translateIdent lValueArrayIdent
+  (newIdent, ty) <- translateIdent lValueArrayIdent
   indexInsts <- translateExpr lValueArrayIndex
 
-  return $
-    indexInsts
-      ++ newIdent
-      ++ [ HirOp HirAddOp,
-           HirDeref
-         ]
+  return
+    ( indexInsts
+        ++ newIdent
+        ++ [ HirOp HirAddOp,
+             HirDeref
+           ],
+      ty
+    )
 translateLValue (LValuePseudoVar pseudoVar) =
   -- TODO: fix this, we should translate psuedo vars into intrinsic calls
   case pseudoVar of
     TimePseudoVar ->
-      return [HirPush $ HirOperandVarAddr (HirFakeIdent "time")]
+      return ([HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "time"}], BasicNumericType)
     InkeyPseudoVar ->
-      return [HirPush $ HirOperandVarAddr (HirFakeIdent "inkey")]
+      return ([HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "inkey"}], BasicStringType)
 
 translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
-translateStringVariableOrLiteral (StringVariable var) = translateIdent var
-translateStringVariableOrLiteral (StringLiteral str) = do
-  strOffset <- gets (lookupStringLiteralOffset str)
-  return [HirPush $ HirOperandStrLitHeaderAt strOffset]
+translateStringVariableOrLiteral (StringVariable var) = do
+  (r, _) <- translateIdent var
+  return r
+translateStringVariableOrLiteral (StringLiteral str) = return [HirPush $ HirOperandStrLitAddr str]
 
 translateFunction :: Function BasicType -> State TranslationState [HirInst]
 translateFunction function = case function of
@@ -153,11 +161,9 @@ translateUnaryOp UnaryPlusOp = do
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
   NumLitExpr n -> return [HirPush $ HirOperandNumLit n]
-  StrLitExpr s -> do
-    strOffset <- gets (lookupStringLiteralOffset s)
-    return [HirPush $ HirOperandStrLitHeaderAt strOffset]
+  StrLitExpr s -> return [HirPush $ HirOperandStrLitAddr s]
   LValueExpr lvalue -> do
-    lvalueAddr <- translateLValue lvalue
+    (lvalueAddr, _) <- translateLValue lvalue
     return $ lvalueAddr ++ [HirDeref]
   BinExpr left op right -> do
     leftInsts <- translateExpr left
@@ -170,7 +176,7 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
 
 translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
-  lvalueAddr <- translateLValue assignmentLValue
+  (lvalueAddr, _) <- translateLValue assignmentLValue
   exprInsts <- translateExpr assignmentExpr
   return $ lvalueAddr ++ exprInsts ++ [HirAssign]
 
@@ -253,28 +259,39 @@ translateStmt stmt = case stmt of
   PrintStmt {printKind, printExprs, printEnding, printUsingClause} -> do
     -- All print expressions have line ending with no newline, except the last one
     -- which has the specified ending.
-
-    let lastPrintInst = case printKind of
-          PrintKindPrint -> [HirIntrinsicCall HirPrint]
-          PrintKindPause -> [HirIntrinsicCall HirPause]
     hirPrints <-
       mapM
         ( \expr -> do
             exprInsts <- translateExpr expr
-            return $ exprInsts ++ [HirIntrinsicCall HirPrint]
+            let printInsts =
+                  case exprType expr of
+                    BasicNumericType -> [HirIntrinsicCall HirPrintNum]
+                    BasicStringType -> [HirIntrinsicCall HirPrintStr]
+                    _ -> error $ "Unsupported print expression type: " ++ show (exprType expr)
+            return $ exprInsts ++ printInsts
         )
         (init printExprs)
 
     lastExprInsts <- translateExpr (last printExprs)
-    let hirPrints' = concat hirPrints ++ lastExprInsts ++ lastPrintInst
+    let lastPrintInst =
+          case exprType (last printExprs) of
+            BasicNumericType -> HirIntrinsicCall HirPrintNum
+            BasicStringType -> HirIntrinsicCall HirPrintStr
+            _ -> error $ "Unsupported last print expression type: " ++ show (exprType (last printExprs))
+    let hirPrints' = concat hirPrints ++ lastExprInsts ++ [lastPrintInst]
     let usingClause = case printUsingClause of
           Just (UsingClause u) -> [HirIntrinsicCall $ HirUsing u]
           Nothing -> []
     putchar <- case printEnding of
       PrintEndingNewLine -> do
         cursorInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+
+        let sleepInsts = case printKind of
+              PrintKindPrint -> HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = hirUserSetSleepTimeFakeVarName}
+              PrintKindPause -> HirPush $ HirOperandNumLit 64 -- FIXME: more or less a second, research true value
         return $
-          [ HirIntrinsicCall HirDoWait,
+          [ sleepInsts,
+            HirIntrinsicCall HirSleep,
             HirIntrinsicCall HirCls
           ]
             ++ cursorInsts
@@ -284,8 +301,13 @@ translateStmt stmt = case stmt of
     return $ usingClause ++ hirPrints' ++ putchar
   UsingStmt (UsingClause u) -> return [HirIntrinsicCall $ HirUsing u]
   InputStmt {inputPrintExpr, inputDestination} -> do
-    inputDestAddr <- translateLValue inputDestination
-    let inputStmt = inputDestAddr ++ [HirIntrinsicCall HirInput]
+    (inputDestAddr, ty) <- translateLValue inputDestination
+    let inputInst = case ty of
+          BasicNumericType -> [HirIntrinsicCall HirInputNum]
+          BasicStringType -> [HirIntrinsicCall HirInputStr]
+          _ -> error $ "Unsupported input destination type: " ++ show ty
+
+    let inputStmt = inputDestAddr ++ inputInst
 
     case inputPrintExpr of
       Just expr -> do
@@ -295,16 +317,29 @@ translateStmt stmt = case stmt of
               { exprInner = StrLitExpr expr,
                 exprType = BasicStringType
               }
-        return $ printExprInsts ++ [HirIntrinsicCall HirPrint] ++ inputStmt
+        return $ printExprInsts ++ [HirIntrinsicCall HirPrintStr] ++ inputStmt
       Nothing -> return inputStmt
   GprintStmt {gprintExprs, gprintEnding} -> do
-    gprintInsts <- mapM translateExpr gprintExprs
-    let gprintsInsts' = concat gprintInsts ++ [HirIntrinsicCall HirGPrint]
+    gprintInsts <-
+      mapM
+        ( \e -> do
+            translatedExpr <- translateExpr e
+            let gprintExprInsts =
+                  case exprType e of
+                    BasicNumericType -> [HirIntrinsicCall HirGPrintNum]
+                    BasicStringType -> [HirIntrinsicCall HirGPrintStr]
+                    _ -> error $ "Unsupported gprint expression type: " ++ show (exprType e)
+            return $ translatedExpr ++ gprintExprInsts
+        )
+        gprintExprs
+    let gprintsInsts' = concat gprintInsts
+
     ending <- case gprintEnding of
       PrintEndingNewLine -> do
         exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
         return $
-          [ HirIntrinsicCall HirDoWait,
+          [ HirPush $ HirOperandVarAddr HirFakeIdent {hirFakeIdentName = hirUserSetSleepTimeFakeVarName},
+            HirIntrinsicCall HirSleep,
             HirIntrinsicCall HirCls
           ]
             ++ exprInsts
@@ -315,7 +350,7 @@ translateStmt stmt = case stmt of
   Comment -> return []
   ReturnStmt -> return [HirReturn]
   DimStmt _ -> return [] -- Already in symbol table
-  EndStmt -> return [HirIntrinsicCall HirEnd]
+  EndStmt -> return [HirReturn]
   WaitStmt {waitForExpr} -> do
     -- Save the last wait time set by the user in a special variable
     let infiniteWaitTime =
@@ -332,7 +367,15 @@ translateStmt stmt = case stmt of
 
     unmaybeWait <- translateExpr (fromMaybe infiniteWaitTime waitForExpr)
 
-    return $ unmaybeWait ++ [HirIntrinsicCall HirSetWait]
+    return $
+      [ HirPush $
+          HirOperandVarAddr
+            HirFakeIdent
+              { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+              }
+      ]
+        ++ unmaybeWait
+        ++ [HirAssign]
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
     -- The rest are the values to poke

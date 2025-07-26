@@ -1,3 +1,6 @@
+-- In this representation all "words" are 8 bytes long, the size of the BASIC
+-- variables
+
 module Hir.Types
   ( HirIntrinsic (..),
     HirStackOps (..),
@@ -7,8 +10,6 @@ module Hir.Types
     HirOperand (..),
   )
 where
-
-import Data.Word (Word16)
 
 data HirIdent where
   HirBasicIdent ::
@@ -31,27 +32,27 @@ instance Show HirIdent where
 
 data HirOperand where
   HirOperandNumLit :: Double -> HirOperand
-  HirOperandStrLitHeaderAt :: Word16 -> HirOperand
+  HirOperandStrLitAddr :: String -> HirOperand
   HirOperandVarAddr :: HirIdent -> HirOperand
   deriving (Eq)
 
 instance Show HirOperand where
   show (HirOperandNumLit num) = show num
-  show (HirOperandStrLitHeaderAt offset) = show offset
-  show (HirOperandVarAddr ident) = "&" ++ show ident
+  show (HirOperandStrLitAddr offset) = '&' : show offset
+  show (HirOperandVarAddr ident) = '&' : show ident
 
 data HirIntrinsic where
-  HirPrint :: HirIntrinsic
-  HirPause :: HirIntrinsic
+  HirPrintNum :: HirIntrinsic
+  HirPrintStr :: HirIntrinsic
   HirUsing :: String -> HirIntrinsic
-  HirInput :: HirIntrinsic
-  HirGPrint :: HirIntrinsic
-  HirEnd :: HirIntrinsic
+  HirInputNum :: HirIntrinsic
+  HirInputStr :: HirIntrinsic
+  HirGPrintNum :: HirIntrinsic
+  HirGPrintStr :: HirIntrinsic
   HirClear :: HirIntrinsic
   HirCls :: HirIntrinsic
   HirRandom :: HirIntrinsic
-  HirSetWait :: HirIntrinsic
-  HirDoWait :: HirIntrinsic
+  HirSleep :: HirIntrinsic
   HirSetPokeAddress :: HirIntrinsic
   HirPoke :: {hirPokeMemoryArea :: Int} -> HirIntrinsic
   HirCursor :: HirIntrinsic
@@ -60,22 +61,22 @@ data HirIntrinsic where
   deriving (Eq)
 
 instance Show HirIntrinsic where
-  show HirPrint = "print"
-  show HirPause = "print_with_pause"
+  show HirPrintNum = "print_num"
+  show HirPrintStr = "print_str"
   show (HirUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
-  show HirInput = "wait_for_input "
-  show HirGPrint = "gprint"
-  show HirEnd = "exit"
+  show HirInputNum = "input_num"
+  show HirInputStr = "input_str"
+  show HirGPrintNum = "gprint_num"
+  show HirGPrintStr = "gprint_str"
   show HirClear = "clear_vars"
   show HirCls = "cls"
   show HirRandom = "gen_random_seed"
-  show HirSetWait = "set_print_wait_time"
-  show HirDoWait = "do_wait"
+  show HirSleep = "sleep"
   show (HirPoke memArea) =
     "poke_memory_area_" ++ show memArea
   show HirSetPokeAddress = "set_poke_address"
-  show HirCursor = "cursor"
-  show HirGCursor = "gcursor"
+  show HirCursor = "set_cursor"
+  show HirGCursor = "set_gcursor"
   show (HirBeepStmt hasOptParams) =
     "beep" ++ (if hasOptParams then "_with_params" else "")
 
@@ -134,6 +135,7 @@ type Label = Int
 data HirInst where
   -- Stack operations
   HirPush :: HirOperand -> HirInst
+  -- Takes a direction and an operand and assigns it to that direction
   HirAssign :: HirInst
   HirOp :: HirStackOps -> HirInst
   HirDeref :: HirInst
