@@ -13,7 +13,8 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  Ast.Types
+    exposed-modules:  
+                      Ast.Types
                       Ast.Parser
                       Ast.SemanticAnalysis
                       SymbolTable

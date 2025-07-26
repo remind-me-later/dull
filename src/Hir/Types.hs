@@ -152,18 +152,18 @@ data HirInst where
   deriving (Eq)
 
 instance Show HirInst where
-  show (HirLabel idx) = "L" ++ show idx ++ ":\n"
-  show (HirGoto idx) = "\tgoto L" ++ show idx ++ "\n"
-  show (HirCall idx) = "\tcall L" ++ show idx ++ "\n"
-  show (HirCondGoto idx) = "\tgoto? L" ++ show idx ++ "\n"
-  show (HirCondCall idx) = "\tcall? L" ++ show idx ++ "\n"
-  show HirReturn = "\treturn\n"
-  show HirAssign = "\tassign\n"
-  show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic ++ "\n"
+  show (HirLabel idx) = "L" ++ show idx ++ ":"
+  show (HirGoto idx) = "\tgoto L" ++ show idx
+  show (HirCall idx) = "\tcall L" ++ show idx
+  show (HirCondGoto idx) = "\tgoto? L" ++ show idx
+  show (HirCondCall idx) = "\tcall? L" ++ show idx
+  show HirReturn = "\treturn"
+  show HirAssign = "\tassign"
+  show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic
   show (HirPush operand) =
-    "\tpush " ++ show operand ++ "\n"
-  show (HirOp op) = "\t" ++ show op ++ "\n"
-  show HirDeref = "\tderef\n"
+    "\tpush " ++ show operand
+  show (HirOp op) = "\t" ++ show op
+  show HirDeref = "\tderef"
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirInst]
@@ -171,5 +171,4 @@ newtype HirProgram = HirProgram
   deriving (Eq)
 
 instance Show HirProgram where
-  show (HirProgram stmts) =
-    "HirProgram:\n" ++ concatMap show stmts
+  show (HirProgram stmts) = unlines (map show stmts)

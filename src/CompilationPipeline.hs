@@ -23,7 +23,8 @@ data CompilationError
 data CompilationResult = CompilationResult
   { compiledProgram :: Program BasicType,
     finalSymbolTable :: SymbolTable,
-    hirProgram :: HirProgram
+    hirProgram :: HirProgram,
+    hirSymbolTable :: SymbolTable
   }
   deriving (Show, Eq)
 
@@ -38,13 +39,14 @@ compileProgram fileName contents = do
         -- Stage 2: Type check and semantic analysis
         let (prog', finalState) = analyzeProgram prog
         -- Stage 3: Translate to HIR
-        let hirProg = translateProgram prog' finalState
+        let (hirProg, symbTable, nextLabelIdx) = translateProgram prog' finalState
         return $
           Right $
             CompilationResult
               { compiledProgram = prog',
                 finalSymbolTable = finalState,
-                hirProgram = hirProg
+                hirProgram = hirProg,
+                hirSymbolTable = symbTable
               }
 
   case result of

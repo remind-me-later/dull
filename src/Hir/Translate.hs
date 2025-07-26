@@ -16,6 +16,11 @@ data TranslationState = TranslationState
     symbolTable :: SymbolTable
   }
 
+insertFakeIdent :: String -> TranslationState -> TranslationState
+insertFakeIdent name state' =
+  let newState = state' {symbolTable = insertFakeVariable name BasicNumericType (symbolTable state')}
+   in newState
+
 lookupLabelInState :: GotoTarget -> TranslationState -> Maybe Int
 lookupLabelInState label (TranslationState {labelToInt}) =
   Data.Map.lookup label labelToInt
@@ -178,7 +183,7 @@ translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
   (lvalueAddr, _) <- translateLValue assignmentLValue
   exprInsts <- translateExpr assignmentExpr
-  return $ lvalueAddr ++ exprInsts ++ [HirAssign]
+  return $ exprInsts ++ lvalueAddr ++ [HirAssign]
 
 translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
@@ -368,13 +373,13 @@ translateStmt stmt = case stmt of
     unmaybeWait <- translateExpr (fromMaybe infiniteWaitTime waitForExpr)
 
     return $
-      [ HirPush $
-          HirOperandVarAddr
-            HirFakeIdent
-              { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-              }
-      ]
-        ++ unmaybeWait
+      unmaybeWait
+        ++ [ HirPush $
+               HirOperandVarAddr
+                 HirFakeIdent
+                   { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                   }
+           ]
         ++ [HirAssign]
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
@@ -449,20 +454,25 @@ translateLine Line {lineNumber, lineLabel, lineStmts} = do
 
 translateProgram' :: Program BasicType -> State TranslationState HirProgram
 translateProgram' (Program programLines) = do
+  -- insert fake identifiers for special variables
+  let fakeVars = ["time", "inkey", hirUserSetSleepTimeFakeVarName]
+  mapM_ (modify . insertFakeIdent) fakeVars
+
   let programLines' = Data.Map.elems programLines
 
   translatedLines <- mapM translateLine programLines'
 
   return HirProgram {hirProgramStatements = concat translatedLines}
 
-translateProgram :: Program BasicType -> SymbolTable -> HirProgram
-translateProgram program symbolTable =
-  let (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable
+translateProgram :: Program BasicType -> SymbolTable -> (HirProgram, SymbolTable, Int)
+translateProgram program symbolTable' =
+  let (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable'
       initialState =
         TranslationState
           { labelToInt = labelMap,
             nextLabelIdx = nextIdx,
             forStartToLabel = Data.Map.empty,
-            symbolTable = symbolTable
+            symbolTable = symbolTable'
           }
-   in evalState (translateProgram' program) initialState
+      (hirProgram, finalState) = runState (translateProgram' program) initialState
+   in (hirProgram, symbolTable finalState, nextLabelIdx finalState)

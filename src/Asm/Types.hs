@@ -140,18 +140,23 @@ data AsmInst where
   AsmSde :: AsmGeneralReg16 -> AsmInst
   AsmSin :: AsmGeneralReg16 -> AsmInst
   AsmStxReg16 :: AsmGeneralReg16 -> AsmInst
-  AsmStxRegS :: AsmGeneralReg16 -> AsmInst
-  AsmStxRegP :: AsmGeneralReg16 -> AsmInst
+  AsmStxRegS :: AsmInst
+  AsmStxRegP :: AsmInst
   AsmPshA :: AsmInst
   AsmPshReg16 :: AsmGeneralReg16 -> AsmInst
   AsmPopA :: AsmInst
   AsmPopReg16 :: AsmGeneralReg16 -> AsmInst
   -- Jumps
-  AsmSjp :: Int -> AsmInst
+  AsmJmp :: Word16 -> AsmInst
   AsmBcs :: Int -> AsmInst -- if C=1 jump
   AsmBcr :: Int -> AsmInst -- if C=0 jump
   AsmBzs :: Int -> AsmInst -- if Z=1 jump
   AsmBzr :: Int -> AsmInst -- if Z=0 jump
+  AsmLop :: Int8 -> AsmInst -- Loop, UL = UL - 1, if UL != 0 jump to -Imm
+  -- Calls
+  AsmSjp :: Word16 -> AsmInst -- Jump to subroutine
+  -- Return
+  AsmRtn :: AsmInst
   deriving (Eq)
 
 instance Show AsmInst where
@@ -194,13 +199,20 @@ instance Show AsmInst where
   show (AsmSde reg) = "\tsde " ++ show reg ++ "\n"
   show (AsmSin reg) = "\tsin " ++ show reg ++ "\n"
   show (AsmStxReg16 reg) = "\tstx " ++ show reg ++ "\n"
-  show (AsmStxRegS reg) = "\tstx s, " ++ show reg ++ "\n"
-  show (AsmStxRegP reg) = "\tstx p, " ++ show reg ++ "\n"
+  show AsmStxRegS = "\tstx s\n"
+  show AsmStxRegP = "\tstx p\n"
   show AsmPshA = "\tpsh a\n"
   show (AsmPshReg16 reg) = "\tpsh " ++ show reg ++ "\n"
   show AsmPopA = "\tpop a\n"
   show (AsmPopReg16 reg) = "\tpop " ++ show reg ++ "\n"
+  show (AsmJmp addr) = "\tjmp " ++ show addr ++ "\n"
+  show (AsmBcs addr) = "\tbcs " ++ show addr ++ "\n"
+  show (AsmBcr addr) = "\tbcr " ++ show addr ++ "\n"
+  show (AsmBzs addr) = "\tbzs " ++ show addr ++ "\n"
+  show (AsmBzr addr) = "\tbzr " ++ show addr ++ "\n"
+  show (AsmLop imm) = "\tlop ul, " ++ show imm ++ "\n"
   show (AsmSjp addr) = "\tsjp " ++ show addr ++ "\n"
+  show AsmRtn = "\trtn\n"
 
 data AsmProgram = AsmProgram
   { asmInstructions :: [AsmInst],
@@ -208,3 +220,14 @@ data AsmProgram = AsmProgram
     asmStringLiteralBeginAddress :: Word16
   }
   deriving (Eq)
+
+instance Show AsmProgram where
+  show AsmProgram {asmInstructions, asmBeginAddress, asmStringLiteralBeginAddress} =
+    "BEGIN: "
+      ++ show asmBeginAddress
+      ++ "\n"
+      ++ "STRINGS BEGIN: "
+      ++ show asmStringLiteralBeginAddress
+      ++ "\n"
+      ++ concatMap show asmInstructions
+      ++ "END\n"
