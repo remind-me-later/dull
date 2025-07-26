@@ -176,3 +176,105 @@ FINALIZE_STRING:
     ; Byte 7: Length (already set)
     
     RTN
+
+; AL-X (7A00H-7A07H) contains a variable address, but we have to discard the exponent
+; and mantissa, and just dereference the address to get the value.
+AL_X_ADDR_INTO_Y:
+    ; Dereference AL-X (7A00H-7A07H) and store result in AL-X
+    LDI XH,0x7A ; AL-X (7A00H-7A07H)
+    LDI XL,0x00 ;
+    
+    ; Check if number is positive (sign byte at 7A01H must be 00H)
+    LDI XL,0x01
+    LIN X           ; A = (7A01H) - sign byte
+    CPI A,0x00      ; Check if positive (00H)
+    BZR POSITIVE_NUM
+    ; Number is negative - error
+    SEC             ; Set carry (error)
+    RTN
+    
+POSITIVE_NUM:
+    ; Extract address from bytes 3-4 (7A03H-7A04H)
+    ; Byte 3 contains high byte of address
+    LDI XL,0x03
+    LIN X           ; A = (7A03H), X = 7A04H
+    PSH A           ; Save high byte on stack
+    
+    ; Byte 4 contains low byte of address  
+    LIN X           ; A = (7A04H)
+    LDA A
+    PSH A           ; Save low byte on stack
+    
+    ; Check if address is in valid 16-bit range
+    ; Pop low byte first, then high byte
+    POP A           ; A = low byte
+    STA YL          ; YL = low byte
+    POP A           ; A = high byte
+    STA YH          ; YH = high byte
+    
+    ; Check if high byte indicates address > 0xFFFF (impossible for 16-bit)
+    ; and verify it's a reasonable address range
+    CPI A,0x80      ; Check if high byte >= 0x80 (above 32KB)
+    BCS ADDR_TOO_HIGH
+    
+    ; Check if address is zero (invalid)
+    LDA YH
+    ORA YL          ; OR high and low bytes
+    CPI A,0x00      ; Check if both are zero
+    BZS INVALID_ADDR
+    REC             ; Clear carry (success)
+    RTN             ; Return
+
+ADDR_TOO_HIGH:
+INVALID_ADDR:
+    ; Address validation failed
+    SEC             ; Set carry (error)
+    RTN             ; Return with error
+
+; Dereference AL-X address and store the 8-byte value at that address into AL-X
+DEREF_AL_X:
+    ; First get the address from AL-X into Y register
+    SJP AL_X_ADDR_INTO_Y
+    BCS DEREF_ERROR     ; If address validation failed, return error
+    
+    ; Y now contains the validated address
+    ; Copy the 8 bytes from (Y) into AL-X
+    LDI XH,0x7A         ; Point X to AL-X start
+    LDI XL,0x00
+    LDI UL,8            ; Copy 8 bytes
+    
+DEREF_LOOP:
+    LIN Y               ; A = (Y), Y += 1
+    SIN X               ; Store into AL-X, X += 1
+    LOP DEREF_LOOP      ; Loop until UL is zero
+    
+    REC                 ; Clear carry (success)
+    RTN                 ; Return
+
+DEREF_ERROR:
+    ; Address validation failed - carry already set
+    RTN                 ; Return with error
+
+; Store AL-Y (8 bytes) at the address pointed to by AL-X
+STORE_AL_Y_AT_AL_X_ADDR:
+    ; First get the address from AL-X into Y register
+    SJP AL_X_ADDR_INTO_Y
+    BCS STORE_ERROR     ; If address validation failed, return error
+    
+    ; Y now contains the validated address where we want to store AL-Y
+    ; Copy the 8 bytes from AL-Y into (Y)
+    LDI XH,0x7A         ; Point X to AL-Y start (7A10H)
+    LDI XL,0x10
+    LDI UL,8            ; Copy 8 bytes
+    
+STORE_LOOP:
+    LIN X               ; A = (AL-Y), X += 1
+    SIN Y               ; Store into (Y), Y += 1
+    LOP STORE_LOOP      ; Loop until UL is zero
+    
+    REC                 ; Clear carry (success)
+    RTN                 ; Return
+
+STORE_ERROR:
+    ; Address validation failed - carry already set
+    RTN                 ; Return with error
