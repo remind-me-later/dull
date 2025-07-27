@@ -8,6 +8,7 @@ module SymbolTable
     insertStringLiteral,
     insertUsedLabel,
     insertFakeVariable,
+    lookupFakeSymbol,
   )
 where
 
@@ -55,8 +56,7 @@ data SymbolTable where
     { symbolMap :: Map Ident Variable,
       fakeSymbolMap :: Map String Variable,
       stringLiteralMap :: Map String Word16,
-      nextOffsetVar :: Word16,
-      nextOffsetString :: Word16,
+      nextOffset :: Word16,
       usedLabels :: Map GotoTarget GotoTargetData
     } ->
     SymbolTable
@@ -98,41 +98,40 @@ emptySymbolTable :: SymbolTable
 emptySymbolTable =
   SymbolTable
     { symbolMap = empty,
-      nextOffsetVar = 0,
-      nextOffsetString = 0,
+      nextOffset = 0,
       stringLiteralMap = empty,
       usedLabels = mempty,
       fakeSymbolMap = empty
     }
 
 insertVariable :: Ident -> BasicType -> SymbolTable -> SymbolTable
-insertVariable sym ty st@SymbolTable {symbolMap, nextOffsetVar} =
+insertVariable sym ty st@SymbolTable {symbolMap, nextOffset} =
   let alreadyInSymbols = Data.Map.member sym symbolMap
       newSymbolName = getIdentName sym
-      newSymbol = Variable {variableName = [newSymbolName], variableOffset = nextOffsetVar, variableType = ty}
+      newSymbol = Variable {variableName = [newSymbolName], variableOffset = nextOffset, variableType = ty}
       newSymbols = insert sym newSymbol symbolMap
-      newOffset = nextOffsetVar + fromIntegral (sizeOfTy ty)
+      newOffset = nextOffset + fromIntegral (sizeOfTy ty)
    in if alreadyInSymbols
         then st
-        else st {symbolMap = newSymbols, nextOffsetVar = newOffset}
+        else st {symbolMap = newSymbols, nextOffset = newOffset}
 
 insertFakeVariable :: String -> BasicType -> SymbolTable -> SymbolTable
-insertFakeVariable name ty st@SymbolTable {fakeSymbolMap, nextOffsetVar} =
+insertFakeVariable name ty st@SymbolTable {fakeSymbolMap, nextOffset} =
   let alreadyInFakeSymbols = Data.Map.member name fakeSymbolMap
-      newFakeSymbol = Variable {variableName = name, variableOffset = nextOffsetVar, variableType = ty}
+      newFakeSymbol = Variable {variableName = name, variableOffset = nextOffset, variableType = ty}
       newFakeSymbols = insert name newFakeSymbol fakeSymbolMap
-      newOffset = nextOffsetVar + fromIntegral (sizeOfTy ty)
+      newOffset = nextOffset + fromIntegral (sizeOfTy ty)
    in if alreadyInFakeSymbols
         then st
-        else st {fakeSymbolMap = newFakeSymbols, nextOffsetVar = newOffset}
+        else st {fakeSymbolMap = newFakeSymbols, nextOffset = newOffset}
 
 insertStringLiteral :: String -> SymbolTable -> SymbolTable
-insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffsetString} =
+insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffset} =
   let alreadyInLiterals = Data.Map.member str stringLiteralMap
-      newOffset = nextOffsetString + fromIntegral (length str + stringHeaderSize)
+      newOffset = nextOffset + fromIntegral (length str + stringHeaderSize)
    in if alreadyInLiterals
         then st
-        else st {stringLiteralMap = insert str nextOffsetString stringLiteralMap, nextOffsetString = newOffset}
+        else st {stringLiteralMap = insert str nextOffset stringLiteralMap, nextOffset = newOffset}
 
 insertUsedLabel :: GotoTarget -> Bool -> SymbolTable -> SymbolTable
 insertUsedLabel label isFunctionCall st@SymbolTable {usedLabels} =
@@ -146,3 +145,7 @@ insertUsedLabel label isFunctionCall st@SymbolTable {usedLabels} =
 lookupSymbol :: Ident -> SymbolTable -> Maybe Variable
 lookupSymbol name SymbolTable {symbolMap} =
   Data.Map.lookup name symbolMap
+
+lookupFakeSymbol :: String -> SymbolTable -> Maybe Variable
+lookupFakeSymbol name SymbolTable {fakeSymbolMap} =
+  Data.Map.lookup name fakeSymbolMap

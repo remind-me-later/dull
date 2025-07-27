@@ -123,10 +123,6 @@ instance Show HirFun where
 type Label = Int
 
 data HirInst where
-  HirLdVarAddrIntoAlX :: HirIdent -> HirInst
-  HirLdVarAddrIntoAlY :: HirIdent -> HirInst
-  HirLdVarIntoAlX :: HirIdent -> HirInst
-  HirLdVarIntoAlY :: HirIdent -> HirInst
   HirLdImmIntoAlX :: Double -> HirInst
   HirLdImmIntoAlY :: Double -> HirInst
   HirLdImmIndirectIntoAlX :: Word16 -> HirInst
@@ -136,7 +132,7 @@ data HirInst where
   HirAddrInAlXToUreg :: HirInst
   HirAlXToAlY :: HirInst
   HirAlYToAlX :: HirInst
-  HirVarAddrToUreg :: HirIdent -> HirInst
+  HirImmToUreg :: Word16 -> HirInst
   HirFun :: HirFun -> HirInst
   -- Labels
   HirLabel :: Label -> HirInst
@@ -151,14 +147,6 @@ data HirInst where
   deriving (Eq)
 
 instance Show HirInst where
-  show (HirLdVarAddrIntoAlX ident) =
-    "\tAL-X = &" ++ show ident
-  show (HirLdVarAddrIntoAlY ident) =
-    "\tAL-Y = &" ++ show ident
-  show (HirLdVarIntoAlX ident) =
-    "\tAL-X = " ++ show ident
-  show (HirLdVarIntoAlY ident) =
-    "\tAL-Y = " ++ show ident
   show (HirLdImmIntoAlX num) =
     "\tAL-X = " ++ show num
   show (HirLdImmIntoAlY num) =
@@ -170,8 +158,8 @@ instance Show HirInst where
   show HirStAlXInUreg = "\t(Ureg) = AL-X"
   show HirAddrInAlXToUreg = "\tUreg = (AL-X)"
   show HirAddrInUregIntoAlX = "\tAL-X = (Ureg)"
-  show (HirVarAddrToUreg ident) =
-    "\tUreg = &" ++ show ident
+  show (HirImmToUreg ident) =
+    "\tUreg = " ++ show ident
   show HirAlXToAlY = "\tAL-Y = AL-X"
   show HirAlYToAlX = "\tAL-X = AL-Y"
   show (HirLabel idx) = "L" ++ show idx ++ ":"

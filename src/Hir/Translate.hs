@@ -68,28 +68,30 @@ hirUserSetSleepTimeFakeVarName :: String
 hirUserSetSleepTimeFakeVarName = "user_set_sleep_time"
 
 translateIdent :: Ident -> State TranslationState ([HirInst], BasicType)
-translateIdent Ident {identName, identHasDollar} =
-  let newIdent =
-        HirBasicIdent
-          { hirIdentName = identName,
-            hirIdentHasDollar = identHasDollar
-          }
-   in return
-        ( [HirLdVarIntoAlX newIdent],
-          if identHasDollar then BasicStringType else BasicNumericType
-        )
+translateIdent id'@Ident {identHasDollar} = do
+  var <- gets (lookupSymbol id' . symbolTable)
+  let varOffset =
+        case var of
+          Just Variable {variableOffset} -> variableOffset
+          Nothing -> error $ "Variable not found: " ++ show id'
+
+  return
+    ( [HirLdImmIndirectIntoAlX varOffset],
+      if identHasDollar then BasicStringType else BasicNumericType
+    )
 
 translateIdentAddr :: Ident -> State TranslationState ([HirInst], BasicType)
-translateIdentAddr Ident {identName, identHasDollar} =
-  let newIdent =
-        HirBasicIdent
-          { hirIdentName = identName,
-            hirIdentHasDollar = identHasDollar
-          }
-   in return
-        ( [HirLdVarAddrIntoAlX newIdent],
-          if identHasDollar then BasicStringType else BasicNumericType
-        )
+translateIdentAddr id'@Ident {identHasDollar} = do
+  var <- gets (lookupSymbol id' . symbolTable)
+  let varOffset =
+        case var of
+          Just Variable {variableOffset} -> variableOffset
+          Nothing -> error $ "Variable not found: " ++ show id'
+
+  return
+    ( [HirImmToUreg varOffset],
+      if identHasDollar then BasicStringType else BasicNumericType
+    )
 
 translateLValueRead :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
 translateLValueRead (LValueIdent ident) = translateIdent ident
@@ -107,14 +109,24 @@ translateLValueRead LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
 translateLValueRead (LValuePseudoVar pseudoVar) =
   -- TODO: fix this, we should translate psuedo vars into intrinsic calls
   case pseudoVar of
-    TimePseudoVar ->
+    TimePseudoVar -> do
+      var <- gets (lookupFakeSymbol "time" . symbolTable)
+      let varOffset =
+            case var of
+              Just Variable {variableOffset} -> variableOffset
+              Nothing -> error "Time pseudo variable not found"
       return
-        ( [HirLdVarIntoAlX (HirFakeIdent {hirFakeIdentName = "time"})],
+        ( [HirLdImmIndirectIntoAlX varOffset],
           BasicNumericType
         )
-    InkeyPseudoVar ->
+    InkeyPseudoVar -> do
+      var <- gets (lookupFakeSymbol "inkey" . symbolTable)
+      let varOffset =
+            case var of
+              Just Variable {variableOffset} -> variableOffset
+              Nothing -> error "Inkey pseudo variable not found"
       return
-        ( [HirLdVarIntoAlX (HirFakeIdent {hirFakeIdentName = "inkey"})],
+        ( [HirLdImmIndirectIntoAlX varOffset],
           BasicStringType
         )
 
@@ -215,9 +227,16 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
 translateLValueIntoUreg :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
 translateLValueIntoUreg assignmentLValue = do
   case assignmentLValue of
-    LValueIdent Ident {identHasDollar, identName} -> do
-      let ident = HirBasicIdent {hirIdentName = identName, hirIdentHasDollar = identHasDollar}
-      return ([HirVarAddrToUreg ident], if identHasDollar then BasicStringType else BasicNumericType)
+    LValueIdent id'@Ident {identHasDollar} -> do
+      var <- gets (lookupSymbol id' . symbolTable)
+      let varOffset =
+            case var of
+              Just Variable {variableOffset} -> variableOffset
+              Nothing -> error $ "Variable not found: " ++ show id'
+      return
+        ( [HirImmToUreg varOffset],
+          if identHasDollar then BasicStringType else BasicNumericType
+        )
     LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} -> do
       (identAddr, ty) <- translateIdentAddr lValueArrayIdent
       indexInsts <- translateExpr lValueArrayIndex
@@ -232,9 +251,25 @@ translateLValueIntoUreg assignmentLValue = do
     LValuePseudoVar pseudoVar -> do
       case pseudoVar of
         TimePseudoVar -> do
-          return ([HirVarAddrToUreg (HirFakeIdent {hirFakeIdentName = "time"})], BasicNumericType)
+          var <- gets (lookupFakeSymbol "time" . symbolTable)
+          let varOffset =
+                case var of
+                  Just Variable {variableOffset} -> variableOffset
+                  Nothing -> error "Time pseudo variable not found"
+          return
+            ( [HirImmToUreg varOffset],
+              BasicNumericType
+            )
         InkeyPseudoVar -> do
-          return ([HirVarAddrToUreg (HirFakeIdent {hirFakeIdentName = "inkey"})], BasicStringType)
+          var <- gets (lookupFakeSymbol "inkey" . symbolTable)
+          let varOffset =
+                case var of
+                  Just Variable {variableOffset} -> variableOffset
+                  Nothing -> error "Inkey pseudo variable not found"
+          return
+            ( [HirImmToUreg varOffset],
+              BasicStringType
+            )
 
 translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
@@ -348,16 +383,17 @@ translateStmt stmt = case stmt of
       PrintEndingNewLine -> do
         cursorInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
 
-        let sleepInsts = case printKind of
-              PrintKindPrint ->
-                [ HirLdVarIntoAlX
-                    HirFakeIdent
-                      { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                      }
-                ]
-              PrintKindPause ->
-                -- FIXME: more or less a second, research true value
-                [HirLdImmIntoAlX 64]
+        sleepInsts <- case printKind of
+          PrintKindPrint -> do
+            var <- gets (lookupFakeSymbol hirUserSetSleepTimeFakeVarName . symbolTable)
+            let varOffset =
+                  case var of
+                    Just Variable {variableOffset} -> variableOffset
+                    Nothing -> error "User set sleep time variable not found"
+            return [HirLdImmIndirectIntoAlX varOffset]
+          PrintKindPause ->
+            -- FIXME: more or less a second, research true value
+            return [HirLdImmIntoAlX 64]
         return $
           sleepInsts
             ++ [ HirIntrinsicCall HirSleep,
@@ -406,11 +442,13 @@ translateStmt stmt = case stmt of
     ending <- case gprintEnding of
       PrintEndingNewLine -> do
         exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
+        var <- gets (lookupFakeSymbol hirUserSetSleepTimeFakeVarName . symbolTable)
+        let varOffset =
+              case var of
+                Just Variable {variableOffset} -> variableOffset
+                Nothing -> error "User set sleep time variable not found"
         return $
-          [ HirLdVarIntoAlX
-              HirFakeIdent
-                { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                },
+          [ HirLdImmIndirectIntoAlX varOffset,
             HirIntrinsicCall HirSleep,
             HirIntrinsicCall HirCls
           ]
@@ -438,13 +476,15 @@ translateStmt stmt = case stmt of
             }
 
     unmaybeWait <- translateExpr (fromMaybe infiniteWaitTime waitForExpr)
+    var <- gets (lookupFakeSymbol hirUserSetSleepTimeFakeVarName . symbolTable)
+    let varOffset =
+          case var of
+            Just Variable {variableOffset} -> variableOffset
+            Nothing -> error "User set sleep time variable not found"
 
     return $
       unmaybeWait
-        ++ [ HirLdVarIntoAlX
-               HirFakeIdent
-                 { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                 },
+        ++ [ HirLdImmIndirectIntoAlX varOffset,
              HirIntrinsicCall HirSleep
            ]
   PokeStmt {pokeKind, pokeExprs} -> do
