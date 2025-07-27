@@ -1,35 +1,12 @@
--- In this representation all "words" are 8 bytes long, the size of the BASIC
--- variables
-
 module Hir.Types
   ( HirIntrinsic (..),
     HirFun (..),
     HirInst (..),
     HirProgram (..),
-    HirIdent (..),
   )
 where
 
 import Data.Word (Word16)
-
-data HirIdent where
-  HirBasicIdent ::
-    { hirIdentName :: Char,
-      hirIdentHasDollar :: Bool
-    } ->
-    HirIdent
-  -- These are identifiers that we include in the Hir code but that
-  -- don't exist in the original source code.
-  HirFakeIdent ::
-    { hirFakeIdentName :: String
-    } ->
-    HirIdent
-  deriving (Eq)
-
-instance Show HirIdent where
-  show (HirBasicIdent name hasDollar) =
-    if hasDollar then [name, '$'] else [name]
-  show (HirFakeIdent name) = '!' : name
 
 data HirIntrinsic where
   HirPrintNum :: HirIntrinsic
