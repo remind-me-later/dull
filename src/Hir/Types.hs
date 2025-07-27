@@ -3,13 +3,14 @@
 
 module Hir.Types
   ( HirIntrinsic (..),
-    HirStackOps (..),
+    HirFun (..),
     HirInst (..),
     HirProgram (..),
     HirIdent (..),
-    HirOperand (..),
   )
 where
+
+import Data.Word (Word16)
 
 data HirIdent where
   HirBasicIdent ::
@@ -23,28 +24,12 @@ data HirIdent where
     { hirFakeIdentName :: String
     } ->
     HirIdent
-  -- Arithmetic internal registers
-  HirArithXReg :: HirIdent
-  HirArithYReg :: HirIdent
   deriving (Eq)
 
 instance Show HirIdent where
   show (HirBasicIdent name hasDollar) =
     if hasDollar then [name, '$'] else [name]
   show (HirFakeIdent name) = '!' : name
-  show HirArithXReg = "AL-X"
-  show HirArithYReg = "AL-Y"
-
-data HirOperand where
-  HirOperandNumLit :: Double -> HirOperand
-  HirOperandStrLitAddr :: String -> HirOperand
-  HirOperandVarAddr :: HirIdent -> HirOperand
-  deriving (Eq)
-
-instance Show HirOperand where
-  show (HirOperandNumLit num) = show num
-  show (HirOperandStrLitAddr offset) = '&' : show offset
-  show (HirOperandVarAddr ident) = '&' : show ident
 
 data HirIntrinsic where
   HirPrintNum :: HirIntrinsic
@@ -85,34 +70,34 @@ instance Show HirIntrinsic where
   show (HirBeepStmt hasOptParams) =
     "beep" ++ (if hasOptParams then "_with_params" else "")
 
-data HirStackOps where
+data HirFun where
   -- Arithmetic operations
-  HirAddOp :: HirStackOps
-  HirSubOp :: HirStackOps
-  HirMulOp :: HirStackOps
-  HirDivOp :: HirStackOps
-  HirExponentOp :: HirStackOps
-  HirAndOp :: HirStackOps
-  HirOrOp :: HirStackOps
+  HirAddOp :: HirFun
+  HirSubOp :: HirFun
+  HirMulOp :: HirFun
+  HirDivOp :: HirFun
+  HirExponentOp :: HirFun
+  HirAndOp :: HirFun
+  HirOrOp :: HirFun
   -- Comparison operations
-  HirEqOp :: HirStackOps
-  HirNeqOp :: HirStackOps
-  HirLtOp :: HirStackOps
-  HirLeqOp :: HirStackOps
-  HirGtOp :: HirStackOps
-  HirGeqOp :: HirStackOps
+  HirEqOp :: HirFun
+  HirNeqOp :: HirFun
+  HirLtOp :: HirFun
+  HirLeqOp :: HirFun
+  HirGtOp :: HirFun
+  HirGeqOp :: HirFun
   -- "Special" operations
-  HirMidOp :: HirStackOps
-  HirLeftOp :: HirStackOps
-  HirRightOp :: HirStackOps
-  HirAsciiOp :: HirStackOps
-  HirPointOp :: HirStackOps
-  HirRndOp :: HirStackOps
-  HirIntOp :: HirStackOps
-  HirSgnOp :: HirStackOps
+  HirMidOp :: HirFun
+  HirLeftOp :: HirFun
+  HirRightOp :: HirFun
+  HirAsciiOp :: HirFun
+  HirPointOp :: HirFun
+  HirRndOp :: HirFun
+  HirIntOp :: HirFun
+  HirSgnOp :: HirFun
   deriving (Eq)
 
-instance Show HirStackOps where
+instance Show HirFun where
   show HirMidOp = "mid" -- TODO: docs page 126 wtf does that mean?
   show HirLeftOp = "left AL-X, 7890H"
   show HirRightOp = "right AL-X, 7890H"
@@ -138,9 +123,21 @@ instance Show HirStackOps where
 type Label = Int
 
 data HirInst where
-  HirAssign :: HirOperand -> HirOperand -> HirInst
-  HirOp :: HirStackOps -> HirInst
-  HirDeref :: HirInst
+  HirLdVarAddrIntoAlX :: HirIdent -> HirInst
+  HirLdVarAddrIntoAlY :: HirIdent -> HirInst
+  HirLdVarIntoAlX :: HirIdent -> HirInst
+  HirLdVarIntoAlY :: HirIdent -> HirInst
+  HirLdImmIntoAlX :: Double -> HirInst
+  HirLdImmIntoAlY :: Double -> HirInst
+  HirLdImmIndirectIntoAlX :: Word16 -> HirInst
+  HirLdImmIndirectIntoAlY :: Word16 -> HirInst
+  HirAddrInUregIntoAlX :: HirInst
+  HirStAlXInUreg :: HirInst
+  HirAddrInAlXToUreg :: HirInst
+  HirAlXToAlY :: HirInst
+  HirAlYToAlX :: HirInst
+  HirVarAddrToUreg :: HirIdent -> HirInst
+  HirFun :: HirFun -> HirInst
   -- Labels
   HirLabel :: Label -> HirInst
   -- Jumps
@@ -154,17 +151,37 @@ data HirInst where
   deriving (Eq)
 
 instance Show HirInst where
+  show (HirLdVarAddrIntoAlX ident) =
+    "\tAL-X = &" ++ show ident
+  show (HirLdVarAddrIntoAlY ident) =
+    "\tAL-Y = &" ++ show ident
+  show (HirLdVarIntoAlX ident) =
+    "\tAL-X = " ++ show ident
+  show (HirLdVarIntoAlY ident) =
+    "\tAL-Y = " ++ show ident
+  show (HirLdImmIntoAlX num) =
+    "\tAL-X = " ++ show num
+  show (HirLdImmIntoAlY num) =
+    "\tAL-Y = " ++ show num
+  show (HirLdImmIndirectIntoAlX addr) =
+    "\tAL-X = (" ++ show addr ++ ")"
+  show (HirLdImmIndirectIntoAlY addr) =
+    "\tAL-Y = (" ++ show addr ++ ")"
+  show HirStAlXInUreg = "\t(Ureg) = AL-X"
+  show HirAddrInAlXToUreg = "\tUreg = (AL-X)"
+  show HirAddrInUregIntoAlX = "\tAL-X = (Ureg)"
+  show (HirVarAddrToUreg ident) =
+    "\tUreg = &" ++ show ident
+  show HirAlXToAlY = "\tAL-Y = AL-X"
+  show HirAlYToAlX = "\tAL-X = AL-Y"
   show (HirLabel idx) = "L" ++ show idx ++ ":"
   show (HirGoto idx) = "\tgoto L" ++ show idx
   show (HirCall idx) = "\tcall L" ++ show idx
-  show (HirCondGoto idx) = "\tgoto? L" ++ show idx
-  show (HirCondCall idx) = "\tcall? L" ++ show idx
+  show (HirCondGoto idx) = "\tif Z goto L" ++ show idx
+  show (HirCondCall idx) = "\tif Z call L" ++ show idx
   show HirReturn = "\treturn"
-  show (HirAssign a b) =
-    "\t" ++ show a ++ " = " ++ show b
   show (HirIntrinsicCall intrinsic) = "\t@" ++ show intrinsic
-  show (HirOp op) = "\t" ++ show op
-  show HirDeref = "\tAL-X = (AL-X)"
+  show (HirFun op) = "\t" ++ show op
 
 newtype HirProgram = HirProgram
   { hirProgramStatements :: [HirInst]

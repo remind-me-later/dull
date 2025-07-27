@@ -100,8 +100,10 @@ instance Show AsmOperand8 where
   show (AsmOperandReg8 reg) = show reg
   show (AsmOperandIndirect access) = show access
 
+type Label = Int
+
 data AsmInst where
-  AsmLabel :: Int -> AsmInst
+  AsmLabel :: Label -> AsmInst
   AsmAdc :: AsmOperand8 -> AsmInst
   AsmAdi :: AsmOperand8 -> Int8 -> AsmInst
   AsmDca :: AsmIndirectReg16Access -> AsmInst
@@ -147,12 +149,12 @@ data AsmInst where
   AsmPopA :: AsmInst
   AsmPopReg16 :: AsmGeneralReg16 -> AsmInst
   -- Jumps
-  AsmJmp :: Word16 -> AsmInst
-  AsmBcs :: Int -> AsmInst -- if C=1 jump
-  AsmBcr :: Int -> AsmInst -- if C=0 jump
-  AsmBzs :: Int -> AsmInst -- if Z=1 jump
-  AsmBzr :: Int -> AsmInst -- if Z=0 jump
-  AsmLop :: Int8 -> AsmInst -- Loop, UL = UL - 1, if UL != 0 jump to -Imm
+  AsmJmp :: Label -> AsmInst
+  AsmBcs :: Label -> AsmInst -- if C=1 jump
+  AsmBcr :: Label -> AsmInst -- if C=0 jump
+  AsmBzs :: Label -> AsmInst -- if Z=1 jump
+  AsmBzr :: Label -> AsmInst -- if Z=0 jump
+  AsmLop :: Label -> AsmInst -- Loop, UL = UL - 1, if UL != 0 jump to -Imm
   -- Calls
   AsmSjp :: Word16 -> AsmInst -- Jump to subroutine
   -- Return

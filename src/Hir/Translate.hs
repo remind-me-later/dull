@@ -75,41 +75,46 @@ translateIdent Ident {identName, identHasDollar} =
             hirIdentHasDollar = identHasDollar
           }
    in return
-        ( [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandVarAddr newIdent)],
+        ( [HirLdVarIntoAlX newIdent],
           if identHasDollar then BasicStringType else BasicNumericType
         )
 
-translateLValue :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
-translateLValue (LValueIdent ident) = translateIdent ident
-translateLValue LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
-  (newIdent, ty) <- translateIdent lValueArrayIdent
+translateIdentAddr :: Ident -> State TranslationState ([HirInst], BasicType)
+translateIdentAddr Ident {identName, identHasDollar} =
+  let newIdent =
+        HirBasicIdent
+          { hirIdentName = identName,
+            hirIdentHasDollar = identHasDollar
+          }
+   in return
+        ( [HirLdVarAddrIntoAlX newIdent],
+          if identHasDollar then BasicStringType else BasicNumericType
+        )
+
+translateLValueRead :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
+translateLValueRead (LValueIdent ident) = translateIdent ident
+translateLValueRead LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
+  (identAddr, ty) <- translateIdentAddr lValueArrayIdent
   indexInsts <- translateExpr lValueArrayIndex
 
   return
-    ( indexInsts
-        ++ newIdent
-        ++ [ HirOp HirAddOp,
-             HirDeref
-           ],
+    ( identAddr
+        ++ [HirAlXToAlY]
+        ++ indexInsts
+        ++ [HirFun HirAddOp, HirAddrInAlXToUreg, HirAddrInUregIntoAlX],
       ty
     )
-translateLValue (LValuePseudoVar pseudoVar) =
+translateLValueRead (LValuePseudoVar pseudoVar) =
   -- TODO: fix this, we should translate psuedo vars into intrinsic calls
   case pseudoVar of
     TimePseudoVar ->
       return
-        ( [ HirAssign
-              (HirOperandVarAddr HirArithXReg)
-              (HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "time"})
-          ],
+        ( [HirLdVarIntoAlX (HirFakeIdent {hirFakeIdentName = "time"})],
           BasicNumericType
         )
     InkeyPseudoVar ->
       return
-        ( [ HirAssign
-              (HirOperandVarAddr HirArithXReg)
-              (HirOperandVarAddr HirFakeIdent {hirFakeIdentName = "inkey"})
-          ],
+        ( [HirLdVarIntoAlX (HirFakeIdent {hirFakeIdentName = "inkey"})],
           BasicStringType
         )
 
@@ -117,12 +122,9 @@ translateStringVariableOrLiteral :: StringVariableOrLiteral -> State Translation
 translateStringVariableOrLiteral (StringVariable var) = do
   (r, _) <- translateIdent var
   return r
-translateStringVariableOrLiteral (StringLiteral str) =
-  return
-    [ HirAssign
-        (HirOperandVarAddr HirArithXReg)
-        (HirOperandStrLitAddr str)
-    ]
+translateStringVariableOrLiteral (StringLiteral str) = do
+  strOffset <- gets (lookupStringLiteralOffset str)
+  return [HirLdImmIndirectIntoAlX strOffset]
 
 translateFunction :: Function BasicType -> State TranslationState [HirInst]
 translateFunction function = case function of
@@ -130,64 +132,62 @@ translateFunction function = case function of
     stringInsts <- translateStringVariableOrLiteral midFunStringExpr
     startInsts <- translateExpr midFunStartExpr
     lengthInsts <- translateExpr midFunLengthExpr
-    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirOp HirMidOp]
+    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirFun HirMidOp]
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral leftFunStringExpr
     lengthInsts <- translateExpr leftFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirOp HirLeftOp]
+    return $ stringInsts ++ lengthInsts ++ [HirFun HirLeftOp]
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral rightFunStringExpr
     lengthInsts <- translateExpr rightFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirOp HirRightOp]
+    return $ stringInsts ++ lengthInsts ++ [HirFun HirRightOp]
   AsciiFun {asciiFunArgument} -> do
     argInsts <- translateStringVariableOrLiteral asciiFunArgument
-    return $ argInsts ++ [HirOp HirAsciiOp]
+    return $ argInsts ++ [HirFun HirAsciiOp]
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
-    return $ posInsts ++ [HirOp HirPointOp]
+    return $ posInsts ++ [HirFun HirPointOp]
   RndFun {rndRangeEnd} ->
     return
-      [ HirAssign
-          (HirOperandVarAddr HirArithXReg)
-          (HirOperandNumLit (fromIntegral rndRangeEnd)),
-        HirOp HirRndOp
+      [ HirLdImmIntoAlX (fromIntegral rndRangeEnd),
+        HirFun HirRndOp
       ]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
-    return $ exprInsts ++ [HirOp HirIntOp]
+    return $ exprInsts ++ [HirFun HirIntOp]
   SgnFun {sgnFunExpr} -> do
     exprInsts <- translateExpr sgnFunExpr
-    return $ exprInsts ++ [HirOp HirSgnOp]
+    return $ exprInsts ++ [HirFun HirSgnOp]
 
 translateBinOp :: BinOperator -> HirInst
-translateBinOp AddOp = HirOp HirAddOp
-translateBinOp SubtractOp = HirOp HirSubOp
-translateBinOp MultiplyOp = HirOp HirMulOp
-translateBinOp DivideOp = HirOp HirDivOp
-translateBinOp CaretOp = HirOp HirExponentOp
-translateBinOp AndOp = HirOp HirAndOp
-translateBinOp OrOp = HirOp HirOrOp
-translateBinOp EqualOp = HirOp HirEqOp
-translateBinOp NotEqualOp = HirOp HirNeqOp
-translateBinOp LessThanOp = HirOp HirLtOp
-translateBinOp LessThanOrEqualOp = HirOp HirLeqOp
-translateBinOp GreaterThanOp = HirOp HirGtOp
-translateBinOp GreaterThanOrEqualOp = HirOp HirGeqOp
+translateBinOp AddOp = HirFun HirAddOp
+translateBinOp SubtractOp = HirFun HirSubOp
+translateBinOp MultiplyOp = HirFun HirMulOp
+translateBinOp DivideOp = HirFun HirDivOp
+translateBinOp CaretOp = HirFun HirExponentOp
+translateBinOp AndOp = HirFun HirAndOp
+translateBinOp OrOp = HirFun HirOrOp
+translateBinOp EqualOp = HirFun HirEqOp
+translateBinOp NotEqualOp = HirFun HirNeqOp
+translateBinOp LessThanOp = HirFun HirLtOp
+translateBinOp LessThanOrEqualOp = HirFun HirLeqOp
+translateBinOp GreaterThanOp = HirFun HirGtOp
+translateBinOp GreaterThanOrEqualOp = HirFun HirGeqOp
 
 translateUnaryOp :: UnaryOperator -> [HirInst]
 translateUnaryOp UnaryMinusOp = do
   -- 0 - x
   [ -- AL-Y = AL-X
-    HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandVarAddr HirArithXReg),
+    HirAlXToAlY,
     -- AL-X = 0
-    HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandNumLit 0),
+    HirLdImmIntoAlX 0,
     -- AL-X = AL-X - AL-Y
-    HirOp HirSubOp
+    HirFun HirSubOp
     ]
 translateUnaryOp UnaryNotOp = do
   -- 0 is false, anything else is true
-  [ HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandNumLit 0),
-    HirOp HirEqOp
+  [ HirLdImmIntoAlY 0,
+    HirFun HirEqOp
     ]
 translateUnaryOp UnaryPlusOp = do
   -- x
@@ -196,33 +196,51 @@ translateUnaryOp UnaryPlusOp = do
 translateExpr :: Expr BasicType -> State TranslationState [HirInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
   NumLitExpr n ->
-    return [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandNumLit n)]
-  StrLitExpr s ->
-    return [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandStrLitAddr s)]
+    return [HirLdImmIntoAlX n]
+  StrLitExpr s -> do
+    strOffset <- gets (lookupStringLiteralOffset s)
+    return [HirLdImmIndirectIntoAlX strOffset]
   LValueExpr lvalue -> do
-    (lvalueAddr, _) <- translateLValue lvalue
-    return $ lvalueAddr ++ [HirDeref]
+    (lvalue', _) <- translateLValueRead lvalue
+    return lvalue'
   BinExpr left op right -> do
     leftInsts <- translateExpr left
     rightInsts <- translateExpr right
-    return $ leftInsts ++ rightInsts ++ [translateBinOp op]
+    return $ leftInsts ++ [HirAlXToAlY] ++ rightInsts ++ [translateBinOp op]
   UnaryExpr op expr' -> do
     exprInsts <- translateExpr expr'
     return $ exprInsts ++ translateUnaryOp op
   FunCallExpr function -> translateFunction function
 
+translateLValueIntoUreg :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
+translateLValueIntoUreg assignmentLValue = do
+  case assignmentLValue of
+    LValueIdent Ident {identHasDollar, identName} -> do
+      let ident = HirBasicIdent {hirIdentName = identName, hirIdentHasDollar = identHasDollar}
+      return ([HirVarAddrToUreg ident], if identHasDollar then BasicStringType else BasicNumericType)
+    LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} -> do
+      (identAddr, ty) <- translateIdentAddr lValueArrayIdent
+      indexInsts <- translateExpr lValueArrayIndex
+
+      return
+        ( identAddr
+            ++ [HirAlXToAlY]
+            ++ indexInsts
+            ++ [HirFun HirAddOp, HirStAlXInUreg],
+          ty
+        )
+    LValuePseudoVar pseudoVar -> do
+      case pseudoVar of
+        TimePseudoVar -> do
+          return ([HirVarAddrToUreg (HirFakeIdent {hirFakeIdentName = "time"})], BasicNumericType)
+        InkeyPseudoVar -> do
+          return ([HirVarAddrToUreg (HirFakeIdent {hirFakeIdentName = "inkey"})], BasicStringType)
+
 translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
-  (lvalueAddr, _) <- translateLValue assignmentLValue
+  (lvalueInsts, _) <- translateLValueIntoUreg assignmentLValue
   exprInsts <- translateExpr assignmentExpr
-  -- return $ exprInsts ++ lvalueAddr ++ [HirAssign]
-  return $
-    lvalueAddr
-      ++ [HirAssign (HirOperandVarAddr HirArithYReg) (HirOperandVarAddr HirArithXReg)]
-      ++ exprInsts
-      ++ [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandVarAddr HirArithYReg)]
-      -- Address is now in AL-X, dereference it
-      ++ [HirDeref]
+  return $ lvalueInsts ++ exprInsts ++ [HirStAlXInUreg]
 
 translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
 translateStmt stmt = case stmt of
@@ -332,17 +350,14 @@ translateStmt stmt = case stmt of
 
         let sleepInsts = case printKind of
               PrintKindPrint ->
-                [ HirAssign
-                    (HirOperandVarAddr HirArithXReg)
-                    ( HirOperandVarAddr
-                        HirFakeIdent
-                          { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                          }
-                    )
+                [ HirLdVarIntoAlX
+                    HirFakeIdent
+                      { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                      }
                 ]
               PrintKindPause ->
                 -- FIXME: more or less a second, research true value
-                [HirAssign (HirOperandVarAddr HirArithXReg) (HirOperandNumLit 64)]
+                [HirLdImmIntoAlX 64]
         return $
           sleepInsts
             ++ [ HirIntrinsicCall HirSleep,
@@ -355,13 +370,13 @@ translateStmt stmt = case stmt of
     return $ usingClause ++ hirPrints' ++ putchar
   UsingStmt (UsingClause u) -> return [HirIntrinsicCall $ HirUsing u]
   InputStmt {inputPrintExpr, inputDestination} -> do
-    (inputDestAddr, ty) <- translateLValue inputDestination
+    (inputDest, ty) <- translateLValueIntoUreg inputDestination
     let inputInst = case ty of
           BasicNumericType -> [HirIntrinsicCall HirInputNum]
           BasicStringType -> [HirIntrinsicCall HirInputStr]
           _ -> error $ "Unsupported input destination type: " ++ show ty
 
-    let inputStmt = inputDestAddr ++ inputInst
+    let inputStmt = inputDest ++ inputInst
 
     case inputPrintExpr of
       Just expr -> do
@@ -392,13 +407,10 @@ translateStmt stmt = case stmt of
       PrintEndingNewLine -> do
         exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
         return $
-          [ HirAssign
-              (HirOperandVarAddr HirArithXReg)
-              ( HirOperandVarAddr
-                  HirFakeIdent
-                    { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                    }
-              ),
+          [ HirLdVarIntoAlX
+              HirFakeIdent
+                { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                },
             HirIntrinsicCall HirSleep,
             HirIntrinsicCall HirCls
           ]
@@ -429,13 +441,10 @@ translateStmt stmt = case stmt of
 
     return $
       unmaybeWait
-        ++ [ HirAssign
-               (HirOperandVarAddr HirArithXReg)
-               ( HirOperandVarAddr
-                   HirFakeIdent
-                     { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
-                     }
-               ),
+        ++ [ HirLdVarIntoAlX
+               HirFakeIdent
+                 { hirFakeIdentName = hirUserSetSleepTimeFakeVarName
+                 },
              HirIntrinsicCall HirSleep
            ]
   PokeStmt {pokeKind, pokeExprs} -> do
