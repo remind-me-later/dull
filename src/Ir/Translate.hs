@@ -1,11 +1,11 @@
-module Hir.Translate where
+module Ir.Translate where
 
 import Ast.Types
 import Control.Monad.State
 import Data.Map qualified
 import Data.Maybe (fromMaybe)
 import Data.Word (Word16)
-import Hir.Types
+import Ir.Types
 import SymbolTable
 import TypeSystem (BasicType (..))
 
@@ -64,10 +64,10 @@ lookupStringLiteralOffset str state' =
     Just offset -> offset
     Nothing -> error $ "String literal not found: " ++ str
 
-hirUserSetSleepTimeFakeVarName :: String
-hirUserSetSleepTimeFakeVarName = "user_set_sleep_time"
+irUserSetSleepTimeFakeVarName :: String
+irUserSetSleepTimeFakeVarName = "user_set_sleep_time"
 
-translateIdent :: Ident -> State TranslationState ([HirInst], BasicType)
+translateIdent :: Ident -> State TranslationState ([IrInst], BasicType)
 translateIdent id'@Ident {identHasDollar} = do
   var <- gets (lookupSymbol id' . symbolTable)
   let varOffset =
@@ -76,11 +76,11 @@ translateIdent id'@Ident {identHasDollar} = do
           Nothing -> error $ "Variable not found: " ++ show id'
 
   return
-    ( [HirLdImmIndirectIntoAlX varOffset],
+    ( [IrLdImmIndirectIntoAlX varOffset],
       if identHasDollar then BasicStringType else BasicNumericType
     )
 
-translateIdentAddr :: Ident -> State TranslationState ([HirInst], BasicType)
+translateIdentAddr :: Ident -> State TranslationState ([IrInst], BasicType)
 translateIdentAddr id'@Ident {identHasDollar} = do
   var <- gets (lookupSymbol id' . symbolTable)
   let varOffset =
@@ -89,11 +89,11 @@ translateIdentAddr id'@Ident {identHasDollar} = do
           Nothing -> error $ "Variable not found: " ++ show id'
 
   return
-    ( [HirImmToUreg varOffset],
+    ( [IrImmToYreg varOffset],
       if identHasDollar then BasicStringType else BasicNumericType
     )
 
-translateLValueRead :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
+translateLValueRead :: LValue BasicType -> State TranslationState ([IrInst], BasicType)
 translateLValueRead (LValueIdent ident) = translateIdent ident
 translateLValueRead LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
   (identAddr, ty) <- translateIdentAddr lValueArrayIdent
@@ -101,9 +101,9 @@ translateLValueRead LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
 
   return
     ( identAddr
-        ++ [HirAlXToAlY]
+        ++ [IrAlXToAlY]
         ++ indexInsts
-        ++ [HirFun HirAddOp, HirAddrInAlXToUreg, HirAddrInUregIntoAlX],
+        ++ [IrFun IrAddOp, IrAddrInAlXToYreg, IrAddrInYregIntoAlX],
       ty
     )
 translateLValueRead (LValuePseudoVar pseudoVar) =
@@ -116,7 +116,7 @@ translateLValueRead (LValuePseudoVar pseudoVar) =
               Just Variable {variableOffset} -> variableOffset
               Nothing -> error "Time pseudo variable not found"
       return
-        ( [HirLdImmIndirectIntoAlX varOffset],
+        ( [IrLdImmIndirectIntoAlX varOffset],
           BasicNumericType
         )
     InkeyPseudoVar -> do
@@ -126,106 +126,106 @@ translateLValueRead (LValuePseudoVar pseudoVar) =
               Just Variable {variableOffset} -> variableOffset
               Nothing -> error "Inkey pseudo variable not found"
       return
-        ( [HirLdImmIndirectIntoAlX varOffset],
+        ( [IrLdImmIndirectIntoAlX varOffset],
           BasicStringType
         )
 
-translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [HirInst]
+translateStringVariableOrLiteral :: StringVariableOrLiteral -> State TranslationState [IrInst]
 translateStringVariableOrLiteral (StringVariable var) = do
   (r, _) <- translateIdent var
   return r
 translateStringVariableOrLiteral (StringLiteral str) = do
   strOffset <- gets (lookupStringLiteralOffset str)
-  return [HirLdImmIndirectIntoAlX strOffset]
+  return [IrLdImmIndirectIntoAlX strOffset]
 
-translateFunction :: Function BasicType -> State TranslationState [HirInst]
+translateFunction :: Function BasicType -> State TranslationState [IrInst]
 translateFunction function = case function of
   MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral midFunStringExpr
     startInsts <- translateExpr midFunStartExpr
     lengthInsts <- translateExpr midFunLengthExpr
-    return $ stringInsts ++ startInsts ++ lengthInsts ++ [HirFun HirMidOp]
+    return $ stringInsts ++ startInsts ++ lengthInsts ++ [IrFun IrMidOp]
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral leftFunStringExpr
     lengthInsts <- translateExpr leftFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirFun HirLeftOp]
+    return $ stringInsts ++ lengthInsts ++ [IrFun IrLeftOp]
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
     stringInsts <- translateStringVariableOrLiteral rightFunStringExpr
     lengthInsts <- translateExpr rightFunLengthExpr
-    return $ stringInsts ++ lengthInsts ++ [HirFun HirRightOp]
+    return $ stringInsts ++ lengthInsts ++ [IrFun IrRightOp]
   AsciiFun {asciiFunArgument} -> do
     argInsts <- translateStringVariableOrLiteral asciiFunArgument
-    return $ argInsts ++ [HirFun HirAsciiOp]
+    return $ argInsts ++ [IrFun IrAsciiOp]
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
-    return $ posInsts ++ [HirFun HirPointOp]
+    return $ posInsts ++ [IrFun IrPointOp]
   RndFun {rndRangeEnd} ->
     return
-      [ HirLdImmIntoAlX (fromIntegral rndRangeEnd),
-        HirFun HirRndOp
+      [ IrLdImmIntoAlX (fromIntegral rndRangeEnd),
+        IrFun IrRndOp
       ]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
-    return $ exprInsts ++ [HirFun HirIntOp]
+    return $ exprInsts ++ [IrFun IrIntOp]
   SgnFun {sgnFunExpr} -> do
     exprInsts <- translateExpr sgnFunExpr
-    return $ exprInsts ++ [HirFun HirSgnOp]
+    return $ exprInsts ++ [IrFun IrSgnOp]
 
-translateBinOp :: BinOperator -> HirInst
-translateBinOp AddOp = HirFun HirAddOp
-translateBinOp SubtractOp = HirFun HirSubOp
-translateBinOp MultiplyOp = HirFun HirMulOp
-translateBinOp DivideOp = HirFun HirDivOp
-translateBinOp CaretOp = HirFun HirExponentOp
-translateBinOp AndOp = HirFun HirAndOp
-translateBinOp OrOp = HirFun HirOrOp
-translateBinOp EqualOp = HirFun HirEqOp
-translateBinOp NotEqualOp = HirFun HirNeqOp
-translateBinOp LessThanOp = HirFun HirLtOp
-translateBinOp LessThanOrEqualOp = HirFun HirLeqOp
-translateBinOp GreaterThanOp = HirFun HirGtOp
-translateBinOp GreaterThanOrEqualOp = HirFun HirGeqOp
+translateBinOp :: BinOperator -> IrInst
+translateBinOp AddOp = IrFun IrAddOp
+translateBinOp SubtractOp = IrFun IrSubOp
+translateBinOp MultiplyOp = IrFun IrMulOp
+translateBinOp DivideOp = IrFun IrDivOp
+translateBinOp CaretOp = IrFun IrExponentOp
+translateBinOp AndOp = IrFun IrAndOp
+translateBinOp OrOp = IrFun IrOrOp
+translateBinOp EqualOp = IrFun IrEqOp
+translateBinOp NotEqualOp = IrFun IrNeqOp
+translateBinOp LessThanOp = IrFun IrLtOp
+translateBinOp LessThanOrEqualOp = IrFun IrLeqOp
+translateBinOp GreaterThanOp = IrFun IrGtOp
+translateBinOp GreaterThanOrEqualOp = IrFun IrGeqOp
 
-translateUnaryOp :: UnaryOperator -> [HirInst]
+translateUnaryOp :: UnaryOperator -> [IrInst]
 translateUnaryOp UnaryMinusOp = do
   -- 0 - x
   [ -- AL-Y = AL-X
-    HirAlXToAlY,
+    IrAlXToAlY,
     -- AL-X = 0
-    HirLdImmIntoAlX 0,
+    IrLdImmIntoAlX 0,
     -- AL-X = AL-X - AL-Y
-    HirFun HirSubOp
+    IrFun IrSubOp
     ]
 translateUnaryOp UnaryNotOp = do
   -- 0 is false, anything else is true
-  [ HirLdImmIntoAlY 0,
-    HirFun HirEqOp
+  [ IrLdImmIntoAlY 0,
+    IrFun IrEqOp
     ]
 translateUnaryOp UnaryPlusOp = do
   -- x
   []
 
-translateExpr :: Expr BasicType -> State TranslationState [HirInst]
+translateExpr :: Expr BasicType -> State TranslationState [IrInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
   NumLitExpr n ->
-    return [HirLdImmIntoAlX n]
+    return [IrLdImmIntoAlX n]
   StrLitExpr s -> do
     strOffset <- gets (lookupStringLiteralOffset s)
-    return [HirLdImmIndirectIntoAlX strOffset]
+    return [IrLdImmIndirectIntoAlX strOffset]
   LValueExpr lvalue -> do
     (lvalue', _) <- translateLValueRead lvalue
     return lvalue'
   BinExpr left op right -> do
     leftInsts <- translateExpr left
     rightInsts <- translateExpr right
-    return $ leftInsts ++ [HirAlXToAlY] ++ rightInsts ++ [translateBinOp op]
+    return $ leftInsts ++ [IrAlXToAlY] ++ rightInsts ++ [translateBinOp op]
   UnaryExpr op expr' -> do
     exprInsts <- translateExpr expr'
     return $ exprInsts ++ translateUnaryOp op
   FunCallExpr function -> translateFunction function
 
-translateLValueIntoUreg :: LValue BasicType -> State TranslationState ([HirInst], BasicType)
-translateLValueIntoUreg assignmentLValue = do
+translateLValueIntoYreg :: LValue BasicType -> State TranslationState ([IrInst], BasicType)
+translateLValueIntoYreg assignmentLValue = do
   case assignmentLValue of
     LValueIdent id'@Ident {identHasDollar} -> do
       var <- gets (lookupSymbol id' . symbolTable)
@@ -234,7 +234,7 @@ translateLValueIntoUreg assignmentLValue = do
               Just Variable {variableOffset} -> variableOffset
               Nothing -> error $ "Variable not found: " ++ show id'
       return
-        ( [HirImmToUreg varOffset],
+        ( [IrImmToYreg varOffset],
           if identHasDollar then BasicStringType else BasicNumericType
         )
     LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} -> do
@@ -243,9 +243,9 @@ translateLValueIntoUreg assignmentLValue = do
 
       return
         ( identAddr
-            ++ [HirAlXToAlY]
+            ++ [IrAlXToAlY]
             ++ indexInsts
-            ++ [HirFun HirAddOp, HirStAlXInUreg],
+            ++ [IrFun IrAddOp, IrStAlXInYreg],
           ty
         )
     LValuePseudoVar pseudoVar -> do
@@ -257,7 +257,7 @@ translateLValueIntoUreg assignmentLValue = do
                   Just Variable {variableOffset} -> variableOffset
                   Nothing -> error "Time pseudo variable not found"
           return
-            ( [HirImmToUreg varOffset],
+            ( [IrImmToYreg varOffset],
               BasicNumericType
             )
         InkeyPseudoVar -> do
@@ -267,34 +267,34 @@ translateLValueIntoUreg assignmentLValue = do
                   Just Variable {variableOffset} -> variableOffset
                   Nothing -> error "Inkey pseudo variable not found"
           return
-            ( [HirImmToUreg varOffset],
+            ( [IrImmToYreg varOffset],
               BasicStringType
             )
 
-translateAssignment :: Assignment BasicType -> State TranslationState [HirInst]
+translateAssignment :: Assignment BasicType -> State TranslationState [IrInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
-  (lvalueInsts, _) <- translateLValueIntoUreg assignmentLValue
+  (lvalueInsts, _) <- translateLValueIntoYreg assignmentLValue
   exprInsts <- translateExpr assignmentExpr
-  return $ lvalueInsts ++ exprInsts ++ [HirStAlXInUreg]
+  return $ lvalueInsts ++ exprInsts ++ [IrStAlXInYreg]
 
-translateStmt :: Stmt BasicType -> State TranslationState [HirInst]
+translateStmt :: Stmt BasicType -> State TranslationState [IrInst]
 translateStmt stmt = case stmt of
   GoToStmt target -> do
     labelIdx <- gets (lookupLabelPanics target)
-    return [HirGoto labelIdx]
+    return [IrGoto labelIdx]
   GoSubStmt target -> do
     labelIdx <- gets (lookupLabelPanics target)
-    return [HirCall labelIdx]
+    return [IrCall labelIdx]
   IfThenStmt condition stmt' ->
     case stmt' of
       GoToStmt target -> do
         labelIdx <- gets (lookupLabelPanics target)
         conditionInsts <- translateExpr condition
-        return $ conditionInsts ++ [HirCondGoto labelIdx]
+        return $ conditionInsts ++ [IrCondGoto labelIdx]
       GoSubStmt target -> do
         labelIdx <- gets (lookupLabelPanics target)
         conditionInsts <- translateExpr condition
-        return $ conditionInsts ++ [HirCondCall labelIdx]
+        return $ conditionInsts ++ [IrCondCall labelIdx]
       s ->
         -- Reverse the condition of the if and transform it into a conditional goto
         let newCondition =
@@ -308,7 +308,7 @@ translateStmt stmt = case stmt of
               put newState
               translateInner <- translateStmt s
               conditionInsts <- translateExpr newCondition
-              return $ conditionInsts ++ (HirCondGoto labelIdx : (translateInner ++ [HirLabel labelIdx]))
+              return $ conditionInsts ++ (IrCondGoto labelIdx : (translateInner ++ [IrLabel labelIdx]))
   ForStmt {forAssignment, forToExpr} -> do
     let forIdent = case assignmentLValue forAssignment of
           LValueIdent ident -> ident
@@ -316,9 +316,9 @@ translateStmt stmt = case stmt of
     -- Begin the for loop by inserting a label and storing the start condition
     (newState, labelIdx) <- gets (beginForLoop forIdent forToExpr)
     put newState
-    hirAssignInsts <- translateAssignment forAssignment
+    irAssignInsts <- translateAssignment forAssignment
 
-    return $ hirAssignInsts ++ [HirLabel labelIdx]
+    return $ irAssignInsts ++ [IrLabel labelIdx]
   NextStmt {nextIdent} -> do
     (startLabelIdx, startCond) <- gets (lookupForStartLabel nextIdent)
     let identExpr =
@@ -349,21 +349,21 @@ translateStmt stmt = case stmt of
     -- Create a conditional goto to the start of the for loop
     conditionInsts <- translateExpr newJumpCondition
     assignInsts <- translateAssignment nextAssignment
-    return $ assignInsts ++ conditionInsts ++ [HirCondGoto startLabelIdx]
+    return $ assignInsts ++ conditionInsts ++ [IrCondGoto startLabelIdx]
   LetStmt {letAssignments} -> do
     assignments <- mapM translateAssignment letAssignments
     return $ concat assignments
   PrintStmt {printKind, printExprs, printEnding, printUsingClause} -> do
     -- All print expressions have line ending with no newline, except the last one
     -- which has the specified ending.
-    hirPrints <-
+    irPrints <-
       mapM
         ( \expr -> do
             exprInsts <- translateExpr expr
             let printInsts =
                   case exprType expr of
-                    BasicNumericType -> [HirIntrinsicCall HirPrintNum]
-                    BasicStringType -> [HirIntrinsicCall HirPrintStr]
+                    BasicNumericType -> [IrIntrinsicCall IrPrintNum]
+                    BasicStringType -> [IrIntrinsicCall IrPrintStr]
                     _ -> error $ "Unsupported print expression type: " ++ show (exprType expr)
             return $ exprInsts ++ printInsts
         )
@@ -372,12 +372,12 @@ translateStmt stmt = case stmt of
     lastExprInsts <- translateExpr (last printExprs)
     let lastPrintInst =
           case exprType (last printExprs) of
-            BasicNumericType -> HirIntrinsicCall HirPrintNum
-            BasicStringType -> HirIntrinsicCall HirPrintStr
+            BasicNumericType -> IrIntrinsicCall IrPrintNum
+            BasicStringType -> IrIntrinsicCall IrPrintStr
             _ -> error $ "Unsupported last print expression type: " ++ show (exprType (last printExprs))
-    let hirPrints' = concat hirPrints ++ lastExprInsts ++ [lastPrintInst]
+    let irPrints' = concat irPrints ++ lastExprInsts ++ [lastPrintInst]
     let usingClause = case printUsingClause of
-          Just (UsingClause u) -> [HirIntrinsicCall $ HirUsing u]
+          Just (UsingClause u) -> [IrIntrinsicCall $ IrUsing u]
           Nothing -> []
     putchar <- case printEnding of
       PrintEndingNewLine -> do
@@ -385,31 +385,31 @@ translateStmt stmt = case stmt of
 
         sleepInsts <- case printKind of
           PrintKindPrint -> do
-            var <- gets (lookupFakeSymbol hirUserSetSleepTimeFakeVarName . symbolTable)
+            var <- gets (lookupFakeSymbol irUserSetSleepTimeFakeVarName . symbolTable)
             let varOffset =
                   case var of
                     Just Variable {variableOffset} -> variableOffset
                     Nothing -> error "User set sleep time variable not found"
-            return [HirLdImmIndirectIntoAlX varOffset]
+            return [IrLdImmIndirectIntoAlX varOffset]
           PrintKindPause ->
             -- FIXME: more or less a second, research true value
-            return [HirLdImmIntoAlX 64]
+            return [IrLdImmIntoAlX 64]
         return $
           sleepInsts
-            ++ [ HirIntrinsicCall HirSleep,
-                 HirIntrinsicCall HirCls
+            ++ [ IrIntrinsicCall IrSleep,
+                 IrIntrinsicCall IrCls
                ]
             ++ cursorInsts
-            ++ [HirIntrinsicCall HirCursor]
+            ++ [IrIntrinsicCall IrCursor]
       _ -> return []
 
-    return $ usingClause ++ hirPrints' ++ putchar
-  UsingStmt (UsingClause u) -> return [HirIntrinsicCall $ HirUsing u]
+    return $ usingClause ++ irPrints' ++ putchar
+  UsingStmt (UsingClause u) -> return [IrIntrinsicCall $ IrUsing u]
   InputStmt {inputPrintExpr, inputDestination} -> do
-    (inputDest, ty) <- translateLValueIntoUreg inputDestination
+    (inputDest, ty) <- translateLValueIntoYreg inputDestination
     let inputInst = case ty of
-          BasicNumericType -> [HirIntrinsicCall HirInputNum]
-          BasicStringType -> [HirIntrinsicCall HirInputStr]
+          BasicNumericType -> [IrIntrinsicCall IrInputNum]
+          BasicStringType -> [IrIntrinsicCall IrInputStr]
           _ -> error $ "Unsupported input destination type: " ++ show ty
 
     let inputStmt = inputDest ++ inputInst
@@ -422,7 +422,7 @@ translateStmt stmt = case stmt of
               { exprInner = StrLitExpr expr,
                 exprType = BasicStringType
               }
-        return $ printExprInsts ++ [HirIntrinsicCall HirPrintStr] ++ inputStmt
+        return $ printExprInsts ++ [IrIntrinsicCall IrPrintStr] ++ inputStmt
       Nothing -> return inputStmt
   GprintStmt {gprintExprs, gprintEnding} -> do
     gprintInsts <-
@@ -431,8 +431,8 @@ translateStmt stmt = case stmt of
             translatedExpr <- translateExpr e
             let gprintExprInsts =
                   case exprType e of
-                    BasicNumericType -> [HirIntrinsicCall HirGPrintNum]
-                    BasicStringType -> [HirIntrinsicCall HirGPrintStr]
+                    BasicNumericType -> [IrIntrinsicCall IrGPrintNum]
+                    BasicStringType -> [IrIntrinsicCall IrGPrintStr]
                     _ -> error $ "Unsupported gprint expression type: " ++ show (exprType e)
             return $ translatedExpr ++ gprintExprInsts
         )
@@ -442,25 +442,25 @@ translateStmt stmt = case stmt of
     ending <- case gprintEnding of
       PrintEndingNewLine -> do
         exprInsts <- translateExpr Expr {exprInner = NumLitExpr 0, exprType = BasicNumericType}
-        var <- gets (lookupFakeSymbol hirUserSetSleepTimeFakeVarName . symbolTable)
+        var <- gets (lookupFakeSymbol irUserSetSleepTimeFakeVarName . symbolTable)
         let varOffset =
               case var of
                 Just Variable {variableOffset} -> variableOffset
                 Nothing -> error "User set sleep time variable not found"
         return $
-          [ HirLdImmIndirectIntoAlX varOffset,
-            HirIntrinsicCall HirSleep,
-            HirIntrinsicCall HirCls
+          [ IrLdImmIndirectIntoAlX varOffset,
+            IrIntrinsicCall IrSleep,
+            IrIntrinsicCall IrCls
           ]
             ++ exprInsts
-            ++ [HirIntrinsicCall HirGCursor]
+            ++ [IrIntrinsicCall IrGCursor]
       PrintEndingNoNewLine -> return []
 
     return $ gprintsInsts' ++ ending
   Comment -> return []
-  ReturnStmt -> return [HirReturn]
+  ReturnStmt -> return [IrReturn]
   DimStmt _ -> return [] -- Already in symbol table
-  EndStmt -> return [HirReturn]
+  EndStmt -> return [IrReturn]
   WaitStmt {waitForExpr} -> do
     -- Save the last wait time set by the user in a special variable
     let infiniteWaitTime =
@@ -476,7 +476,7 @@ translateStmt stmt = case stmt of
             }
 
     unmaybeWait <- translateExpr (fromMaybe infiniteWaitTime waitForExpr)
-    var <- gets (lookupFakeSymbol hirUserSetSleepTimeFakeVarName . symbolTable)
+    var <- gets (lookupFakeSymbol irUserSetSleepTimeFakeVarName . symbolTable)
     let varOffset =
           case var of
             Just Variable {variableOffset} -> variableOffset
@@ -484,8 +484,8 @@ translateStmt stmt = case stmt of
 
     return $
       unmaybeWait
-        ++ [ HirLdImmIndirectIntoAlX varOffset,
-             HirIntrinsicCall HirSleep
+        ++ [ IrLdImmIndirectIntoAlX varOffset,
+             IrIntrinsicCall IrSleep
            ]
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
@@ -496,9 +496,9 @@ translateStmt stmt = case stmt of
           concatMap
             ( \inst ->
                 inst
-                  ++ [ HirIntrinsicCall
-                         ( HirPoke
-                             { hirPokeMemoryArea =
+                  ++ [ IrIntrinsicCall
+                         ( IrPoke
+                             { irPokeMemoryArea =
                                  case pokeKind of
                                    Me0 -> 0
                                    Me1 -> 1
@@ -509,17 +509,17 @@ translateStmt stmt = case stmt of
             pokeValuesInsts
     return $
       pokeAddressInsts
-        ++ [HirIntrinsicCall HirSetPokeAddress]
+        ++ [IrIntrinsicCall IrSetPokeAddress]
         ++ pokeValuesInsts'
-  RandomStmt -> return [HirIntrinsicCall HirRandom]
-  ClsStmt -> return [HirIntrinsicCall HirCls]
-  ClearStmt -> return [HirIntrinsicCall HirClear]
+  RandomStmt -> return [IrIntrinsicCall IrRandom]
+  ClsStmt -> return [IrIntrinsicCall IrCls]
+  ClearStmt -> return [IrIntrinsicCall IrClear]
   CursorStmt {cursorExpr} -> do
     exprInsts <- translateExpr cursorExpr
-    return $ exprInsts ++ [HirIntrinsicCall HirCursor]
+    return $ exprInsts ++ [IrIntrinsicCall IrCursor]
   GCursorStmt {gCursorExpr} -> do
     gCursorExprInsts <- translateExpr gCursorExpr
-    return $ gCursorExprInsts ++ [HirIntrinsicCall HirGCursor]
+    return $ gCursorExprInsts ++ [IrIntrinsicCall IrGCursor]
   ReadStmt _ -> error "Unimplemented: ReadStmt"
   DataStmt _ -> error "Unimplemented: DataStmt"
   RestoreStmt _ -> error "Unimplemented: RestoreStmt"
@@ -536,41 +536,41 @@ translateStmt stmt = case stmt of
             repetitionsInsts
               ++ frequencyInsts
               ++ durationInsts
-              ++ [HirIntrinsicCall $ HirBeepStmt True]
+              ++ [IrIntrinsicCall $ IrBeepStmt True]
         Nothing -> do
           repetitionsInsts <- translateExpr beepStmtRepetitionsExpr
-          return $ repetitionsInsts ++ [HirIntrinsicCall $ HirBeepStmt False]
+          return $ repetitionsInsts ++ [IrIntrinsicCall $ IrBeepStmt False]
 
-translateLine :: Line BasicType -> State TranslationState [HirInst]
+translateLine :: Line BasicType -> State TranslationState [IrInst]
 translateLine Line {lineNumber, lineLabel, lineStmts} = do
   label <- case lineLabel of
     Just lbl -> do
       labelIdx <- gets (lookupLabelInState (GoToLabel lbl))
       case labelIdx of
-        Just idx -> return [HirLabel idx]
+        Just idx -> return [IrLabel idx]
         Nothing -> return []
     Nothing -> return []
   number <- do
     lineNumberIdx <- gets (lookupLabelInState (GoToLine lineNumber))
     case lineNumberIdx of
-      Just idx -> return [HirLabel idx]
+      Just idx -> return [IrLabel idx]
       Nothing -> return []
   stmts <- mapM translateStmt lineStmts
   return $ number ++ label ++ concat stmts
 
-translateProgram' :: Program BasicType -> State TranslationState HirProgram
+translateProgram' :: Program BasicType -> State TranslationState IrProgram
 translateProgram' (Program programLines) = do
   -- insert fake identifiers for special variables
-  let fakeVars = ["time", "inkey", hirUserSetSleepTimeFakeVarName]
+  let fakeVars = ["time", "inkey", irUserSetSleepTimeFakeVarName]
   mapM_ (modify . insertFakeIdent) fakeVars
 
   let programLines' = Data.Map.elems programLines
 
   translatedLines <- mapM translateLine programLines'
 
-  return HirProgram {hirProgramStatements = concat translatedLines}
+  return IrProgram {irProgramStatements = concat translatedLines}
 
-translateProgram :: Program BasicType -> SymbolTable -> (HirProgram, SymbolTable, Int)
+translateProgram :: Program BasicType -> SymbolTable -> (IrProgram, SymbolTable, Int)
 translateProgram program symbolTable' =
   let (labelMap, nextIdx) = symbolTableUsedLabelsToInt symbolTable'
       initialState =
@@ -580,5 +580,5 @@ translateProgram program symbolTable' =
             forStartToLabel = Data.Map.empty,
             symbolTable = symbolTable'
           }
-      (hirProgram, finalState) = runState (translateProgram' program) initialState
-   in (hirProgram, symbolTable finalState, nextLabelIdx finalState)
+      (irProgram, finalState) = runState (translateProgram' program) initialState
+   in (irProgram, symbolTable finalState, nextLabelIdx finalState)

@@ -20,8 +20,8 @@ library
                       SymbolTable
                       TypeSystem
                       CompilationPipeline
-                      Hir.Types
-                      Hir.Translate
+                      Ir.Types
+                      Ir.Translate
                       Asm.Types
                       Asm.Translate
 
