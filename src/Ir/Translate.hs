@@ -277,6 +277,20 @@ translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType
   exprInsts <- translateExpr assignmentExpr
   return $ lvalueInsts ++ exprInsts ++ [IrStAlXInYreg]
 
+-- Assume sleep time is in AL-X
+sleepInstructions :: [IrInst]
+sleepInstructions =
+  [ IrAlXToAreg,
+    IrAToTm0,
+    IrHalt
+  ]
+
+cursorPtrAddress :: Word16
+cursorPtrAddress = 0x7875
+
+inputBufferAddress :: Word16
+inputBufferAddress = 0x7BB0
+
 translateStmt :: Stmt BasicType -> State TranslationState [IrInst]
 translateStmt stmt = case stmt of
   GoToStmt target -> do
@@ -356,26 +370,28 @@ translateStmt stmt = case stmt of
   PrintStmt {printKind, printExprs, printEnding, printUsingClause} -> do
     -- All print expressions have line ending with no newline, except the last one
     -- which has the specified ending.
+    let exprTyToInst ty = case ty of
+          BasicNumericType ->
+            [ IrIntrinsicCall IrNumToStrInBuffer,
+              IrIntrinsicCall IrPrintStr
+            ]
+          BasicStringType ->
+            [ IrIntrinsicCall IrStrDataInAlXIntoUregAndAreg,
+              IrIntrinsicCall IrPrintStr
+            ]
+          _ -> error $ "Unsupported print expression type: " ++ show ty
+
     irPrints <-
       mapM
         ( \expr -> do
             exprInsts <- translateExpr expr
-            let printInsts =
-                  case exprType expr of
-                    BasicNumericType -> [IrIntrinsicCall IrPrintNum]
-                    BasicStringType -> [IrIntrinsicCall IrPrintStr]
-                    _ -> error $ "Unsupported print expression type: " ++ show (exprType expr)
-            return $ exprInsts ++ printInsts
+            return $ exprInsts ++ exprTyToInst (exprType expr)
         )
         (init printExprs)
 
     lastExprInsts <- translateExpr (last printExprs)
-    let lastPrintInst =
-          case exprType (last printExprs) of
-            BasicNumericType -> IrIntrinsicCall IrPrintNum
-            BasicStringType -> IrIntrinsicCall IrPrintStr
-            _ -> error $ "Unsupported last print expression type: " ++ show (exprType (last printExprs))
-    let irPrints' = concat irPrints ++ lastExprInsts ++ [lastPrintInst]
+    let lastPrintInst = exprTyToInst $ exprType (last printExprs)
+    let irPrints' = concat irPrints ++ lastExprInsts ++ lastPrintInst
     let usingClause = case printUsingClause of
           Just (UsingClause u) -> [IrIntrinsicCall $ IrUsing u]
           Nothing -> []
@@ -396,11 +412,10 @@ translateStmt stmt = case stmt of
             return [IrLdImmIntoAlX 64]
         return $
           sleepInsts
-            ++ [ IrIntrinsicCall IrSleep,
-                 IrIntrinsicCall IrCls
-               ]
+            ++ sleepInstructions
+            ++ [IrIntrinsicCall IrCls]
             ++ cursorInsts
-            ++ [IrIntrinsicCall IrCursor]
+            ++ [IrStAlXInImm 0x7875]
       _ -> return []
 
     return $ usingClause ++ irPrints' ++ putchar
@@ -408,8 +423,15 @@ translateStmt stmt = case stmt of
   InputStmt {inputPrintExpr, inputDestination} -> do
     (inputDest, ty) <- translateLValueIntoYreg inputDestination
     let inputInst = case ty of
-          BasicNumericType -> [IrIntrinsicCall IrInputNum]
-          BasicStringType -> [IrIntrinsicCall IrInputStr]
+          BasicNumericType ->
+            [ IrIntrinsicCall IrInputStr,
+              IrIntrinsicCall IrStrInBufferToNum
+            ]
+          BasicStringType ->
+            [ IrIntrinsicCall IrInputStr,
+              IrImmToUreg inputBufferAddress,
+              IrIntrinsicCall IrUregAndAregIntoStrDataInAlX
+            ]
           _ -> error $ "Unsupported input destination type: " ++ show ty
 
     let inputStmt = inputDest ++ inputInst
@@ -422,7 +444,12 @@ translateStmt stmt = case stmt of
               { exprInner = StrLitExpr expr,
                 exprType = BasicStringType
               }
-        return $ printExprInsts ++ [IrIntrinsicCall IrPrintStr] ++ inputStmt
+        return $
+          printExprInsts
+            ++ [ IrIntrinsicCall IrStrDataInAlXIntoUregAndAreg,
+                 IrIntrinsicCall IrPrintStr
+               ]
+            ++ inputStmt
       Nothing -> return inputStmt
   GprintStmt {gprintExprs, gprintEnding} -> do
     gprintInsts <-
@@ -448,10 +475,9 @@ translateStmt stmt = case stmt of
                 Just Variable {variableOffset} -> variableOffset
                 Nothing -> error "User set sleep time variable not found"
         return $
-          [ IrLdImmIndirectIntoAlX varOffset,
-            IrIntrinsicCall IrSleep,
-            IrIntrinsicCall IrCls
-          ]
+          [IrLdImmIndirectIntoAlX varOffset]
+            ++ sleepInstructions
+            ++ [IrIntrinsicCall IrCls]
             ++ exprInsts
             ++ [IrIntrinsicCall IrGCursor]
       PrintEndingNoNewLine -> return []
@@ -484,9 +510,8 @@ translateStmt stmt = case stmt of
 
     return $
       unmaybeWait
-        ++ [ IrLdImmIndirectIntoAlX varOffset,
-             IrIntrinsicCall IrSleep
-           ]
+        ++ [IrLdImmIndirectIntoAlX varOffset]
+        ++ sleepInstructions
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
     -- The rest are the values to poke
@@ -512,11 +537,16 @@ translateStmt stmt = case stmt of
         ++ [IrIntrinsicCall IrSetPokeAddress]
         ++ pokeValuesInsts'
   RandomStmt -> return [IrIntrinsicCall IrRandom]
-  ClsStmt -> return [IrIntrinsicCall IrCls]
+  ClsStmt ->
+    return
+      [ IrIntrinsicCall IrCls,
+        IrLdImmIntoAlX 0,
+        IrStAlXInImm cursorPtrAddress
+      ]
   ClearStmt -> return [IrIntrinsicCall IrClear]
   CursorStmt {cursorExpr} -> do
     exprInsts <- translateExpr cursorExpr
-    return $ exprInsts ++ [IrIntrinsicCall IrCursor]
+    return $ exprInsts ++ [IrStAlXInImm cursorPtrAddress]
   GCursorStmt {gCursorExpr} -> do
     gCursorExprInsts <- translateExpr gCursorExpr
     return $ gCursorExprInsts ++ [IrIntrinsicCall IrGCursor]
