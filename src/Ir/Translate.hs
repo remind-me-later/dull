@@ -64,6 +64,12 @@ lookupStringLiteralOffset str state' =
     Just offset -> offset
     Nothing -> error $ "String literal not found: " ++ str
 
+lookupNumberLiteralOffset :: Double -> TranslationState -> Word16
+lookupNumberLiteralOffset num state' =
+  case Data.Map.lookup num (numberLiteralMap (symbolTable state')) of
+    Just offset -> offset
+    Nothing -> error $ "Number literal not found: " ++ show num
+
 irUserSetSleepTimeFakeVarName :: String
 irUserSetSleepTimeFakeVarName = "user_set_sleep_time"
 
@@ -86,6 +92,16 @@ translateIdent id'@Ident {identHasDollar} = do
       if identHasDollar then BasicStringType else BasicNumericType
     )
 
+loadImmediateToAlx :: Double -> State TranslationState [IrInst]
+loadImmediateToAlx imm = do
+  immAddr <- gets (lookupNumberLiteralOffset imm)
+  return [IrLoadImmediateToYReg immAddr, IrLoadFromYRegToAlX]
+
+loadImmediateToAlY :: Double -> State TranslationState [IrInst]
+loadImmediateToAlY imm = do
+  immAddr <- gets (lookupNumberLiteralOffset imm)
+  return [IrLoadImmediateToYReg immAddr, IrLoadFromYRegToAlX, IrCopyAlXToAlY]
+
 translateIdentAddrToAlX :: Ident -> State TranslationState ([IrInst], BasicType)
 translateIdentAddrToAlX id'@Ident {identHasDollar} = do
   var <- gets (lookupSymbol id' . symbolTable)
@@ -93,10 +109,10 @@ translateIdentAddrToAlX id'@Ident {identHasDollar} = do
         case var of
           Just Variable {variableOffset} -> variableOffset
           Nothing -> error $ "Variable not found: " ++ show id'
+  insts <- loadImmediateToAlx (fromIntegral varOffset)
 
   return
-    ( 
-      [IrLoadImmediateToAlX (fromIntegral varOffset)],
+    ( insts,
       if identHasDollar then BasicStringType else BasicNumericType
     )
 
@@ -166,11 +182,10 @@ translateFunction function = case function of
   PointFun {pointFunPositionExpr} -> do
     posInsts <- translateExpr pointFunPositionExpr
     return $ posInsts ++ [IrCallFunction IrPointOp]
-  RndFun {rndRangeEnd} ->
-    return
-      [ IrLoadImmediateToAlX (fromIntegral rndRangeEnd),
-        IrCallFunction IrRndOp
-      ]
+  RndFun {rndRangeEnd} -> do
+    -- FIXME: wrong, rndRangeEnd should be an expression
+    insts <- loadImmediateToAlx (fromIntegral rndRangeEnd)
+    return $ insts ++ [IrCallFunction IrRndOp]
   IntFun {intFunExpr} -> do
     exprInsts <- translateExpr intFunExpr
     return $ exprInsts ++ [IrCallFunction IrIntOp]
@@ -193,29 +208,29 @@ translateBinOp LessThanOrEqualOp = IrCallFunction IrLeqOp
 translateBinOp GreaterThanOp = IrCallFunction IrGtOp
 translateBinOp GreaterThanOrEqualOp = IrCallFunction IrGeqOp
 
-translateUnaryOp :: UnaryOperator -> [IrInst]
+translateUnaryOp :: UnaryOperator -> State TranslationState [IrInst]
 translateUnaryOp UnaryMinusOp = do
+  insts <- loadImmediateToAlx 0
   -- 0 - x
-  [ -- AL-Y = AL-X
-    IrCopyAlXToAlY,
-    -- AL-X = 0
-    IrLoadImmediateToAlX 0,
-    -- AL-X = AL-X - AL-Y
-    IrCallFunction IrSubOp
+  return $
+    [ -- AL-Y = AL-X
+      IrCopyAlXToAlY
     ]
+      -- AL-X = 0
+      ++ insts
+      -- AL-X = AL-X - AL-Y
+      ++ [IrCallFunction IrSubOp]
 translateUnaryOp UnaryNotOp = do
+  insts <- loadImmediateToAlY 0
   -- 0 is false, anything else is true
-  [ IrLoadImmediateToAlY 0,
-    IrCallFunction IrEqOp
-    ]
+  return $ insts ++ [IrCallFunction IrEqOp]
 translateUnaryOp UnaryPlusOp = do
   -- x
-  []
+  return []
 
 translateExpr :: Expr BasicType -> State TranslationState [IrInst]
 translateExpr Expr {exprInner, exprType = _} = case exprInner of
-  NumLitExpr n ->
-    return [IrLoadImmediateToAlX n]
+  NumLitExpr n -> loadImmediateToAlx n
   StrLitExpr s -> do
     strOffset <- gets (lookupStringLiteralOffset s)
     return $ loadIndirectIntoAlXThroughYReg strOffset
@@ -228,7 +243,8 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
     return $ leftInsts ++ [IrCopyAlXToAlY] ++ rightInsts ++ [translateBinOp op]
   UnaryExpr op expr' -> do
     exprInsts <- translateExpr expr'
-    return $ exprInsts ++ translateUnaryOp op
+    unaryOpInsts <- translateUnaryOp op
+    return $ exprInsts ++ unaryOpInsts
   FunCallExpr function -> translateFunction function
 
 translateLValueIntoYreg :: LValue BasicType -> State TranslationState ([IrInst], BasicType)
@@ -282,7 +298,7 @@ translateAssignment :: Assignment BasicType -> State TranslationState [IrInst]
 translateAssignment Assignment {assignmentLValue, assignmentExpr, assignmentType = _} = do
   (lvalueInsts, _) <- translateLValueIntoYreg assignmentLValue
   exprInsts <- translateExpr assignmentExpr
-  return $ lvalueInsts ++ exprInsts ++ [IrStoreAlXToYReg]
+  return $ lvalueInsts ++ [IrPushYReg] ++ exprInsts ++ [IrPopYReg, IrStoreAlXToYReg]
 
 -- Assume sleep time is in AL-X
 sleepInstructions :: [IrInst]
@@ -416,7 +432,7 @@ translateStmt stmt = case stmt of
             return $ loadIndirectIntoAlXThroughYReg varOffset
           PrintKindPause ->
             -- FIXME: more or less a second, research true value
-            return [IrLoadImmediateToAlX 64]
+            loadImmediateToAlx 64
         return $
           sleepInsts
             ++ sleepInstructions
@@ -545,12 +561,12 @@ translateStmt stmt = case stmt of
         ++ [IrCallIntrinsic IrSetPokeAddress]
         ++ pokeValuesInsts'
   RandomStmt -> return [IrCallIntrinsic IrRandomize]
-  ClsStmt ->
-    return
-      [ IrCallIntrinsic IrClearScreen,
-        IrLoadImmediateToAlX 0,
-        IrStoreAlXToAddress cursorPtrAddress
-      ]
+  ClsStmt -> do
+    insts <- loadImmediateToAlx 0
+    return $
+      [IrCallIntrinsic IrClearScreen]
+        ++ insts
+        ++ [IrStoreAlXToAddress cursorPtrAddress]
   ClearStmt -> return [IrCallIntrinsic IrClearVariables]
   CursorStmt {cursorExpr} -> do
     exprInsts <- translateExpr cursorExpr

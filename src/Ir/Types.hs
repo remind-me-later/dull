@@ -102,8 +102,6 @@ instance Show IrFun where
 type Label = Int
 
 data IrInst where
-  IrLoadImmediateToAlX :: Double -> IrInst
-  IrLoadImmediateToAlY :: Double -> IrInst
   IrLoadFromYRegToAlX :: IrInst
   IrStoreAlXToYReg :: IrInst
   IrLoadAddressFromAlXToYReg :: IrInst
@@ -141,10 +139,6 @@ showWord16 w = "0x" ++ showHexAllCaps
     showHexAllCaps = map toUpper (showHex w "")
 
 instance Show IrInst where
-  show (IrLoadImmediateToAlX num) =
-    "\tAL-X = " ++ show num
-  show (IrLoadImmediateToAlY num) =
-    "\tAL-Y = " ++ show num
   show IrStoreAlXToYReg = "\t(Yreg) = AL-X"
   show IrLoadAddressFromAlXToYReg = "\tYreg = (AL-X as u16)"
   show IrLoadFromYRegToAlX = "\tAL-X = (Yreg)"

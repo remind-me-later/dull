@@ -9,13 +9,16 @@ module SymbolTable
     insertUsedLabel,
     insertFakeVariable,
     lookupFakeSymbol,
+    insertNumberLiteral,
   )
 where
 
 import Ast.Types (GotoTarget, Ident (..), getIdentName)
+import Data.Char (toUpper)
 import Data.List (intercalate, sortBy)
 import Data.Map
 import Data.Word (Word16)
+import Numeric (showHex)
 import TypeSystem
 
 data Variable where
@@ -40,7 +43,9 @@ instance Show Variable where
           ++ ")*"
           ++ show strArrLength
           ++ " : "
-          ++ show variableOffset
+          ++ showHexAllCaps variableOffset
+    where
+      showHexAllCaps w = Prelude.map toUpper (showHex w "")
 
 data GotoTargetData where
   IsBranch :: GotoTargetData
@@ -56,6 +61,7 @@ data SymbolTable where
     { symbolMap :: Map Ident Variable,
       fakeSymbolMap :: Map String Variable,
       stringLiteralMap :: Map String Word16,
+      numberLiteralMap :: Map Double Word16,
       nextOffset :: Word16,
       usedLabels :: Map GotoTarget GotoTargetData,
       startAddress :: Word16
@@ -69,7 +75,7 @@ instance Show SymbolTable where
       ++ intercalate ", " (show <$> orderedSymbols)
       ++ "}\n"
       ++ "strings: {"
-      ++ intercalate ", " (show <$> stringLits)
+      ++ intercalate ", " (showStringLit <$> stringLits)
       ++ "}\n"
       ++ "used labels: {"
       ++ intercalate ", " (show <$> usedLabels')
@@ -94,6 +100,12 @@ instance Show SymbolTable where
         sortBy
           (\s1 s2 -> compare (variableOffset s1) (variableOffset s2))
           (elems fakeSymbolMap)
+      showStringLit (str, offset) =
+        "("
+          ++ show str
+          ++ ", 0x"
+          ++ Prelude.map toUpper (showHex offset "")
+          ++ ")"
 
 emptySymbolTable :: Word16 -> SymbolTable
 emptySymbolTable startAddress =
@@ -103,7 +115,8 @@ emptySymbolTable startAddress =
       stringLiteralMap = empty,
       usedLabels = mempty,
       fakeSymbolMap = empty,
-      startAddress = startAddress
+      startAddress = startAddress,
+      numberLiteralMap = empty
     }
 
 insertVariable :: Ident -> BasicType -> SymbolTable -> SymbolTable
@@ -134,6 +147,14 @@ insertStringLiteral str st@SymbolTable {stringLiteralMap, nextOffset} =
    in if alreadyInLiterals
         then st
         else st {stringLiteralMap = insert str nextOffset stringLiteralMap, nextOffset = newOffset}
+
+insertNumberLiteral :: Double -> SymbolTable -> SymbolTable
+insertNumberLiteral num st@SymbolTable {numberLiteralMap, nextOffset} =
+  let alreadyInLiterals = Data.Map.member num numberLiteralMap
+      newOffset = nextOffset + fromIntegral (sizeOfTy BasicNumericType)
+   in if alreadyInLiterals
+        then st
+        else st {numberLiteralMap = insert num nextOffset numberLiteralMap, nextOffset = newOffset}
 
 insertUsedLabel :: GotoTarget -> Bool -> SymbolTable -> SymbolTable
 insertUsedLabel label isFunctionCall st@SymbolTable {usedLabels} =

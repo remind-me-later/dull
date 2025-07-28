@@ -46,6 +46,10 @@ insertStringLiteralInState :: String -> SemanticAnalysisState -> SemanticAnalysi
 insertStringLiteralInState str (SemanticAnalysisState symTable) =
   SemanticAnalysisState {symbolTable = insertStringLiteral str symTable}
 
+insertNumberLiteralInState :: Double -> SemanticAnalysisState -> SemanticAnalysisState
+insertNumberLiteralInState num (SemanticAnalysisState symTable) =
+  SemanticAnalysisState {symbolTable = insertNumberLiteral num symTable}
+
 lookupSymbolInState :: Ident -> SemanticAnalysisState -> Variable
 lookupSymbolInState name (SemanticAnalysisState symTable) =
   case lookupSymbol name symTable of
@@ -172,7 +176,10 @@ analyzeFunction ident = case ident of
       else error "Sgn function requires a numeric expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
-analyzeExprInner (NumLitExpr num) = return (NumLitExpr num, BasicNumericType)
+analyzeExprInner (NumLitExpr num) = do
+  -- Insert the number literal into the symbol table
+  modify (insertNumberLiteralInState num)
+  return (NumLitExpr num, BasicNumericType)
 analyzeExprInner (StrLitExpr str) = do
   -- Insert the string literal into the symbol table
   modify (insertStringLiteralInState str)
