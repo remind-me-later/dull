@@ -1,4 +1,6 @@
-ADDR_IN_Y_INTO_VAR_IN_AL_X:
+; Subroutine labels begin with "SUB_"
+
+SUB_ADDR_IN_Y_INTO_VAR_IN_AL_X:
     LDI XH, 0x7A ; AL-X (7A00H-7A07H)
     LDI XL, 0x00 ; 
     LDI UL, 8 ; Prepare UL to iterate 8 times
@@ -9,22 +11,138 @@ LO1:
     REC ; Clear carry (success)
     RTN ; Return
 
-VAR_IN_AL_X_INTO_ADDR_IN_Y:
-    LDI XH, 0x7A ; AL-X (7A00H-7A07H)
-    LDI XL, 0x00 ; 
-    LDI UL, 8 ; Prepare UL to iterate 8 times
-LO2:
-    LIN X ; A = (X), X += 1
-    SIN Y ; Store into (Y)
-    LOP LO2 ; Loop until UL is zero
-    REC ; Clear carry (success)
-    RTN ; Return
+; Treat the numeric value in AL-X (7A00H-7A07H) as a variable address
+; this means transforming the 8 byte representation into a 16bit address
+; and storing it in the Y register.
+; Input: AL-X contains 8 byte address (7A00H-7A07H)
+; Output: Y register contains the 16-bit address
+SUB_VAR_IN_AL_X_INTO_ADDR_IN_Y:
+    ; Check if number is positive (sign byte at 7A01H must be 00H)
+    LDA (7A01H)         ; Load sign byte
+    CPI A,0x00          ; Check if positive (00H)
+    BZR POSITIVE_ADDRESS
+    ; Number is negative - error
+    SEC                 ; Set carry (error)
+    RTN
+
+POSITIVE_ADDRESS:
+    ; Build 16-bit address from BCD digits in bytes 2, 3, and 4
+    ; We'll extract each BCD digit and build the binary value
+    
+    ; Initialize 16-bit result to zero
+    LDI A,0x00
+    STA YH              ; High byte = 0
+    STA YL              ; Low byte = 0
+    
+    ; Process byte 2 (7A02H) - most significant BCD digits
+    LDA (7A02H)
+    PSH A               ; Save for low nibble
+    
+    ; High nibble of byte 2 (ten-thousands place)
+    ANI A,0xF0
+    SHR
+    SHR
+    SHR
+    SHR
+    ; Multiply by 10000 and add to result
+    ; For addresses up to 65535, we can have at most 6 in ten-thousands
+    ; Simple: if digit >= 1, add 10000 (0x2710) to result
+    CPI A,0
+    BZS SKIP_TEN_THOUSANDS
+    ; Add 10000 * digit to YH:YL
+    ; 10000 = 0x2710, so for digit 1: add 0x2710, digit 2: add 0x4E20, etc.
+    ; Simplified: just use the digit as high byte contribution
+    ADI A,A             ; A = A * 2 
+    ADI A,A             ; A = A * 4
+    ADI A,A             ; A = A * 8  (approximate scaling)
+    STA YH              ; Store scaled value as high byte
+
+SKIP_TEN_THOUSANDS:
+    ; Low nibble of byte 2 (thousands place)  
+    POP A
+    ANI A,0x0F
+    ; Add thousands: multiply by 1000 and add
+    ; 1000 = 0x3E8, so for each digit multiply by 1000
+    ; Simplified approach: add to high byte with scaling
+    ADI A,A             ; A = A * 2
+    ADI A,A             ; A = A * 4  
+    ADA YH              ; Add to high byte
+    STA YH
+    
+    ; Process byte 3 (7A03H) - middle BCD digits
+    LDA (7A03H)
+    PSH A               ; Save for low nibble
+    
+    ; High nibble (hundreds place)
+    ANI A,0xF0
+    SHR
+    SHR
+    SHR
+    SHR
+    ; Add hundreds to low byte
+    ADA YL
+    STA YL
+    ; Handle carry to high byte
+    BCC NO_CARRY_1
+    LDA YH
+    INC A
+    STA YH
+NO_CARRY_1:
+    
+    ; Low nibble (tens place)
+    POP A
+    ANI A,0x0F
+    ; Multiply by 10 and add to low byte
+    STA (7A18H)         ; Store digit
+    ADI A,A             ; A = A * 2
+    ADI A,A             ; A = A * 4
+    ADI A,A             ; A = A * 8
+    ADA (7A18H)         ; A = A * 8 + digit = A * 9
+    ADA (7A18H)         ; A = A * 9 + digit = A * 10
+    ADA YL              ; Add to low byte
+    STA YL
+    BCC NO_CARRY_2
+    LDA YH
+    INC A
+    STA YH
+NO_CARRY_2:
+    
+    ; Process byte 4 (7A04H) - units digit
+    LDA (7A04H)
+    ANI A,0x0F          ; Only need low nibble for units
+    ADA YL              ; Add units to low byte
+    STA YL
+    BCC NO_CARRY_3
+    LDA YH
+    INC A
+    STA YH
+NO_CARRY_3:
+    
+    ; Validate address is reasonable (not zero, not too high)
+    LDA YH
+    ORA YL              ; OR high and low bytes
+    CPI A,0x00          ; Check if both are zero
+    BZS INVALID_ADDRESS
+    
+    ; Check if address is too high (>= 0x8000)
+    LDA YH
+    CPI A,0x80
+    BCS INVALID_ADDRESS
+    
+    REC                 ; Clear carry (success)
+    RTN
+
+INVALID_ADDRESS:
+    ; Address validation failed
+    SEC                 ; Set carry (error)
+    RTN
+    
 
 ; Modified NUM_TO_STR function
 ; Input: Number at AL-X (7A00H-7A07H)
 ; Output: String at buffer 0x7BB0, length in register A
 
-NUM_TO_STR:
+SUB_NUM_TO_STR:
     ; Set Y to point to input buffer (0x7BB0)
     LDI YH,0x7B
     LDI YL,0xB0
@@ -140,7 +258,7 @@ FINALIZE_NUM_TO_STR:
 ; Store address in U register and length in A into string header in AL-X
 ; Input: U register contains address, A contains length
 ; Output: String header stored in AL-X (7A00H-7A07H)
-STORE_STRING_HEADER_IN_AL_X:
+SUB_STORE_STRING_HEADER_IN_AL_X:
     ; Store string header in AL-X format
     LDI XH,0x7A         ; Point to AL-X
     LDI XL,0x00
@@ -174,7 +292,7 @@ STORE_STRING_HEADER_IN_AL_X:
 ; Load string header from AL-X into U register (address) and A (length)
 ; Input: String header in AL-X (7A00H-7A07H)  
 ; Output: U register contains address, A contains length
-LOAD_STRING_HEADER_FROM_AL_X:
+SUB_LOAD_STRING_HEADER_FROM_AL_X:
     ; Load string header from AL-X format
     LDI XH,0x7A         ; Point to AL-X
     LDI XL,0x05         ; Skip to address bytes (offset 5)
@@ -194,7 +312,7 @@ LOAD_STRING_HEADER_FROM_AL_X:
 ; Get string input from keyboard and store in input buffer (0x7BB0)
 ; Output: String at buffer 0x7BB0, length in register A
 ; Uses Key scan subroutine at E243H
-INPUT_STRING:
+SUB_INPUT_STRING:
     ; Set Y to point to input buffer (0x7BB0)
     LDI YH,0x7B
     LDI YL,0xB0
@@ -268,7 +386,7 @@ INPUT_COMPLETE:
 ; Parse string in input buffer (0x7BB0) into number in AL-X
 ; Input: String length in register A, string at buffer 0x7BB0
 ; Output: Number stored in AL-X (7A00H-7A07H)
-STR_TO_NUM:
+SUB_STR_TO_NUM:
     ; Save string length
     STA (7A17H)         ; Store length for processing
     

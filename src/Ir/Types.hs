@@ -104,8 +104,6 @@ type Label = Int
 data IrInst where
   IrLoadImmediateToAlX :: Double -> IrInst
   IrLoadImmediateToAlY :: Double -> IrInst
-  IrLoadIndirectToAlX :: Word16 -> IrInst
-  IrLoadIndirectToAlY :: Word16 -> IrInst
   IrLoadFromYRegToAlX :: IrInst
   IrStoreAlXToYReg :: IrInst
   IrLoadAddressFromAlXToYReg :: IrInst
@@ -119,6 +117,12 @@ data IrInst where
   IrCopyARegToTimer0 :: IrInst
   IrCopyARegToTimer1 :: IrInst
   IrCallFunction :: IrFun -> IrInst
+  IrPushYReg :: IrInst
+  IrPopYReg :: IrInst
+  IrPushAlX :: IrInst
+  IrPopAlX :: IrInst
+  IrPushAlY :: IrInst
+  IrPopAlY :: IrInst
   -- Labels
   IrLabel :: Label -> IrInst
   -- Jumps
@@ -141,10 +145,6 @@ instance Show IrInst where
     "\tAL-X = " ++ show num
   show (IrLoadImmediateToAlY num) =
     "\tAL-Y = " ++ show num
-  show (IrLoadIndirectToAlX addr) =
-    "\tAL-X = (" ++ showWord16 addr ++ ")"
-  show (IrLoadIndirectToAlY addr) =
-    "\tAL-Y = (" ++ showWord16 addr ++ ")"
   show IrStoreAlXToYReg = "\t(Yreg) = AL-X"
   show IrLoadAddressFromAlXToYReg = "\tYreg = (AL-X as u16)"
   show IrLoadFromYRegToAlX = "\tAL-X = (Yreg)"
@@ -167,6 +167,12 @@ instance Show IrInst where
   show IrCopyARegToTimer1 = "\tTM1 = Areg"
   show IrCopyAlXToAReg = "\tAreg = AL-X as u8"
   show (IrStoreAlXToAddress addr) = "\t(" ++ showWord16 addr ++ ") = AL-X"
+  show IrPushYReg = "\tPSH Yreg"
+  show IrPopYReg = "\tPOP Yreg"
+  show IrPushAlX = "\tPSH AL-X"
+  show IrPopAlX = "\tPOP AL-X"
+  show IrPushAlY = "\tPSH AL-Y"
+  show IrPopAlY = "\tPOP AL-Y"
 
 newtype IrProgram = IrProgram
   { irProgramStatements :: [IrInst]

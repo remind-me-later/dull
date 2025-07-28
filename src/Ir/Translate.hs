@@ -67,6 +67,12 @@ lookupStringLiteralOffset str state' =
 irUserSetSleepTimeFakeVarName :: String
 irUserSetSleepTimeFakeVarName = "user_set_sleep_time"
 
+loadIndirectIntoAlXThroughYReg :: Word16 -> [IrInst]
+loadIndirectIntoAlXThroughYReg addr =
+  [ IrLoadImmediateToYReg addr,
+    IrLoadFromYRegToAlX
+  ]
+
 translateIdent :: Ident -> State TranslationState ([IrInst], BasicType)
 translateIdent id'@Ident {identHasDollar} = do
   var <- gets (lookupSymbol id' . symbolTable)
@@ -76,12 +82,12 @@ translateIdent id'@Ident {identHasDollar} = do
           Nothing -> error $ "Variable not found: " ++ show id'
 
   return
-    ( [IrLoadIndirectToAlX varOffset],
+    ( loadIndirectIntoAlXThroughYReg varOffset,
       if identHasDollar then BasicStringType else BasicNumericType
     )
 
-translateIdentAddr :: Ident -> State TranslationState ([IrInst], BasicType)
-translateIdentAddr id'@Ident {identHasDollar} = do
+translateIdentAddrToAlX :: Ident -> State TranslationState ([IrInst], BasicType)
+translateIdentAddrToAlX id'@Ident {identHasDollar} = do
   var <- gets (lookupSymbol id' . symbolTable)
   let varOffset =
         case var of
@@ -89,21 +95,22 @@ translateIdentAddr id'@Ident {identHasDollar} = do
           Nothing -> error $ "Variable not found: " ++ show id'
 
   return
-    ( [IrLoadImmediateToYReg varOffset],
+    ( 
+      [IrLoadImmediateToAlX (fromIntegral varOffset)],
       if identHasDollar then BasicStringType else BasicNumericType
     )
 
 translateLValueRead :: LValue BasicType -> State TranslationState ([IrInst], BasicType)
 translateLValueRead (LValueIdent ident) = translateIdent ident
 translateLValueRead LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} = do
-  (identAddr, ty) <- translateIdentAddr lValueArrayIdent
+  (identAddrToAlX, ty) <- translateIdentAddrToAlX lValueArrayIdent
   indexInsts <- translateExpr lValueArrayIndex
 
   return
-    ( identAddr
-        ++ [IrCopyAlXToAlY]
+    ( identAddrToAlX
+        ++ [IrPushAlX]
         ++ indexInsts
-        ++ [IrCallFunction IrAddOp, IrLoadAddressFromAlXToYReg, IrLoadFromYRegToAlX],
+        ++ [IrPopAlY, IrCallFunction IrAddOp, IrLoadAddressFromAlXToYReg, IrLoadFromYRegToAlX],
       ty
     )
 translateLValueRead (LValuePseudoVar pseudoVar) =
@@ -116,7 +123,7 @@ translateLValueRead (LValuePseudoVar pseudoVar) =
               Just Variable {variableOffset} -> variableOffset
               Nothing -> error "Time pseudo variable not found"
       return
-        ( [IrLoadIndirectToAlX varOffset],
+        ( loadIndirectIntoAlXThroughYReg varOffset,
           BasicNumericType
         )
     InkeyPseudoVar -> do
@@ -126,7 +133,7 @@ translateLValueRead (LValuePseudoVar pseudoVar) =
               Just Variable {variableOffset} -> variableOffset
               Nothing -> error "Inkey pseudo variable not found"
       return
-        ( [IrLoadIndirectToAlX varOffset],
+        ( loadIndirectIntoAlXThroughYReg varOffset,
           BasicStringType
         )
 
@@ -136,7 +143,7 @@ translateStringVariableOrLiteral (StringVariable var) = do
   return r
 translateStringVariableOrLiteral (StringLiteral str) = do
   strOffset <- gets (lookupStringLiteralOffset str)
-  return [IrLoadIndirectToAlX strOffset]
+  return $ loadIndirectIntoAlXThroughYReg strOffset
 
 translateFunction :: Function BasicType -> State TranslationState [IrInst]
 translateFunction function = case function of
@@ -211,7 +218,7 @@ translateExpr Expr {exprInner, exprType = _} = case exprInner of
     return [IrLoadImmediateToAlX n]
   StrLitExpr s -> do
     strOffset <- gets (lookupStringLiteralOffset s)
-    return [IrLoadIndirectToAlX strOffset]
+    return $ loadIndirectIntoAlXThroughYReg strOffset
   LValueExpr lvalue -> do
     (lvalue', _) <- translateLValueRead lvalue
     return lvalue'
@@ -238,14 +245,14 @@ translateLValueIntoYreg assignmentLValue = do
           if identHasDollar then BasicStringType else BasicNumericType
         )
     LValueArrayAccess {lValueArrayIdent, lValueArrayIndex} -> do
-      (identAddr, ty) <- translateIdentAddr lValueArrayIdent
+      (identAddrToAlX, ty) <- translateIdentAddrToAlX lValueArrayIdent
       indexInsts <- translateExpr lValueArrayIndex
 
       return
-        ( identAddr
-            ++ [IrCopyAlXToAlY]
+        ( identAddrToAlX
+            ++ [IrPushAlX]
             ++ indexInsts
-            ++ [IrCallFunction IrAddOp, IrStoreAlXToYReg],
+            ++ [IrPopAlY, IrCallFunction IrAddOp, IrLoadAddressFromAlXToYReg],
           ty
         )
     LValuePseudoVar pseudoVar -> do
@@ -406,7 +413,7 @@ translateStmt stmt = case stmt of
                   case var of
                     Just Variable {variableOffset} -> variableOffset
                     Nothing -> error "User set sleep time variable not found"
-            return [IrLoadIndirectToAlX varOffset]
+            return $ loadIndirectIntoAlXThroughYReg varOffset
           PrintKindPause ->
             -- FIXME: more or less a second, research true value
             return [IrLoadImmediateToAlX 64]
@@ -476,7 +483,7 @@ translateStmt stmt = case stmt of
                 Just Variable {variableOffset} -> variableOffset
                 Nothing -> error "User set sleep time variable not found"
         return $
-          [IrLoadIndirectToAlX varOffset]
+          loadIndirectIntoAlXThroughYReg varOffset
             ++ sleepInstructions
             ++ [IrCallIntrinsic IrClearScreen]
             ++ exprInsts
@@ -511,7 +518,7 @@ translateStmt stmt = case stmt of
 
     return $
       unmaybeWait
-        ++ [IrLoadIndirectToAlX varOffset]
+        ++ loadIndirectIntoAlXThroughYReg varOffset
         ++ sleepInstructions
   PokeStmt {pokeKind, pokeExprs} -> do
     -- The first expression is the address to begin poking
