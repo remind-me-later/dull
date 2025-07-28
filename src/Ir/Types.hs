@@ -6,6 +6,7 @@ module Ir.Types
   )
 where
 
+import Data.Char (toUpper)
 import Data.Word (Word16)
 import Numeric (showHex)
 
@@ -29,13 +30,13 @@ data IrIntrinsic where
   deriving (Eq)
 
 instance Show IrIntrinsic where
-  show IrStrDataInAlXIntoUregAndAreg = "Areg = AL-X (len), Ureg = AL-X (addr)"
-  show IrUregAndAregIntoStrDataInAlX = "AL-X = Areg(len), AL-X = Ureg(addr)"
-  show IrNumToStrInBuffer = "call NUM_TO_STR, A = (len), Ureg = (addr)"
-  show IrStrInBufferToNum = "call STR_TO_NUM, AL-X = NUM"
+  show IrStrDataInAlXIntoUregAndAreg = "SJP LOAD_STRING_HEADER_FROM_AL_X"
+  show IrUregAndAregIntoStrDataInAlX = "SJP STORE_STRING_HEADER_IN_AL_X"
+  show IrNumToStrInBuffer = "SJP NUM_TO_STR"
+  show IrStrInBufferToNum = "SJP STR_TO_NUM"
   show IrPrintStr = "SBJ 0xED00"
   show (IrUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
-  show IrInputStr = "input_str A = (len)"
+  show IrInputStr = "SJP INPUT_STRING"
   show IrGPrintNum = "gprint_num"
   show IrGPrintStr = "gprint_str"
   show IrClear = "clear_vars"
@@ -82,21 +83,21 @@ instance Show IrFun where
   show IrAsciiOp = "ASC AL-X"
   show IrPointOp = "point" -- TODO:
   show IrRndOp = "rnd" -- TODO:
-  show IrIntOp = "INT AL-X"
-  show IrSgnOp = "SGN AL-X"
-  show IrAddOp = "ADD AL-X AL-Y"
-  show IrSubOp = "SUB AL-X AL-Y"
-  show IrMulOp = "MUL AL-X AL-Y"
-  show IrDivOp = "DIV AL-X AL-Y"
-  show IrExponentOp = "EXP AL-X AL-Y"
+  show IrIntOp = "SBJ 0xF5BE"
+  show IrSgnOp = "SBJ 0xF59D"
+  show IrAddOp = "SBJ 0xEFBA"
+  show IrSubOp = "SBJ 0xEFB6"
+  show IrMulOp = "SBJ 0xF01A"
+  show IrDivOp = "SBJ 0xF084"
+  show IrExponentOp = "SBJ 0xF89C"
   show IrAndOp = "AND AL-X AL-Y"
   show IrOrOp = "OR AL-X AL-Y"
-  show IrEqOp = "EQ AL-X AL-Y"
-  show IrNeqOp = "NEQ AL-X AL-Y"
-  show IrLtOp = "LT AL-X AL-Y"
-  show IrLeqOp = "LEQ AL-X AL-Y"
-  show IrGtOp = "GT AL-X AL-Y"
-  show IrGeqOp = "GEQ AL-X AL-Y"
+  show IrEqOp = "A = 0x04\n\tSBJ 0xD0D2"
+  show IrNeqOp = "A = 0x00\n\tSBJ 0xD0D2"
+  show IrLtOp = "A = 0x01\n\tSBJ 0xD0D2"
+  show IrLeqOp = "A = 0x05\n\tSBJ 0xD0D2"
+  show IrGtOp = "A = 0x02\n\tSBJ 0xD0D2"
+  show IrGeqOp = "A = 0x06\n\tSBJ 0xD0D2"
 
 type Label = Int
 
@@ -131,7 +132,9 @@ data IrInst where
   deriving (Eq)
 
 showWord16 :: Word16 -> String
-showWord16 w = "0x" ++ showHex w ""
+showWord16 w = "0x" ++ showHexAllCaps
+  where
+    showHexAllCaps = map toUpper (showHex w "")
 
 instance Show IrInst where
   show (IrLdImmIntoAlX num) =
@@ -152,10 +155,10 @@ instance Show IrInst where
   show IrAlXToAlY = "\tAL-Y = AL-X"
   show IrAlYToAlX = "\tAL-X = AL-Y"
   show (IrLabel idx) = "L" ++ show idx ++ ":"
-  show (IrGoto idx) = "\tgoto L" ++ show idx
-  show (IrCall idx) = "\tcall L" ++ show idx
-  show (IrCondGoto idx) = "\tif Z goto L" ++ show idx
-  show (IrCondCall idx) = "\tif Z call L" ++ show idx
+  show (IrGoto idx) = "\tJMP :L" ++ show idx
+  show (IrCall idx) = "\tSJP :L" ++ show idx
+  show (IrCondGoto idx) = "\tBZS :L" ++ show idx
+  show (IrCondCall idx) = "\tif Z call :L" ++ show idx
   show IrReturn = "\tRTN"
   show (IrIntrinsicCall intrinsic) = "\t" ++ show intrinsic
   show (IrFun op) = "\t" ++ show op

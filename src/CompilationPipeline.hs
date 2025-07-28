@@ -38,7 +38,7 @@ compileProgram fileName contents = do
       Right prog -> do
         -- Stage 2: Type check and semantic analysis
         let (prog', finalState) = analyzeProgram prog
-        -- Stage 3: Translate to HIR
+        -- Stage 3: Translate to IR
         let (irProg, symbTable, nextLabelIdx) = translateProgram prog' finalState
         return $
           Right $

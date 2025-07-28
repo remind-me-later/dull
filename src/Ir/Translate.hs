@@ -425,7 +425,8 @@ translateStmt stmt = case stmt of
     let inputInst = case ty of
           BasicNumericType ->
             [ IrIntrinsicCall IrInputStr,
-              IrIntrinsicCall IrStrInBufferToNum
+              IrIntrinsicCall IrStrInBufferToNum,
+              IrStAlXInYreg
             ]
           BasicStringType ->
             [ IrIntrinsicCall IrInputStr,

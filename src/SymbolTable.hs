@@ -57,7 +57,8 @@ data SymbolTable where
       fakeSymbolMap :: Map String Variable,
       stringLiteralMap :: Map String Word16,
       nextOffset :: Word16,
-      usedLabels :: Map GotoTarget GotoTargetData
+      usedLabels :: Map GotoTarget GotoTargetData,
+      startAddress :: Word16
     } ->
     SymbolTable
   deriving (Eq)
@@ -94,14 +95,15 @@ instance Show SymbolTable where
           (\s1 s2 -> compare (variableOffset s1) (variableOffset s2))
           (elems fakeSymbolMap)
 
-emptySymbolTable :: SymbolTable
-emptySymbolTable =
+emptySymbolTable :: Word16 -> SymbolTable
+emptySymbolTable startAddress =
   SymbolTable
     { symbolMap = empty,
-      nextOffset = 0,
+      nextOffset = startAddress,
       stringLiteralMap = empty,
       usedLabels = mempty,
-      fakeSymbolMap = empty
+      fakeSymbolMap = empty,
+      startAddress = startAddress
     }
 
 insertVariable :: Ident -> BasicType -> SymbolTable -> SymbolTable

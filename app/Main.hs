@@ -29,8 +29,8 @@ main = do
           putStrLn "✓ Compilation successful!"
           putStrLn $ "Program:\n" ++ show prog
           putStrLn $ "Symbol table:\n" ++ show symbolTable
-          putStrLn $ "HIR:\n" ++ show ir
-          putStrLn $ "HIR Symbol table:\n" ++ show irSymbolTable
+          putStrLn $ "IR:\n" ++ show ir
+          putStrLn $ "IR Symbol table:\n" ++ show irSymbolTable
     _ -> do
       putStrLn "Usage: dull <filename>"
       exitFailure

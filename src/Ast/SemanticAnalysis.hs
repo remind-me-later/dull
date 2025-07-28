@@ -36,7 +36,7 @@ data SemanticAnalysisState where
 
 emptySemanticAnalysisState :: SemanticAnalysisState
 emptySemanticAnalysisState =
-  SemanticAnalysisState {symbolTable = emptySymbolTable}
+  SemanticAnalysisState {symbolTable = emptySymbolTable 0x40C5}
 
 insertVariableInState :: Ident -> BasicType -> SemanticAnalysisState -> SemanticAnalysisState
 insertVariableInState sym ty (SemanticAnalysisState symTable) =
