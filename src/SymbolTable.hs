@@ -33,16 +33,16 @@ data Variable where
 instance Show Variable where
   show Variable {variableName, variableOffset, variableType} =
     variableName ++ case variableType of
-      BasicStringType -> "$ : " ++ show variableOffset
-      BasicNumericType -> " : " ++ show variableOffset
+      BasicStringType -> "$ : 0x" ++ showHexAllCaps variableOffset
+      BasicNumericType -> " : 0x" ++ showHexAllCaps variableOffset
       BasicNumArrType {numericArrSize} ->
-        "(" ++ show numericArrSize ++ ") : " ++ show variableOffset
+        "(" ++ show numericArrSize ++ ") : 0x" ++ showHexAllCaps variableOffset
       BasicStrArrType {strArrSize, strArrLength} ->
         "$("
           ++ show strArrSize
           ++ ")*"
           ++ show strArrLength
-          ++ " : "
+          ++ " : 0x"
           ++ showHexAllCaps variableOffset
     where
       showHexAllCaps w = Prelude.map toUpper (showHex w "")
@@ -70,12 +70,15 @@ data SymbolTable where
   deriving (Eq)
 
 instance Show SymbolTable where
-  show SymbolTable {symbolMap, stringLiteralMap, usedLabels, fakeSymbolMap} =
+  show SymbolTable {symbolMap, stringLiteralMap, usedLabels, fakeSymbolMap, numberLiteralMap} =
     "vars: {"
       ++ intercalate ", " (show <$> orderedSymbols)
       ++ "}\n"
       ++ "strings: {"
       ++ intercalate ", " (showStringLit <$> stringLits)
+      ++ "}\n"
+      ++ "number literals: {"
+      ++ intercalate ", " (showStringLit <$> numLits)
       ++ "}\n"
       ++ "used labels: {"
       ++ intercalate ", " (show <$> usedLabels')
@@ -96,6 +99,10 @@ instance Show SymbolTable where
         sortBy
           (\(l1, _) (l2, _) -> compare l1 l2)
           (toList usedLabels)
+      numLits =
+        sortBy
+          (\(n1, _) (n2, _) -> compare n1 n2)
+          (toList numberLiteralMap)
       fakeSymbols' =
         sortBy
           (\s1 s2 -> compare (variableOffset s1) (variableOffset s2))

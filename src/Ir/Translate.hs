@@ -64,11 +64,17 @@ lookupStringLiteralOffset str state' =
     Just offset -> offset
     Nothing -> error $ "String literal not found: " ++ str
 
-lookupNumberLiteralOffset :: Double -> TranslationState -> Word16
-lookupNumberLiteralOffset num state' =
+lookupNumberLiteralOffset :: Double -> State TranslationState Word16
+lookupNumberLiteralOffset num = do
+  state' <- get
   case Data.Map.lookup num (numberLiteralMap (symbolTable state')) of
-    Just offset -> offset
-    Nothing -> error $ "Number literal not found: " ++ show num
+    Just offset -> return offset
+    Nothing -> do
+      -- Add into the symbol table
+      let nextOffset' = nextOffset (symbolTable state')
+      let newState = insertNumberLiteral num (symbolTable state')
+      modify (\s -> s {symbolTable = newState})
+      return nextOffset'
 
 irUserSetSleepTimeFakeVarName :: String
 irUserSetSleepTimeFakeVarName = "user_set_sleep_time"
@@ -94,12 +100,12 @@ translateIdent id'@Ident {identHasDollar} = do
 
 loadImmediateToAlx :: Double -> State TranslationState [IrInst]
 loadImmediateToAlx imm = do
-  immAddr <- gets (lookupNumberLiteralOffset imm)
+  immAddr <- lookupNumberLiteralOffset imm
   return [IrLoadImmediateToYReg immAddr, IrLoadFromYRegToAlX]
 
 loadImmediateToAlY :: Double -> State TranslationState [IrInst]
 loadImmediateToAlY imm = do
-  immAddr <- gets (lookupNumberLiteralOffset imm)
+  immAddr <- lookupNumberLiteralOffset imm
   return [IrLoadImmediateToYReg immAddr, IrLoadFromYRegToAlX, IrCopyAlXToAlY]
 
 translateIdentAddrToAlX :: Ident -> State TranslationState ([IrInst], BasicType)
