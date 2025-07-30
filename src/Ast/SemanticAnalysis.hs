@@ -366,14 +366,20 @@ analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
   return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = analyzedLValue})
 analyzeStmt EndStmt = return EndStmt
 analyzeStmt Comment = return Comment
-analyzeStmt (ForStmt forAssignment forToExpr) = do
+analyzeStmt (ForStmt forAssignment forToExpr stepExpr) = do
   forType <- analyzeAssignment forAssignment
   toType <- analyzeExpr forToExpr
 
   when (assignmentType forType /= BasicNumericType || Ast.Types.exprType toType /= BasicNumericType) $
     error "For statement requires numeric expressions for assignment and to"
 
-  return (ForStmt forType toType)
+  case stepExpr of
+    Just step -> do
+      stepType <- analyzeExpr step
+      when (Ast.Types.exprType stepType /= BasicNumericType) $
+        error "For statement requires a numeric expression for step"
+      return (ForStmt {forAssignment = forType, forToExpr = toType, forStepExpr = Just stepType})
+    Nothing -> return (ForStmt {forAssignment = forType, forToExpr = toType, forStepExpr = Nothing})
 analyzeStmt (NextStmt nextIdent) = do
   let nextType = BasicNumericType -- Next always refers to a numeric identifier
   modify (insertVariableInState nextIdent nextType)

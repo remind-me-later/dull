@@ -489,9 +489,16 @@ ifStmt = do
 forStmt :: Parser RawStmt
 forStmt = do
   _ <- keyword "FOR"
-  a <- assignment
+  ass <- assignment
   _ <- keyword "TO"
-  ForStmt a <$> expression
+  toExpr <- expression
+  stepExpr <- optional (keyword "STEP" *> expression)
+  return
+    ForStmt
+      { forAssignment = ass,
+        forToExpr = toExpr,
+        forStepExpr = stepExpr
+      }
 
 nextStmt :: Parser RawStmt
 nextStmt = keyword "NEXT" *> (NextStmt <$> ident)

@@ -378,7 +378,12 @@ data Stmt et where
     Stmt et
   EndStmt :: Stmt et
   Comment :: Stmt et
-  ForStmt :: {forAssignment :: Assignment et, forToExpr :: Expr et} -> Stmt et
+  ForStmt ::
+    { forAssignment :: Assignment et,
+      forToExpr :: Expr et,
+      forStepExpr :: Maybe (Expr et) -- if Nothing, the step is 1
+    } ->
+    Stmt et
   NextStmt :: {nextIdent :: Ident} -> Stmt et
   ClearStmt :: Stmt et
   GoToStmt :: {gotoTarget :: Expr et} -> Stmt et
@@ -448,7 +453,10 @@ instance Show (Stmt et) where
       ++ show me
   show EndStmt = "END"
   show Comment = "REM"
-  show (ForStmt assign to) = "FOR " ++ show assign ++ " TO " ++ show to
+  show (ForStmt assign to step) =
+    "FOR " ++ show assign ++ " TO " ++ show to ++ case step of
+      Just s -> " STEP " ++ show s
+      Nothing -> ""
   show (NextStmt i) = "NEXT " ++ show i
   show ClearStmt = "CLEAR"
   show (GoToStmt target) = "GOTO " ++ show target
