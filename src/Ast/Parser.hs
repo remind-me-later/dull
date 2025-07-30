@@ -13,6 +13,7 @@ import Text.Parsec
   ( ParsecT,
     char,
     eof,
+    lookAhead,
     many1,
     runParserT,
     satisfy,
@@ -79,21 +80,32 @@ keyword kw = Ast.Parser.lex $ string kw
 symbol :: Char -> Parser Char
 symbol sym = Ast.Parser.lex $ char sym
 
--- Variables consist of the following:
--- \[A-Z]$?
--- the dollar indicates a string variable
-
 ident :: Parser Ident
 ident = Ast.Parser.lex $ do
+  -- Look ahead to see the next 3 characters
+  lookahead <- lookAhead (many (satisfy (`elem` ['A' .. 'Z'])))
+
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
-  dollar <- optional (char '$')
-  return
-    Ident
-      { identName = firstChar,
-        identHasDollar = case dollar of
-          Just _ -> True
-          Nothing -> False
-      }
+
+  -- If we have 3 or more uppercase letters, only parse the first
+  if length lookahead >= 3
+    then do
+      return
+        Ident
+          { identName1 = firstChar,
+            identName2 = Nothing,
+            identHasDollar = False
+          }
+    else do
+      -- Normal parsing for 1-2 characters
+      secondChar <- optional (satisfy (`elem` ['A' .. 'Z']))
+      dollar <- optional (char '$')
+      return
+        Ident
+          { identName1 = firstChar,
+            identName2 = secondChar,
+            identHasDollar = isJust dollar
+          }
 
 pseudoVariable :: Parser PseudoVariable
 pseudoVariable =

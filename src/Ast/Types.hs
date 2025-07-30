@@ -29,7 +29,6 @@ module Ast.Types
     BeepOptionalParams (..),
     PrintCommaFormat (..),
     GPrintSeparator (..),
-    getIdentName,
   )
 where
 
@@ -174,18 +173,16 @@ instance Show PseudoVariable where
 
 data Ident where
   Ident ::
-    { identName :: Char,
+    { identName1 :: Char,
+      identName2 :: Maybe Char,
       identHasDollar :: Bool -- True if the identifier ends with a dollar sign, indicating a string variable
     } ->
     Ident
   deriving (Eq, Ord)
 
 instance Show Ident where
-  show (Ident c True) = [c, '$']
-  show (Ident c False) = [c]
-
-getIdentName :: Ident -> Char
-getIdentName (Ident c _) = c
+  show (Ident c1 c2 hasDollar) =
+    c1 : maybe "" (: []) c2 ++ if hasDollar then "$" else ""
 
 data LValue et where
   LValueIdent :: Ident -> LValue et

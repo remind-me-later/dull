@@ -8,7 +8,7 @@ module SymbolTable
   )
 where
 
-import Ast.Types (Ident (..), getIdentName)
+import Ast.Types (Ident (..))
 import Data.List (intercalate)
 import Data.Map
 import Data.Word (Word16)
@@ -66,8 +66,8 @@ emptySymbolTable = SymbolTable {symbolMap = empty, labelToLineMap = empty}
 insertVariable :: Ident -> BasicType -> SymbolTable -> SymbolTable
 insertVariable sym ty st@SymbolTable {symbolMap} =
   let alreadyInSymbols = Data.Map.member sym symbolMap
-      newSymbolName = getIdentName sym
-      newSymbol = Variable {variableName = [newSymbolName], variableType = ty}
+      newSymbolName = show sym
+      newSymbol = Variable {variableName = newSymbolName, variableType = ty}
       newSymbols = insert sym newSymbol symbolMap
    in if alreadyInSymbols
         then st
