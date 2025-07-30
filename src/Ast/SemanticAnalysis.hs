@@ -88,6 +88,25 @@ analyzeLValue (LValueArrayAccess ident expr) = do
                   ++ show strArrLength
         t -> error $ "Array " ++ show ident ++ " is not a numeric or string array: " ++ show t
     _ -> error "Array index must be numeric"
+analyzeLValue (LValue2DArrayAccess ident rowIndex colIndex) = do
+  rowIndexType <- analyzeExpr rowIndex
+  colIndexType <- analyzeExpr colIndex
+  case (Ast.Types.exprType rowIndexType, Ast.Types.exprType colIndexType) of
+    (BasicNumericType, BasicNumericType) -> do
+      -- Arrays must be declared before use with the DIM statement
+      symbol <- gets (lookupSymbolInState ident)
+      let ty = SymbolTable.variableType symbol
+      case ty of
+        BasicNum2DArrType {num2DArrRows, num2DArrCols} ->
+          if num2DArrRows >= 0 && num2DArrCols >= 0
+            then return (LValue2DArrayAccess {lValue2DArrayIdent = ident, lValue2DArrayRowIndex = rowIndexType, lValue2DArrayColIndex = colIndexType}, BasicNumericType)
+            else error $ "2D array " ++ show ident ++ " has invalid rows or columns: " ++ show num2DArrRows ++ ", " ++ show num2DArrCols
+        BasicStr2DArrType {str2DArrRows, str2DArrCols, str2DArrLength} ->
+          if str2DArrRows >= 0 && str2DArrCols >= 0 && str2DArrLength >= 0
+            then return (LValue2DArrayAccess {lValue2DArrayIdent = ident, lValue2DArrayRowIndex = rowIndexType, lValue2DArrayColIndex = colIndexType}, BasicStringType)
+            else error $ "String 2D array " ++ show ident ++ " has invalid rows, columns or length: " ++ show str2DArrRows ++ ", " ++ show str2DArrCols ++ ", " ++ show str2DArrLength
+        t -> error $ "Array " ++ show ident ++ " is not a numeric or string 2D array: " ++ show t
+    _ -> error "Row and column indices must be numeric"
 analyzeLValue (LValuePseudoVar pseudoVar) = do
   ty <- analyzePsuedoVar pseudoVar
   return (LValuePseudoVar pseudoVar, ty)
@@ -152,7 +171,10 @@ analyzeFunction ident = case ident of
       then return (PointFun {pointFunPositionExpr = posType}, BasicNumericType)
       else error "POINT function requires a numeric expression for position"
   RndFun {rndRangeEnd} -> do
-    return (RndFun {rndRangeEnd}, BasicNumericType)
+    rangeEndType <- analyzeExpr rndRangeEnd
+    if Ast.Types.exprType rangeEndType == BasicNumericType
+      then return (RndFun {rndRangeEnd = rangeEndType}, BasicNumericType)
+      else error "RND function requires a numeric expression for range end"
   IntFun {intFunExpr} -> do
     exprType <- analyzeExpr intFunExpr
     if Ast.Types.exprType exprType == BasicNumericType
@@ -176,6 +198,11 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType exprType == BasicNumericType
       then return (StrFun {strFunExpr = exprType}, BasicStringType)
       else error "STR$ function requires a numeric expression"
+  ChrFun {chrFunExpr} -> do
+    exprType <- analyzeExpr chrFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (ChrFun {chrFunExpr = exprType}, BasicStringType)
+      else error "CHR$ function requires a numeric expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
@@ -211,10 +238,9 @@ analyzeExprInner (BinExpr left op right) = do
       if leftType == BasicNumericType && rightType == BasicNumericType
         then return (BinExpr analyzedLeft AddOp analyzedRight, BasicNumericType)
         else
-          -- if leftType == BasicStringType && rightType == BasicStringType
-          --   then return (BinExpr analyzedLeft AddOp analyzedRight, BasicStringType)
-          --   else error "Addition can only be applied to numeric or string expressions"
-          error "Unimplemented string concatenation"
+          if leftType == BasicStringType && rightType == BasicStringType
+            then return (BinExpr analyzedLeft AddOp analyzedRight, BasicStringType)
+            else error "Addition can only be applied to numeric or string expressions"
     SubtractOp ->
       if leftType == BasicNumericType && rightType == BasicNumericType
         then return (BinExpr analyzedLeft SubtractOp analyzedRight, BasicNumericType)
@@ -276,7 +302,7 @@ analyzeExpr Expr {exprInner} = do
 
 -- We have to add the arrays to the symbol table
 analyzeDimAndInsertIntoTable :: DimInner -> State SemanticAnalysisState BasicType
-analyzeDimAndInsertIntoTable (DimInner {dimIdent, dimSize, dimStringLength}) = do
+analyzeDimAndInsertIntoTable (DimInner1D {dimIdent, dimSize, dimStringLength}) = do
   case identHasDollar dimIdent of
     False -> do
       let exprType = BasicNumArrType {numericArrSize = dimSize}
@@ -289,6 +315,21 @@ analyzeDimAndInsertIntoTable (DimInner {dimIdent, dimSize, dimStringLength}) = d
     True -> do
       let concreteLength = fromMaybe defaultStringLength dimStringLength
           exprType = BasicStrArrType {strArrSize = dimSize, strArrLength = concreteLength}
+      modify (insertVariableInState dimIdent exprType)
+      return exprType
+analyzeDimAndInsertIntoTable (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength}) = do
+  case identHasDollar dimIdent of
+    False -> do
+      let exprType = BasicNum2DArrType {num2DArrRows = dimRows, num2DArrCols = dimCols}
+
+      when (isJust dimStringLength) $
+        error "Numeric 2D arrays cannot have a string length"
+
+      modify (insertVariableInState dimIdent exprType)
+      return exprType
+    True -> do
+      let concreteLength = fromMaybe defaultStringLength dimStringLength
+          exprType = BasicStr2DArrType {str2DArrRows = dimRows, str2DArrCols = dimCols, str2DArrLength = concreteLength}
       modify (insertVariableInState dimIdent exprType)
       return exprType
 
@@ -315,6 +356,16 @@ analyzeBeepOptionalParams (BeepOptionalParams frequency duration) = do
   if Ast.Types.exprType analyzedFrequency == BasicNumericType && Ast.Types.exprType analyzedDuration == BasicNumericType
     then return (BeepOptionalParams {beepFrequency = analyzedFrequency, beepDuration = analyzedDuration})
     else error "Beep optional parameters must be numeric expressions"
+
+analyzeDimInner :: DimInner -> State SemanticAnalysisState ()
+analyzeDimInner dimInner = do
+  case dimInner of
+    DimInner1D {dimIdent, dimSize, dimStringLength} -> do
+      _ <- analyzeDimAndInsertIntoTable (DimInner1D {dimIdent, dimSize, dimStringLength})
+      return ()
+    DimInner2D {dimIdent, dimRows, dimCols, dimStringLength} -> do
+      _ <- analyzeDimAndInsertIntoTable (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength})
+      return ()
 
 analyzeStmt :: RawStmt -> State SemanticAnalysisState TypedStmt
 analyzeStmt (LetStmt assignments) = do
@@ -378,6 +429,43 @@ analyzeStmt (PauseStmt pauseCommaFormat) = do
                   }
             }
         )
+analyzeStmt (LPrintStmt maybeCommaFormat) = do
+  case maybeCommaFormat of
+    Just commaFormat -> do
+      case commaFormat of
+        PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+          expr1Type <- analyzeExpr printCommaFormatExpr1
+          expr2Type <- analyzeExpr printCommaFormatExpr2
+          return
+            ( LPrintStmt
+                { lprintCommaFormat =
+                    Just
+                      ( PrintCommaFormat
+                          { printCommaFormatExpr1 = expr1Type,
+                            printCommaFormatExpr2 = expr2Type
+                          }
+                      )
+                }
+            )
+        PrintSemicolonFormat
+          { printSemicolonFormatUsingClause,
+            printSemicolonFormatExprs,
+            printSemicolonFormatEnding
+          } -> do
+            analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+            return
+              ( LPrintStmt
+                  { lprintCommaFormat =
+                      Just
+                        ( PrintSemicolonFormat
+                            { printSemicolonFormatUsingClause,
+                              printSemicolonFormatExprs = analyzedExprs,
+                              printSemicolonFormatEnding
+                            }
+                        )
+                  }
+              )
+    Nothing -> return (LPrintStmt {lprintCommaFormat = Nothing})
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
   -- add string literals to the symbol table
@@ -462,9 +550,9 @@ analyzeStmt (PokeStmt pokeKind pokeExprs) = do
     error "Poke statement requires numeric expressions"
 
   return (PokeStmt {pokeKind = pokeKind, pokeExprs = exprTypes})
-analyzeStmt (DimStmt dimKind) = do
-  _ <- analyzeDimAndInsertIntoTable dimKind
-  return (DimStmt dimKind)
+analyzeStmt (DimStmt decls) = do
+  mapM_ analyzeDimInner decls
+  return (DimStmt {dimDecls = decls})
 -- FIXME: check that data, read and restore are typed correctly
 analyzeStmt (ReadStmt readStmtDestinations) = do
   analyzedLvalues <- mapM analyzeLValue readStmtDestinations

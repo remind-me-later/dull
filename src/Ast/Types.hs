@@ -28,6 +28,7 @@ module Ast.Types
     BeepOptionalParams (..),
     PrintCommaFormat (..),
     GPrintSeparator (..),
+    identName,
   )
 where
 
@@ -105,7 +106,7 @@ data Function et where
     } ->
     Function et
   RndFun ::
-    { rndRangeEnd :: Number
+    { rndRangeEnd :: Expr et
     } ->
     Function et
   IntFun ::
@@ -126,6 +127,10 @@ data Function et where
     Function et
   StrFun ::
     { strFunExpr :: Expr et -- the expression to convert to string
+    } ->
+    Function et
+  ChrFun ::
+    { chrFunExpr :: Expr et -- the numeric expression to convert to a character
     } ->
     Function et
   deriving (Eq)
@@ -159,6 +164,8 @@ instance Show (Function et) where
     "(VAL " ++ show expr ++ ")"
   show StrFun {strFunExpr = expr} =
     "(STR$ " ++ show expr ++ ")"
+  show ChrFun {chrFunExpr = expr} =
+    "(CHR$ " ++ show expr ++ ")"
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -183,11 +190,20 @@ instance Show Ident where
   show (Ident c1 c2 hasDollar) =
     c1 : maybe "" (: []) c2 ++ if hasDollar then "$" else ""
 
+identName :: Ident -> String
+identName (Ident c1 c2 _) = c1 : maybe "" (: []) c2
+
 data LValue et where
   LValueIdent :: Ident -> LValue et
   LValueArrayAccess ::
     { lValueArrayIdent :: Ident,
       lValueArrayIndex :: Expr et
+    } ->
+    LValue et
+  LValue2DArrayAccess ::
+    { lValue2DArrayIdent :: Ident,
+      lValue2DArrayRowIndex :: Expr et,
+      lValue2DArrayColIndex :: Expr et
     } ->
     LValue et
   LValuePseudoVar :: PseudoVariable -> LValue et
@@ -202,6 +218,8 @@ instance Show (LValue et) where
   show (LValueIdent ident) = show ident
   show (LValueArrayAccess ident index) =
     show ident ++ "(" ++ show index ++ ")"
+  show (LValue2DArrayAccess ident rowIndex colIndex) =
+    show ident ++ "(" ++ show rowIndex ++ ", " ++ show colIndex ++ ")"
   show (LValuePseudoVar pseudoVar) = show pseudoVar
   show (LValueFixedMemoryAreaVar name hasDollar) =
     if hasDollar
@@ -286,21 +304,37 @@ data PokeKind where
   Me1 :: PokeKind
   deriving (Eq)
 
--- FIXME: allow 2 dimensions
 data DimInner where
-  DimInner ::
+  DimInner1D ::
     { dimIdent :: Ident,
       dimSize :: Word8,
+      dimStringLength :: Maybe Word8 -- if Nothing, the default string length is used, only used for string arrays
+    } ->
+    DimInner
+  DimInner2D ::
+    { dimIdent :: Ident,
+      dimRows :: Word8,
+      dimCols :: Word8,
       dimStringLength :: Maybe Word8 -- if Nothing, the default string length is used, only used for string arrays
     } ->
     DimInner
   deriving (Eq)
 
 instance Show DimInner where
-  show (DimInner {dimIdent, dimSize, dimStringLength}) =
+  show (DimInner1D {dimIdent, dimSize, dimStringLength}) =
     show dimIdent
       ++ "("
       ++ show dimSize
+      ++ ")"
+      ++ case dimStringLength of
+        Just len -> "*" ++ show len
+        Nothing -> ""
+  show (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength}) =
+    show dimIdent
+      ++ "("
+      ++ show dimRows
+      ++ ", "
+      ++ show dimCols
       ++ ")"
       ++ case dimStringLength of
         Just len -> "*" ++ show len
@@ -362,6 +396,10 @@ data Stmt et where
     { pauseCommaFormat :: PrintCommaFormat et
     } ->
     Stmt et
+  LPrintStmt ::
+    { lprintCommaFormat :: Maybe (PrintCommaFormat et)
+    } ->
+    Stmt et
   UsingStmt ::
     { usingStmtClause :: UsingClause
     } ->
@@ -421,7 +459,7 @@ data Stmt et where
       pokeExprs :: [Expr et]
     } ->
     Stmt et
-  DimStmt :: {dimKind :: DimInner} -> Stmt et
+  DimStmt :: {dimDecls :: [DimInner]} -> Stmt et
   ReadStmt ::
     { readStmtDestinations :: [LValue et]
     } ->
@@ -477,7 +515,7 @@ instance Show (Stmt et) where
         Me0 -> " "
         Me1 -> "# "
       ++ intercalate ", " (show <$> exprs)
-  show (DimStmt e) = "DIM " ++ show e
+  show (DimStmt decls) = "DIM " ++ intercalate ", " (show <$> decls)
   show (ReadStmt ids) = "READ " ++ intercalate ", " (show <$> ids)
   show (DataStmt exprs) = "DATA " ++ intercalate ", " (show <$> exprs)
   show (RestoreStmt n) = "RESTORE " ++ show n
@@ -489,6 +527,7 @@ instance Show (Stmt et) where
   show (OnGoSubStmt expr targets) =
     "ON " ++ show expr ++ " GOSUB " ++ intercalate ", " (show <$> targets)
   show (CallStmt expr) = "CALL " ++ show expr
+  show (LPrintStmt maybeCommaFormat) = "LPRINT " ++ maybe "" show maybeCommaFormat
 
 type LineNumber = Word16
 

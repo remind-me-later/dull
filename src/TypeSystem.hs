@@ -22,6 +22,17 @@ data BasicType where
       strArrLength :: Word8
     } ->
     BasicType
+  BasicNum2DArrType ::
+    { num2DArrRows :: Word8,
+      num2DArrCols :: Word8
+    } ->
+    BasicType
+  BasicStr2DArrType ::
+    { str2DArrRows :: Word8,
+      str2DArrCols :: Word8,
+      str2DArrLength :: Word8
+    } ->
+    BasicType
   deriving (Show, Eq)
 
 defaultStringLength :: Word8

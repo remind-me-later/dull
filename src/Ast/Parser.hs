@@ -98,7 +98,7 @@ ident = Ast.Parser.lex $ do
           }
     else do
       -- Normal parsing for 1-2 characters
-      secondChar <- optional (satisfy (`elem` ['A' .. 'Z']))
+      secondChar <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
       dollar <- optional (char '$')
       return
         Ident
@@ -131,14 +131,35 @@ lvalueArrayAccess = do
   ident' <- ident
   index <- optional (parens expression)
   case index of
-    Just idx -> return (LValueArrayAccess ident' idx)
+    Just idx ->
+      return
+        LValueArrayAccess
+          { lValueArrayIdent = ident',
+            lValueArrayIndex = idx
+          }
     Nothing -> return (LValueIdent ident')
+
+lvalue2DArrayAccess :: Parser RawLValue
+lvalue2DArrayAccess = do
+  ident' <- ident
+  _ <- symbol '('
+  rowIndex <- expression
+  _ <- symbol ','
+  colIndex <- expression
+  _ <- symbol ')'
+  return
+    LValue2DArrayAccess
+      { lValue2DArrayIdent = ident',
+        lValue2DArrayRowIndex = rowIndex,
+        lValue2DArrayColIndex = colIndex
+      }
 
 lvalue :: Parser RawLValue
 lvalue =
   Ast.Parser.lex
     ( try (LValuePseudoVar <$> pseudoVariable)
         <|> try lvalueFixedMemoryArea
+        <|> try lvalue2DArrayAccess
         <|> lvalueArrayAccess
     )
 
@@ -159,11 +180,12 @@ functionCall =
     <|> try statusFunCall
     <|> try valFunCall
     <|> try strFunCall
+    <|> try chrFunCall
     <|> sgnFunCall
   where
     rndFunCall = do
       _ <- keyword "RND"
-      RndFun <$> decimalNumber
+      RndFun <$> expressionFactor
     asciiFunCall = do
       _ <- keyword "ASC"
       AsciiFun <$> expressionFactor
@@ -211,6 +233,9 @@ functionCall =
     strFunCall = do
       _ <- keyword "STR$"
       StrFun <$> expression
+    chrFunCall = do
+      _ <- keyword "CHR$"
+      ChrFun <$> expressionFactor
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -409,6 +434,34 @@ printStmt = do
     Left () -> PrintStmt {printCommaFormat = commaFormat}
     Right () -> PauseStmt {pauseCommaFormat = commaFormat}
 
+lprintStmt :: Parser RawStmt
+lprintStmt = do
+  _ <- keyword "LPRINT"
+  maybeUsing <- optional (usingClause <* symbol ';')
+  firstExpr <- optional expression
+
+  case firstExpr of
+    Nothing -> do
+      return LPrintStmt {lprintCommaFormat = Nothing}
+    Just firstExpr' -> do
+      commaExpr <- optional (symbol ',' *> expression)
+      commaFormat <- case commaExpr of
+        Just expr -> do
+          return PrintCommaFormat {printCommaFormatExpr1 = firstExpr', printCommaFormatExpr2 = expr}
+        Nothing -> do
+          restExprs <- many (try (symbol ';' *> expression))
+          semi <- optional (symbol ';')
+          return
+            PrintSemicolonFormat
+              { printSemicolonFormatUsingClause = maybeUsing,
+                printSemicolonFormatExprs = firstExpr' : restExprs,
+                printSemicolonFormatEnding =
+                  case semi of
+                    Just _ -> PrintEndingNoNewLine
+                    Nothing -> PrintEndingNewLine
+              }
+      return LPrintStmt {lprintCommaFormat = Just commaFormat}
+
 gPrintStmt :: Parser RawStmt
 gPrintStmt = do
   _ <- keyword "GPRINT"
@@ -559,21 +612,37 @@ pokeStmt = do
         exprs
     )
 
+dimDecl :: Parser DimInner
+dimDecl = do
+  identifier <- ident
+  _ <- symbol '('
+  dimRows <- word8
+  maybeCols <- optional (symbol ',' *> word8)
+  _ <- symbol ')'
+  maybeStrLen <- optional (binOperator MultiplyOp *> word8)
+
+  case maybeCols of
+    Just cols ->
+      return
+        DimInner2D
+          { dimIdent = identifier,
+            dimRows = dimRows,
+            dimCols = cols,
+            dimStringLength = maybeStrLen
+          }
+    Nothing ->
+      return
+        DimInner1D
+          { dimIdent = identifier,
+            dimSize = dimRows,
+            dimStringLength = maybeStrLen
+          }
+
 dimStmt :: Parser RawStmt
 dimStmt = do
   _ <- keyword "DIM"
-  identifier <- ident
-  size <- parens word8
-  strLen <- optional (binOperator MultiplyOp *> word8)
-  return
-    ( DimStmt
-        ( DimInner
-            { dimIdent = identifier,
-              dimSize = size,
-              dimStringLength = strLen
-            }
-        )
-    )
+  decls <- commaSeparated dimDecl
+  return DimStmt {dimDecls = decls}
 
 dataStmt :: Parser RawStmt
 dataStmt = do
@@ -656,6 +725,7 @@ stmt mandatoryLet =
     <|> try unlockStmt
     <|> try onGotoGosubStmt
     <|> try callStmt
+    <|> try lprintStmt
     <|> letStmt mandatoryLet
 
 line :: Parser RawLine

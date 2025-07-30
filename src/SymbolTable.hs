@@ -8,7 +8,7 @@ module SymbolTable
   )
 where
 
-import Ast.Types (Ident (..))
+import Ast.Types (Ident (..), identName)
 import Data.List (intercalate)
 import Data.Map
 import Data.Word (Word16)
@@ -34,6 +34,15 @@ instance Show Variable where
           ++ show strArrSize
           ++ ")*"
           ++ show strArrLength
+      BasicNum2DArrType {num2DArrRows, num2DArrCols} ->
+        "(" ++ show num2DArrRows ++ ", " ++ show num2DArrCols ++ ")"
+      BasicStr2DArrType {str2DArrRows, str2DArrCols, str2DArrLength} ->
+        "$("
+          ++ show str2DArrRows
+          ++ ", "
+          ++ show str2DArrCols
+          ++ ")*"
+          ++ show str2DArrLength
 
 data GotoTargetData where
   IsBranch :: GotoTargetData
@@ -66,7 +75,7 @@ emptySymbolTable = SymbolTable {symbolMap = empty, labelToLineMap = empty}
 insertVariable :: Ident -> BasicType -> SymbolTable -> SymbolTable
 insertVariable sym ty st@SymbolTable {symbolMap} =
   let alreadyInSymbols = Data.Map.member sym symbolMap
-      newSymbolName = show sym
+      newSymbolName = identName sym
       newSymbol = Variable {variableName = newSymbolName, variableType = ty}
       newSymbols = insert sym newSymbol symbolMap
    in if alreadyInSymbols
