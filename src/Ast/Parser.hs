@@ -154,7 +154,7 @@ functionCall =
       RndFun <$> decimalNumber
     asciiFunCall = do
       _ <- keyword "ASC"
-      AsciiFun <$> expression
+      AsciiFun <$> expressionFactor
     sgnFunCall = do
       _ <- keyword "SGN"
       SgnFun <$> expression

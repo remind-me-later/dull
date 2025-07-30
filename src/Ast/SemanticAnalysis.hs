@@ -382,15 +382,9 @@ analyzeStmt ClearStmt = return ClearStmt
 analyzeStmt (GoToStmt gotoTarget) = do
   exprType <- analyzeExpr gotoTarget
 
-  when (Ast.Types.exprType exprType /= BasicNumericType) $
-    error "GoTo statement requires a numeric expression"
-
   return (GoToStmt {gotoTarget = exprType})
 analyzeStmt (GoSubStmt gosubTarget) = do
   exprType <- analyzeExpr gosubTarget
-
-  when (Ast.Types.exprType exprType /= BasicNumericType) $
-    error "GoSub statement requires a numeric expression"
 
   return (GoSubStmt {gosubTarget = exprType})
 analyzeStmt (WaitStmt waitForExpr) = do
