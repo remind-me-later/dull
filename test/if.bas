@@ -1,3 +1,0 @@
-10  LET X = 1
-20  IF X = 1 THEN LET X = 30: LET Y = 40: LET Z = 50
-30  PRINT "Y = "; Y

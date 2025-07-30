@@ -36,29 +36,17 @@ data SemanticAnalysisState where
 
 emptySemanticAnalysisState :: SemanticAnalysisState
 emptySemanticAnalysisState =
-  SemanticAnalysisState {symbolTable = emptySymbolTable 0x40C5}
+  SemanticAnalysisState {symbolTable = emptySymbolTable}
 
 insertVariableInState :: Ident -> BasicType -> SemanticAnalysisState -> SemanticAnalysisState
 insertVariableInState sym ty (SemanticAnalysisState symTable) =
   SemanticAnalysisState {symbolTable = insertVariable sym ty symTable}
-
-insertStringLiteralInState :: String -> SemanticAnalysisState -> SemanticAnalysisState
-insertStringLiteralInState str (SemanticAnalysisState symTable) =
-  SemanticAnalysisState {symbolTable = insertStringLiteral str symTable}
-
-insertNumberLiteralInState :: Double -> SemanticAnalysisState -> SemanticAnalysisState
-insertNumberLiteralInState num (SemanticAnalysisState symTable) =
-  SemanticAnalysisState {symbolTable = insertNumberLiteral num symTable}
 
 lookupSymbolInState :: Ident -> SemanticAnalysisState -> Variable
 lookupSymbolInState name (SemanticAnalysisState symTable) =
   case lookupSymbol name symTable of
     Just sym -> sym
     Nothing -> error $ "Symbol not found: " ++ show name
-
-insertUsedLabelInState :: GotoTarget -> Bool -> SemanticAnalysisState -> SemanticAnalysisState
-insertUsedLabelInState label isFunctionCall (SemanticAnalysisState symTable) =
-  SemanticAnalysisState {symbolTable = insertUsedLabel label isFunctionCall symTable}
 
 analyzeIdentAndInsertIntoTable :: Ident -> State SemanticAnalysisState BasicType
 analyzeIdentAndInsertIntoTable id'@Ident {identHasDollar} =
@@ -103,11 +91,12 @@ analyzeLValue (LValueArrayAccess ident expr) = do
 analyzeLValue (LValuePseudoVar pseudoVar) = do
   ty <- analyzePsuedoVar pseudoVar
   return (LValuePseudoVar pseudoVar, ty)
+analyzeLValue (LValueFixedMemoryAreaVar name hasDollar) =
+  let ty = if hasDollar then BasicStringType else BasicNumericType
+   in return (LValueFixedMemoryAreaVar {lValueFixedMemoryAreaVarName = name, lValueFixedMemoryAreaHasDollar = hasDollar}, ty)
 
 analyzeStrVariableOrLiteral :: StringVariableOrLiteral -> State SemanticAnalysisState BasicType
-analyzeStrVariableOrLiteral (StringLiteral lit) = do
-  modify (insertStringLiteralInState lit)
-  return BasicStringType
+analyzeStrVariableOrLiteral (StringLiteral _) = return BasicStringType
 analyzeStrVariableOrLiteral (StringVariable ident) = do
   analyzedId <- analyzeIdentAndInsertIntoTable ident
   case analyzedId of
@@ -131,7 +120,7 @@ analyzeFunction ident = case ident of
               },
             BasicStringType
           )
-      else error "Mid function requires a string and numeric expressions for start and length"
+      else error "MID$ function requires a string and numeric expressions for start and length"
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
     strType <- analyzeStrVariableOrLiteral leftFunStringExpr
     lengthType <- analyzeExpr leftFunLengthExpr
@@ -141,7 +130,7 @@ analyzeFunction ident = case ident of
           ( LeftFun {leftFunStringExpr, leftFunLengthExpr = lengthType},
             BasicStringType
           )
-      else error "Left function requires a string and a numeric expression for length"
+      else error "LEFT$ function requires a string and a numeric expression for length"
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
     strType <- analyzeStrVariableOrLiteral rightFunStringExpr
     lengthType <- analyzeExpr rightFunLengthExpr
@@ -151,39 +140,47 @@ analyzeFunction ident = case ident of
           ( RightFun {rightFunStringExpr, rightFunLengthExpr = lengthType},
             BasicStringType
           )
-      else error "Right function requires a string and a numeric expression for length"
+      else error "RIGHT$ function requires a string and a numeric expression for length"
   AsciiFun {asciiFunArgument} -> do
-    argType <- analyzeStrVariableOrLiteral asciiFunArgument
-    if argType == BasicStringType
-      then return (AsciiFun {asciiFunArgument}, BasicNumericType)
-      else error "Ascii function requires a string argument"
+    exprType <- analyzeExpr asciiFunArgument
+    if Ast.Types.exprType exprType == BasicStringType
+      then return (AsciiFun {asciiFunArgument = exprType}, BasicNumericType)
+      else error "ASC function requires a string argument"
   PointFun {pointFunPositionExpr} -> do
     posType <- analyzeExpr pointFunPositionExpr
     if Ast.Types.exprType posType == BasicNumericType
       then return (PointFun {pointFunPositionExpr = posType}, BasicNumericType)
-      else error "Point function requires a numeric expression for position"
+      else error "POINT function requires a numeric expression for position"
   RndFun {rndRangeEnd} -> do
     return (RndFun {rndRangeEnd}, BasicNumericType)
   IntFun {intFunExpr} -> do
     exprType <- analyzeExpr intFunExpr
     if Ast.Types.exprType exprType == BasicNumericType
       then return (IntFun {intFunExpr = exprType}, BasicNumericType)
-      else error "Int function requires a numeric expression"
+      else error "INT function requires a numeric expression"
   SgnFun {sgnFunExpr} -> do
     exprType <- analyzeExpr sgnFunExpr
     if Ast.Types.exprType exprType == BasicNumericType
       then return (SgnFun {sgnFunExpr = exprType}, BasicNumericType)
-      else error "Sgn function requires a numeric expression"
+      else error "SGN function requires a numeric expression"
+  StatusFun {statusFunArg} ->
+    return (StatusFun {statusFunArg}, BasicNumericType)
+  ValFun {valFunExpr} -> do
+    exprType <- analyzeExpr valFunExpr
+
+    if Ast.Types.exprType exprType == BasicStringType
+      then return (ValFun {valFunExpr = exprType}, BasicNumericType)
+      else error "VAL function requires a string expression"
+  StrFun {strFunExpr} -> do
+    exprType <- analyzeExpr strFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (StrFun {strFunExpr = exprType}, BasicStringType)
+      else error "STR$ function requires a numeric expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
-analyzeExprInner (NumLitExpr num) = do
-  -- Insert the number literal into the symbol table
-  modify (insertNumberLiteralInState num)
-  return (NumLitExpr num, BasicNumericType)
-analyzeExprInner (StrLitExpr str) = do
-  -- Insert the string literal into the symbol table
-  modify (insertStringLiteralInState str)
-  return (StrLitExpr str, BasicStringType)
+analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
+analyzeExprInner (HexNumLitExpr num) = return (HexNumLitExpr num, BasicNumericType)
+analyzeExprInner (StrLitExpr str) = return (StrLitExpr str, BasicStringType)
 analyzeExprInner (LValueExpr lValue) = do
   (typedLValue, ty) <- analyzeLValue lValue
   return (LValueExpr typedLValue, ty)
@@ -331,17 +328,34 @@ analyzeStmt (IfThenStmt condition thenStmt) = do
 
   thenStmt' <- analyzeStmt thenStmt
   return (IfThenStmt conditionType thenStmt')
-analyzeStmt (PrintStmt printKind printExprs printEnding printUsingClause) = do
-  -- mapM_ analyzeExpr printExprs
-  exprTypes <- mapM analyzeExpr printExprs
-  return
-    ( PrintStmt
-        { printKind = printKind,
-          printExprs = exprTypes,
-          printEnding = printEnding,
-          printUsingClause = printUsingClause
-        }
-    )
+analyzeStmt (PrintStmt printKind printCommaFormat) = do
+  case printCommaFormat of
+    PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+      expr1Type <- analyzeExpr printCommaFormatExpr1
+      expr2Type <- analyzeExpr printCommaFormatExpr2
+
+      -- FIXME: this form should be made up of a tring and a numeric expression, but check
+
+      return
+        ( PrintStmt
+            { printKind = printKind,
+              printCommaFormat = PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+            }
+        )
+    PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+      analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+
+      return
+        ( PrintStmt
+            { printKind = printKind,
+              printCommaFormat =
+                PrintSemicolonFormat
+                  { printSemicolonFormatUsingClause,
+                    printSemicolonFormatExprs = analyzedExprs,
+                    printSemicolonFormatEnding = printSemicolonFormatEnding
+                  }
+            }
+        )
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
   -- add string literals to the symbol table
@@ -366,11 +380,19 @@ analyzeStmt (NextStmt nextIdent) = do
   return NextStmt {nextIdent = nextIdent}
 analyzeStmt ClearStmt = return ClearStmt
 analyzeStmt (GoToStmt gotoTarget) = do
-  modify (insertUsedLabelInState gotoTarget False)
-  return (GoToStmt {gotoTarget = gotoTarget})
+  exprType <- analyzeExpr gotoTarget
+
+  when (Ast.Types.exprType exprType /= BasicNumericType) $
+    error "GoTo statement requires a numeric expression"
+
+  return (GoToStmt {gotoTarget = exprType})
 analyzeStmt (GoSubStmt gosubTarget) = do
-  modify (insertUsedLabelInState gosubTarget True)
-  return (GoSubStmt {gosubTarget = gosubTarget})
+  exprType <- analyzeExpr gosubTarget
+
+  when (Ast.Types.exprType exprType /= BasicNumericType) $
+    error "GoSub statement requires a numeric expression"
+
+  return (GoSubStmt {gosubTarget = exprType})
 analyzeStmt (WaitStmt waitForExpr) = do
   case waitForExpr of
     Just expr -> do
@@ -381,10 +403,10 @@ analyzeStmt (WaitStmt waitForExpr) = do
     Nothing -> return WaitStmt {waitForExpr = Nothing} -- No expression means wait indefinitely
 analyzeStmt ClsStmt = return ClsStmt
 analyzeStmt RandomStmt = return RandomStmt
-analyzeStmt (GprintStmt gprintExprs gprintEnding) = do
+analyzeStmt (GprintStmt gprintExprs gprintSeparator) = do
   analyzedExprs <- mapM analyzeExpr gprintExprs
 
-  return (GprintStmt {gprintExprs = analyzedExprs, gprintEnding = gprintEnding})
+  return (GprintStmt {gprintExprs = analyzedExprs, gprintSeparator = gprintSeparator})
 analyzeStmt (GCursorStmt gCursorExpr) = do
   gCursorType <- analyzeExpr gCursorExpr
 
@@ -431,9 +453,36 @@ analyzeStmt (DataStmt exprs) = do
 analyzeStmt (RestoreStmt restoreLineOrLabelExpr) = do
   expr <- analyzeExpr restoreLineOrLabelExpr
   return (RestoreStmt {restoreLineOrLabelExpr = expr})
+analyzeStmt ArunStmt = return ArunStmt
+analyzeStmt LockStmt = return LockStmt
+analyzeStmt UnlockStmt = return UnlockStmt
+analyzeStmt (OnGoToStmt onGotoExpr onGotoTargets) = do
+  exprType <- analyzeExpr onGotoExpr
+
+  when (Ast.Types.exprType exprType /= BasicNumericType) $
+    error "On Goto statement requires a numeric expression"
+
+  return (OnGoToStmt {onGotoExpr = exprType, onGotoTargets = onGotoTargets})
+analyzeStmt (OnGoSubStmt onGoSubExpr onGoSubTargets) = do
+  exprType <- analyzeExpr onGoSubExpr
+  when (Ast.Types.exprType exprType /= BasicNumericType) $
+    error "On GoSub statement requires a numeric expression"
+
+  return (OnGoSubStmt {onGosubExpr = exprType, onGosubTargets = onGoSubTargets})
+analyzeStmt (CallStmt callExpr) = do
+  analyzedCallExpr <- analyzeExpr callExpr
+  case Ast.Types.exprType analyzedCallExpr of
+    BasicNumericType -> return (CallStmt {callExpression = analyzedCallExpr})
+    _ -> error "Call statement requires a numeric expression"
 
 analyzeLine :: RawLine -> State SemanticAnalysisState TypedLine
 analyzeLine (Line lineNumber lineLabel lineStmts) = do
+  case lineLabel of
+    Just label -> do
+      -- Insert the label into the symbol table with the current line number
+      modify (\s -> s {symbolTable = insertLabel label lineNumber (symbolTable s)})
+    Nothing -> return ()
+
   analyzedStmts <- mapM analyzeStmt lineStmts
   return (Line {lineNumber = lineNumber, lineLabel = lineLabel, lineStmts = analyzedStmts})
 

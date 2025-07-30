@@ -4,9 +4,8 @@ module Ast.Types
     Ident (..),
     Expr (..),
     PrintEnding (..),
-    PrintKind (..),
+    PrintOrPause (..),
     Assignment (..),
-    GotoTarget (..),
     PokeKind (..),
     Stmt (..),
     LineNumber,
@@ -28,12 +27,19 @@ module Ast.Types
     RawFunction,
     RawExprInner,
     BeepOptionalParams (..),
+    PrintCommaFormat (..),
+    GPrintSeparator (..),
     getIdentName,
   )
 where
 
+import Data.Char (toUpper)
 import Data.List (intercalate)
 import Data.Map qualified
+import Data.Word (Word16, Word8)
+import Numeric (showHex)
+
+type Number = Double
 
 data BinOperator where
   AddOp :: BinOperator
@@ -76,7 +82,6 @@ instance Show StringVariableOrLiteral where
   show (StringVariable ident) = show ident
 
 data Function et where
-  -- String functions
   MidFun ::
     { midFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
       midFunStartExpr :: Expr et, -- the start position (1-based)
@@ -94,24 +99,35 @@ data Function et where
     } ->
     Function et
   AsciiFun ::
-    { asciiFunArgument :: StringVariableOrLiteral
+    { asciiFunArgument :: Expr et
     } ->
     Function et
-  -- Integer functions
   PointFun ::
     { pointFunPositionExpr :: Expr et -- returns the color of the pixel at the position, the expression must be in range 0-155
     } ->
     Function et
   RndFun ::
-    { rndRangeEnd :: Int -- TODO: what is the range of RND?
+    { rndRangeEnd :: Number
     } ->
     Function et
   IntFun ::
-    { intFunExpr :: Expr et -- returns the integer part of the expression
+    { intFunExpr :: Expr et
     } ->
     Function et
   SgnFun ::
     { sgnFunExpr :: Expr et -- returns 1, 0 or -1
+    } ->
+    Function et
+  StatusFun ::
+    { statusFunArg :: Word8
+    } ->
+    Function et
+  ValFun ::
+    { valFunExpr :: Expr et -- the string to convert
+    } ->
+    Function et
+  StrFun ::
+    { strFunExpr :: Expr et -- the expression to convert to string
     } ->
     Function et
   deriving (Eq)
@@ -139,6 +155,12 @@ instance Show (Function et) where
       { asciiFunArgument = arg
       } =
       "(ASC " ++ show arg ++ ")"
+  show StatusFun {statusFunArg = arg} =
+    "(STATUS " ++ show arg ++ ")"
+  show ValFun {valFunExpr = expr} =
+    "(VAL " ++ show expr ++ ")"
+  show StrFun {strFunExpr = expr} =
+    "(STR$ " ++ show expr ++ ")"
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -173,6 +195,11 @@ data LValue et where
     } ->
     LValue et
   LValuePseudoVar :: PseudoVariable -> LValue et
+  LValueFixedMemoryAreaVar ::
+    { lValueFixedMemoryAreaVarName :: Char,
+      lValueFixedMemoryAreaHasDollar :: Bool -- True if the variable is a string variable
+    } ->
+    LValue et
   deriving (Eq)
 
 instance Show (LValue et) where
@@ -180,6 +207,10 @@ instance Show (LValue et) where
   show (LValueArrayAccess ident index) =
     show ident ++ "(" ++ show index ++ ")"
   show (LValuePseudoVar pseudoVar) = show pseudoVar
+  show (LValueFixedMemoryAreaVar name hasDollar) =
+    if hasDollar
+      then "@$(" ++ [name] ++ ")"
+      else "@(" ++ [name] ++ ")"
 
 data UnaryOperator where
   UnaryMinusOp :: UnaryOperator
@@ -195,7 +226,8 @@ instance Show UnaryOperator where
 data ExprInner et where
   UnaryExpr :: UnaryOperator -> Expr et -> ExprInner et
   BinExpr :: Expr et -> BinOperator -> Expr et -> ExprInner et
-  NumLitExpr :: Double -> ExprInner et
+  DecNumLitExpr :: Number -> ExprInner et
+  HexNumLitExpr :: Word16 -> ExprInner et
   LValueExpr :: LValue et -> ExprInner et
   StrLitExpr :: String -> ExprInner et
   FunCallExpr :: Function et -> ExprInner et
@@ -204,7 +236,10 @@ data ExprInner et where
 instance Show (ExprInner et) where
   show (UnaryExpr op expr) = show op ++ show expr
   show (BinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
-  show (NumLitExpr n) = show n
+  show (DecNumLitExpr n) = show n
+  show (HexNumLitExpr h) =
+    let showHexAllCaps x = map toUpper (showHex x "")
+     in '&' : showHexAllCaps h
   show (LValueExpr lval) = show lval
   show (StrLitExpr s) = "\"" ++ s ++ "\""
   show (FunCallExpr f) = show f
@@ -227,14 +262,14 @@ data PrintEnding where
 
 instance Show PrintEnding where
   show PrintEndingNewLine = ""
-  show PrintEndingNoNewLine = "\\n"
+  show PrintEndingNoNewLine = ";"
 
-data PrintKind where
-  PrintKindPrint :: PrintKind
-  PrintKindPause :: PrintKind
+data PrintOrPause where
+  PrintKindPrint :: PrintOrPause
+  PrintKindPause :: PrintOrPause
   deriving (Eq)
 
-instance Show PrintKind where
+instance Show PrintOrPause where
   show PrintKindPrint = "PRINT"
   show PrintKindPause = "PAUSE"
 
@@ -259,15 +294,6 @@ instance Show (Assignment et) where
   show (Assignment lValue expr _) =
     show lValue ++ " = " ++ show expr
 
-data GotoTarget where
-  GoToLabel :: String -> GotoTarget
-  GoToLine :: LineNumber -> GotoTarget
-  deriving (Eq, Ord)
-
-instance Show GotoTarget where
-  show (GoToLabel s) = "\"" ++ s ++ "\""
-  show (GoToLine n) = show n
-
 data PokeKind where
   Me0 :: PokeKind
   Me1 :: PokeKind
@@ -277,8 +303,8 @@ data PokeKind where
 data DimInner where
   DimInner ::
     { dimIdent :: Ident,
-      dimSize :: Int,
-      dimStringLength :: Maybe Int -- if Nothing, the default string length is used, only used for string arrays
+      dimSize :: Word8,
+      dimStringLength :: Maybe Word8 -- if Nothing, the default string length is used, only used for string arrays
     } ->
     DimInner
   deriving (Eq)
@@ -301,16 +327,47 @@ data BeepOptionalParams et where
     BeepOptionalParams et
   deriving (Eq)
 
+data PrintCommaFormat et where
+  PrintCommaFormat ::
+    { printCommaFormatExpr1 :: Expr et,
+      printCommaFormatExpr2 :: Expr et
+    } ->
+    PrintCommaFormat et
+  PrintSemicolonFormat ::
+    { printSemicolonFormatUsingClause :: Maybe UsingClause,
+      printSemicolonFormatExprs :: [Expr et],
+      printSemicolonFormatEnding :: PrintEnding
+    } ->
+    PrintCommaFormat et
+  deriving (Eq)
+
+instance Show (PrintCommaFormat et) where
+  show (PrintCommaFormat e1 e2) =
+    show e1 ++ ", " ++ show e2
+  show (PrintSemicolonFormat maybeUsingClause exprs ending) =
+    case maybeUsingClause of
+      Just usingClause ->
+        "USING " ++ show usingClause ++ "; " ++ intercalate "; " (show <$> exprs) ++ show ending
+      Nothing ->
+        intercalate "; " (show <$> exprs) ++ show ending
+
+data GPrintSeparator where
+  GPrintSeparatorComma :: GPrintSeparator
+  GPrintSeparatorSemicolon :: GPrintSeparator
+  deriving (Eq)
+
+instance Show GPrintSeparator where
+  show GPrintSeparatorComma = ","
+  show GPrintSeparatorSemicolon = ";"
+
 data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
   IfThenStmt :: {ifCondition :: Expr et, ifThenStmt :: Stmt et} -> Stmt et
   -- FIXME: the PRINT statement can swparate the screen in two sections, with
   -- the first and second section being comma separated, skip for now
   PrintStmt ::
-    { printKind :: PrintKind,
-      printExprs :: [Expr et],
-      printEnding :: PrintEnding,
-      printUsingClause :: Maybe UsingClause
+    { printKind :: PrintOrPause,
+      printCommaFormat :: PrintCommaFormat et
     } ->
     Stmt et
   UsingStmt ::
@@ -327,8 +384,18 @@ data Stmt et where
   ForStmt :: {forAssignment :: Assignment et, forToExpr :: Expr et} -> Stmt et
   NextStmt :: {nextIdent :: Ident} -> Stmt et
   ClearStmt :: Stmt et
-  GoToStmt :: {gotoTarget :: GotoTarget} -> Stmt et
-  GoSubStmt :: {gosubTarget :: GotoTarget} -> Stmt et
+  GoToStmt :: {gotoTarget :: Expr et} -> Stmt et
+  GoSubStmt :: {gosubTarget :: Expr et} -> Stmt et
+  OnGoToStmt ::
+    { onGotoExpr :: Expr et,
+      onGotoTargets :: [Word16] -- the targets are line numbers
+    } ->
+    Stmt et
+  OnGoSubStmt ::
+    { onGosubExpr :: Expr et,
+      onGosubTargets :: [Word16] -- the targets are line numbers
+    } ->
+    Stmt et
   WaitStmt ::
     { waitForExpr :: Maybe (Expr et) -- TODO: should be in range 0-65535, how do we enforce this?
     } ->
@@ -337,7 +404,7 @@ data Stmt et where
   RandomStmt :: Stmt et
   GprintStmt ::
     { gprintExprs :: [Expr et],
-      gprintEnding :: PrintEnding
+      gprintSeparator :: GPrintSeparator
     } ->
     Stmt et
   GCursorStmt :: {gCursorExpr :: Expr et} -> Stmt et
@@ -363,21 +430,20 @@ data Stmt et where
     { restoreLineOrLabelExpr :: Expr et
     } ->
     Stmt et
+  ArunStmt :: Stmt et
+  LockStmt :: Stmt et
+  UnlockStmt :: Stmt et
+  CallStmt ::
+    { callExpression :: Expr et
+    } ->
+    Stmt et
   deriving (Eq)
 
 instance Show (Stmt et) where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
   show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
-  show (PrintStmt k exprs kind maybeUsing) =
-    show k
-      ++ " "
-      ++ case maybeUsing of
-        Just usingClause -> show usingClause ++ "; "
-        Nothing -> ""
-      ++ intercalate "; " (show <$> exprs)
-      ++ case kind of
-        PrintEndingNewLine -> ""
-        PrintEndingNoNewLine -> ";"
+  show (PrintStmt {printKind, printCommaFormat}) =
+    show printKind ++ " " ++ show printCommaFormat
   show (UsingStmt usingClause) = "USING " ++ show usingClause
   show (InputStmt maybePrintExpr me) =
     "INPUT "
@@ -394,12 +460,8 @@ instance Show (Stmt et) where
     "WAIT " ++ maybe "" show maybeExpr
   show ClsStmt = "CLS"
   show RandomStmt = "RANDOM"
-  show (GprintStmt exprs kind) =
-    "GPRINT "
-      ++ intercalate "; " (show <$> exprs)
-      ++ case kind of
-        PrintEndingNewLine -> ""
-        PrintEndingNoNewLine -> ";"
+  show (GprintStmt exprs sep) =
+    "GPRINT " ++ intercalate (show sep) (show <$> exprs)
   show (GCursorStmt e) = "GCURSOR " ++ show e
   show (BeepStmt repetitions optionalParams) =
     "BEEP "
@@ -420,8 +482,16 @@ instance Show (Stmt et) where
   show (ReadStmt ids) = "READ " ++ intercalate ", " (show <$> ids)
   show (DataStmt exprs) = "DATA " ++ intercalate ", " (show <$> exprs)
   show (RestoreStmt n) = "RESTORE " ++ show n
+  show ArunStmt = "ARUN"
+  show LockStmt = "LOCK"
+  show UnlockStmt = "UNLOCK"
+  show (OnGoToStmt expr targets) =
+    "ON " ++ show expr ++ " GOTO " ++ intercalate ", " (show <$> targets)
+  show (OnGoSubStmt expr targets) =
+    "ON " ++ show expr ++ " GOSUB " ++ intercalate ", " (show <$> targets)
+  show (CallStmt expr) = "CALL " ++ show expr
 
-type LineNumber = Int
+type LineNumber = Word16
 
 -- A line starts with a line number and can contain multiple statements separated by ":"
 -- example: 10 LET A = 5

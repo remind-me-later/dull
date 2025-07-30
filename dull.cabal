@@ -20,10 +20,6 @@ library
                       SymbolTable
                       TypeSystem
                       CompilationPipeline
-                      Ir.Types
-                      Ir.Translate
-                      Asm.Types
-                      Asm.Translate
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

@@ -9,6 +9,8 @@ import Ast.Parser (parseProgram)
 import Ast.SemanticAnalysis (analyzeProgram)
 import Ast.Types (Program)
 import Control.Exception (SomeException, try)
+import Ir.Translate (translateProgram)
+import Ir.Types (IrProgram)
 import SymbolTable (SymbolTable)
 import TypeSystem (BasicType)
 
@@ -20,7 +22,9 @@ data CompilationError
 
 data CompilationResult = CompilationResult
   { compiledProgram :: Program BasicType,
-    finalSymbolTable :: SymbolTable
+    finalSymbolTable :: SymbolTable,
+    irProgram :: IrProgram,
+    irSymbolTable :: SymbolTable
   }
   deriving (Show, Eq)
 
@@ -34,11 +38,15 @@ compileProgram fileName contents = do
       Right prog -> do
         -- Stage 2: Type check and semantic analysis
         let (prog', finalState) = analyzeProgram prog
+        -- Stage 3: Translate to IR
+        let (irProg, symbTable, nextLabelIdx) = translateProgram prog' finalState
         return $
           Right $
             CompilationResult
               { compiledProgram = prog',
-                finalSymbolTable = finalState
+                finalSymbolTable = finalState,
+                irProgram = irProg,
+                irSymbolTable = symbTable
               }
 
   case result of

@@ -7,6 +7,8 @@ import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
 import Data.Functor (($>))
 import Data.Map qualified
+import Data.Maybe (isJust)
+import Data.Word (Word16, Word8)
 import Text.Parsec
   ( ParsecT,
     char,
@@ -32,8 +34,8 @@ sc = skipMany (satisfy (`elem` [' ', '\t', '\r']))
 lex :: Parser a -> Parser a
 lex p = p <* sc
 
-number :: Parser Double -- FIXME: should use the Number representation of BASIC
-number = Ast.Parser.lex $ do
+decimalNumber :: Parser Double -- FIXME: should use the Number representation of BASIC
+decimalNumber = Ast.Parser.lex $ do
   wholePart <- many (satisfy (`elem` ['0' .. '9']))
   case wholePart of
     [] -> do
@@ -48,10 +50,28 @@ number = Ast.Parser.lex $ do
         Just d -> return (read (wholePart ++ "." ++ d))
         Nothing -> return (read wholePart)
 
-integer :: Parser Int
-integer = Ast.Parser.lex $ do
+-- hex number begin with &
+hexNumber :: Parser Word16
+hexNumber = Ast.Parser.lex $ do
+  _ <- char '&'
+  hexDigits <- many1 (satisfy (`elem` ['0' .. '9'] ++ ['A' .. 'F']))
+  let num = read ("0x" ++ hexDigits) :: Integer
+  if num > fromIntegral (maxBound :: Word16)
+    then fail "Hex number out of bounds for Word16"
+    else return (fromIntegral num)
+
+word16 :: Parser Word16
+word16 = Ast.Parser.lex $ do
   digits <- many1 (satisfy (`elem` ['0' .. '9']))
   return (read digits)
+
+word8 :: Parser Word8
+word8 = Ast.Parser.lex $ do
+  digits <- many1 (satisfy (`elem` ['0' .. '9']))
+  let num = read digits :: Integer
+  if num > 255
+    then fail "Word8 out of bounds (0-255)"
+    else return (fromIntegral num)
 
 keyword :: String -> Parser String
 keyword kw = Ast.Parser.lex $ string kw
@@ -80,17 +100,34 @@ pseudoVariable =
   try (keyword "TIME" $> TimePseudoVar)
     <|> keyword "INKEY$" $> InkeyPseudoVar
 
+lvalueFixedMemoryArea :: Parser RawLValue
+lvalueFixedMemoryArea = do
+  _ <- char '@'
+  hasDollar <- optional (char '$')
+  _ <- symbol '('
+  name <- satisfy (`elem` ['A' .. 'Z'])
+  _ <- symbol ')'
+  return
+    ( LValueFixedMemoryAreaVar
+        { lValueFixedMemoryAreaVarName = name,
+          lValueFixedMemoryAreaHasDollar = isJust hasDollar
+        }
+    )
+
+lvalueArrayAccess :: Parser RawLValue
+lvalueArrayAccess = do
+  ident' <- ident
+  index <- optional (parens expression)
+  case index of
+    Just idx -> return (LValueArrayAccess ident' idx)
+    Nothing -> return (LValueIdent ident')
+
 lvalue :: Parser RawLValue
 lvalue =
   Ast.Parser.lex
     ( try (LValuePseudoVar <$> pseudoVariable)
-        <|> ( do
-                ident' <- ident
-                index <- optional (parens expression)
-                case index of
-                  Just idx -> return (LValueArrayAccess ident' idx)
-                  Nothing -> return (LValueIdent ident')
-            )
+        <|> try lvalueFixedMemoryArea
+        <|> lvalueArrayAccess
     )
 
 stringVariableOrLiteral :: Parser StringVariableOrLiteral
@@ -107,14 +144,17 @@ functionCall =
     <|> try pointFunCall
     <|> try rndFunCall
     <|> try intFunCall
+    <|> try statusFunCall
+    <|> try valFunCall
+    <|> try strFunCall
     <|> sgnFunCall
   where
     rndFunCall = do
       _ <- keyword "RND"
-      RndFun <$> integer
+      RndFun <$> decimalNumber
     asciiFunCall = do
       _ <- keyword "ASC"
-      AsciiFun <$> stringVariableOrLiteral
+      AsciiFun <$> expression
     sgnFunCall = do
       _ <- keyword "SGN"
       SgnFun <$> expression
@@ -150,6 +190,15 @@ functionCall =
       lengthExpr <- expression
       _ <- symbol ')'
       return (RightFun {rightFunStringExpr = strExpr, rightFunLengthExpr = lengthExpr})
+    statusFunCall = do
+      _ <- keyword "STATUS"
+      StatusFun <$> word8
+    valFunCall = do
+      _ <- keyword "VAL"
+      ValFun <$> expressionFactor
+    strFunCall = do
+      _ <- keyword "STR$"
+      StrFun <$> expression
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -178,32 +227,37 @@ commaSeparated p = sepBy1 p (symbol ',')
 newline :: Parser ()
 newline = many (symbol '\n') $> ()
 
+expressionFactor :: Parser RawExpr
+expressionFactor =
+  try parenExpr
+    <|> try decNumLitExpr
+    <|> try strLitExpr
+    <|> try funCallExpr
+    <|> try hexNumLitExpr
+    <|> lvalueExpr
+  where
+    decNumLitExpr = do
+      n <- decimalNumber
+      return Expr {exprInner = DecNumLitExpr n, exprType = ()}
+    hexNumLitExpr = do
+      n <- hexNumber
+      return Expr {exprInner = HexNumLitExpr n, exprType = ()}
+    strLitExpr = do
+      str <- stringLiteral
+      return Expr {exprInner = StrLitExpr str, exprType = ()}
+    lvalueExpr = do
+      lvalue' <- lvalue
+      return Expr {exprInner = LValueExpr lvalue', exprType = ()}
+    parenExpr = parens expression
+    funCallExpr = do
+      fun <- functionCall
+      return Expr {exprInner = FunCallExpr fun, exprType = ()}
+
 expression :: Parser RawExpr
 expression = logicalExpr
   where
-    factor =
-      try parenExpr
-        <|> try numLitExpr
-        <|> try strLitExpr
-        <|> try funCallExpr
-        <|> lvalueExpr
-      where
-        numLitExpr = do
-          n <- number
-          return Expr {exprInner = NumLitExpr n, exprType = ()}
-        strLitExpr = do
-          str <- stringLiteral
-          return Expr {exprInner = StrLitExpr str, exprType = ()}
-        lvalueExpr = do
-          lvalue' <- lvalue
-          return Expr {exprInner = LValueExpr lvalue', exprType = ()}
-        parenExpr = parens expression
-        funCallExpr = do
-          fun <- functionCall
-          return Expr {exprInner = FunCallExpr fun, exprType = ()}
-
     exponentExpr = do
-      left <- factor
+      left <- expressionFactor
       maybeOp <- optional (binOperator CaretOp)
       case maybeOp of
         Just op -> do
@@ -320,40 +374,72 @@ usingClause = do
 printStmt :: Parser RawStmt
 printStmt = do
   k <- try (keyword "PRINT" $> Left ()) <|> (keyword "PAUSE" $> Right ())
+  let kw = case k of
+        Left () -> PrintKindPrint
+        Right () -> PrintKindPause
   maybeUsing <- optional (usingClause <* symbol ';')
   firstExpr <- expression
-  restExprs <- many (try (symbol ';' *> expression))
-  semi <- optional (symbol ';')
-  return
-    ( PrintStmt
-        { printKind =
-            case k of
-              Left _ -> PrintKindPrint
-              Right _ -> PrintKindPause,
-          printExprs = firstExpr : restExprs,
-          printEnding =
-            case semi of
-              Just _ -> PrintEndingNoNewLine
-              Nothing -> PrintEndingNewLine,
-          printUsingClause = maybeUsing
-        }
-    )
+  commaExpr <- optional (symbol ',' *> expression)
+
+  case commaExpr of
+    Just expr -> do
+      return
+        ( PrintStmt
+            { printKind = kw,
+              printCommaFormat =
+                PrintCommaFormat
+                  { printCommaFormatExpr1 = firstExpr,
+                    printCommaFormatExpr2 = expr
+                  }
+            }
+        )
+    Nothing -> do
+      restExprs <- many (try (symbol ';' *> expression))
+      semi <- optional (symbol ';')
+      return
+        ( PrintStmt
+            { printKind = kw,
+              printCommaFormat =
+                PrintSemicolonFormat
+                  { printSemicolonFormatUsingClause = maybeUsing,
+                    printSemicolonFormatExprs = firstExpr : restExprs,
+                    printSemicolonFormatEnding =
+                      case semi of
+                        Just _ -> PrintEndingNoNewLine
+                        Nothing -> PrintEndingNewLine
+                  }
+            }
+        )
 
 gPrintStmt :: Parser RawStmt
 gPrintStmt = do
   _ <- keyword "GPRINT"
   firstExpr <- expression
-  restExprs <- many (try (symbol ';' *> expression))
-  semi <- optional (symbol ';')
-  return
-    ( GprintStmt
-        { gprintExprs = firstExpr : restExprs,
-          gprintEnding =
-            case semi of
-              Just _ -> PrintEndingNoNewLine
-              Nothing -> PrintEndingNewLine
-        }
-    )
+  sep <- optional ((try (symbol ',') $> Left ()) <|> (symbol ';' $> Right ()))
+  case sep of
+    Nothing -> do
+      return
+        ( GprintStmt
+            { gprintExprs = [firstExpr],
+              gprintSeparator = GPrintSeparatorComma -- Doesn't matter, we only have one expression
+            }
+        )
+    Just (Left _) -> do
+      restExprs <- expression `sepBy` symbol ','
+      return
+        ( GprintStmt
+            { gprintExprs = firstExpr : restExprs,
+              gprintSeparator = GPrintSeparatorComma
+            }
+        )
+    Just (Right _) -> do
+      restExprs <- expression `sepBy` symbol ';'
+      return
+        ( GprintStmt
+            { gprintExprs = firstExpr : restExprs,
+              gprintSeparator = GPrintSeparatorSemicolon
+            }
+        )
 
 gCursorStmt :: Parser RawStmt
 gCursorStmt = do
@@ -381,7 +467,7 @@ ifStmt = do
   cond <- expression
   _ <- optional (keyword "THEN")
   -- the then statement can be a normal statement with a mandatory let or a line number
-  thenStmt <- try (stmt True) <|> (GoToStmt . GoToLine <$> integer)
+  thenStmt <- try (stmt True) <|> (GoToStmt <$> expression)
   return
     IfThenStmt
       { ifCondition = cond,
@@ -407,20 +493,15 @@ clsStmt = keyword "CLS" $> ClsStmt
 randomStmt :: Parser RawStmt
 randomStmt = keyword "RANDOM" $> RandomStmt
 
-gotoTargetStmt :: Parser GotoTarget
-gotoTargetStmt =
-  try (GoToLabel <$> stringLiteral)
-    <|> GoToLine <$> integer
-
 gotoStmt :: Parser RawStmt
 gotoStmt = do
   _ <- keyword "GOTO"
-  GoToStmt <$> gotoTargetStmt
+  GoToStmt <$> expression
 
 gosubStmt :: Parser RawStmt
 gosubStmt = do
   _ <- keyword "GOSUB"
-  GoSubStmt <$> gotoTargetStmt
+  GoSubStmt <$> expression
 
 waitStmt :: Parser RawStmt
 waitStmt = keyword "WAIT" *> (WaitStmt <$> optional expression)
@@ -471,8 +552,8 @@ dimStmt :: Parser RawStmt
 dimStmt = do
   _ <- keyword "DIM"
   identifier <- ident
-  size <- parens integer
-  strLen <- optional (binOperator MultiplyOp *> integer)
+  size <- parens word8
+  strLen <- optional (binOperator MultiplyOp *> word8)
   return
     ( DimStmt
         ( DimInner
@@ -497,6 +578,41 @@ restoreStmt :: Parser RawStmt
 restoreStmt = do
   _ <- keyword "RESTORE"
   RestoreStmt <$> expression
+
+arunStmt :: Parser RawStmt
+arunStmt = keyword "ARUN" $> ArunStmt
+
+lockStmt :: Parser RawStmt
+lockStmt = keyword "LOCK" $> LockStmt
+
+unlockStmt :: Parser RawStmt
+unlockStmt = keyword "UNLOCK" $> UnlockStmt
+
+callStmt :: Parser RawStmt
+callStmt = do
+  _ <- keyword "CALL"
+  expr <- expression
+  return CallStmt {callExpression = expr}
+
+onGotoGosubStmt :: Parser RawStmt
+onGotoGosubStmt = do
+  _ <- keyword "ON"
+  expr <- expression
+  gotoOrGosub <- (keyword "GOTO" $> Left ()) <|> (keyword "GOSUB" $> Right ())
+  targets <- commaSeparated word16
+  case gotoOrGosub of
+    Left () ->
+      return
+        OnGoToStmt
+          { onGotoExpr = expr,
+            onGotoTargets = targets
+          }
+    Right () ->
+      return
+        OnGoSubStmt
+          { onGosubExpr = expr,
+            onGosubTargets = targets
+          }
 
 stmt :: Bool -> Parser RawStmt
 stmt mandatoryLet =
@@ -524,12 +640,17 @@ stmt mandatoryLet =
     <|> try dataStmt
     <|> try restoreStmt
     <|> try usingStmt
+    <|> try arunStmt
+    <|> try lockStmt
+    <|> try unlockStmt
+    <|> try onGotoGosubStmt
+    <|> try callStmt
     <|> letStmt mandatoryLet
 
 line :: Parser RawLine
 line = do
-  lineNumber <- integer
-  lineLabel <- optional stringLiteral
+  lineNumber <- word16
+  lineLabel <- optional (stringLiteral <* optional (symbol ':'))
   lineStmts <- sepBy (stmt False) (symbol ':')
   -- if there are no stmts the label wasn't a label it was a print statement
   case (lineLabel, lineStmts) of
@@ -542,9 +663,12 @@ line = do
             lineStmts =
               [ PrintStmt
                   { printKind = PrintKindPrint,
-                    printExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],
-                    printEnding = PrintEndingNewLine,
-                    printUsingClause = Nothing
+                    printCommaFormat =
+                      PrintSemicolonFormat
+                        { printSemicolonFormatUsingClause = Nothing,
+                          printSemicolonFormatExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],
+                          printSemicolonFormatEnding = PrintEndingNewLine
+                        }
                   }
               ]
           }

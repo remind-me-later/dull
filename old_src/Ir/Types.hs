@@ -30,13 +30,13 @@ data IrIntrinsic where
   deriving (Eq)
 
 instance Show IrIntrinsic where
-  show IrLoadStringHeader = "SJP LOAD_STRING_HEADER_FROM_AL_X"
-  show IrStoreStringHeader = "SJP STORE_STRING_HEADER_IN_AL_X"
-  show IrNumberToString = "SJP NUM_TO_STR"
-  show IrStringToNumber = "SJP STR_TO_NUM"
+  show IrLoadStringHeader = "SJP SUB_LOAD_STRING_HEADER_FROM_AL_X"
+  show IrStoreStringHeader = "SJP SUB_STORE_STRING_HEADER_IN_AL_X"
+  show IrNumberToString = "SJP SUB_NUM_TO_STR"
+  show IrStringToNumber = "SJP SUB_STR_TO_NUM"
   show IrPrintString = "SJP 0xED00"
   show (IrFormatUsing usingClause) = "using_fmt(" ++ show usingClause ++ ")"
-  show IrInputString = "SJP INPUT_STRING"
+  show IrInputString = "SJP SUB_INPUT_STRING"
   show IrGraphicPrintNumber = "gprint_num"
   show IrGraphicPrintString = "gprint_str"
   show IrClearVariables = "clear_vars"
