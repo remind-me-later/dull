@@ -328,7 +328,7 @@ analyzeStmt (IfThenStmt condition thenStmt) = do
 
   thenStmt' <- analyzeStmt thenStmt
   return (IfThenStmt conditionType thenStmt')
-analyzeStmt (PrintStmt printKind printCommaFormat) = do
+analyzeStmt (PrintStmt printCommaFormat) = do
   case printCommaFormat of
     PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
       expr1Type <- analyzeExpr printCommaFormatExpr1
@@ -338,8 +338,7 @@ analyzeStmt (PrintStmt printKind printCommaFormat) = do
 
       return
         ( PrintStmt
-            { printKind = printKind,
-              printCommaFormat = PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+            { printCommaFormat = PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
             }
         )
     PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
@@ -347,8 +346,31 @@ analyzeStmt (PrintStmt printKind printCommaFormat) = do
 
       return
         ( PrintStmt
-            { printKind = printKind,
-              printCommaFormat =
+            { printCommaFormat =
+                PrintSemicolonFormat
+                  { printSemicolonFormatUsingClause,
+                    printSemicolonFormatExprs = analyzedExprs,
+                    printSemicolonFormatEnding = printSemicolonFormatEnding
+                  }
+            }
+        )
+analyzeStmt (PauseStmt pauseCommaFormat) = do
+  case pauseCommaFormat of
+    PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+      expr1Type <- analyzeExpr printCommaFormatExpr1
+      expr2Type <- analyzeExpr printCommaFormatExpr2
+
+      return
+        ( PauseStmt
+            { pauseCommaFormat = PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+            }
+        )
+    PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+      analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+
+      return
+        ( PauseStmt
+            { pauseCommaFormat =
                 PrintSemicolonFormat
                   { printSemicolonFormatUsingClause,
                     printSemicolonFormatExprs = analyzedExprs,
@@ -474,6 +496,7 @@ analyzeStmt (CallStmt callExpr) = do
   case Ast.Types.exprType analyzedCallExpr of
     BasicNumericType -> return (CallStmt {callExpression = analyzedCallExpr})
     _ -> error "Call statement requires a numeric expression"
+analyzeStmt (BeepOnOffStmt beepOn) = return (BeepOnOffStmt {beepOn = beepOn})
 
 analyzeLine :: RawLine -> State SemanticAnalysisState TypedLine
 analyzeLine (Line lineNumber lineLabel lineStmts) = do

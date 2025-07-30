@@ -83,7 +83,7 @@ symbol sym = Ast.Parser.lex $ char sym
 ident :: Parser Ident
 ident = Ast.Parser.lex $ do
   -- Look ahead to see the next 3 characters
-  lookahead <- lookAhead (many (satisfy (`elem` ['A' .. 'Z'])))
+  lookahead <- try (lookAhead (many (satisfy (`elem` ['A' .. 'Z']))))
 
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
 
@@ -233,7 +233,7 @@ parens p = do
   return result
 
 commaSeparated :: Parser a -> Parser [a]
-commaSeparated p = sepBy1 p (symbol ',')
+commaSeparated p = p `sepBy1` symbol ','
 
 -- Parse new line, possibly with carriage return
 newline :: Parser ()
@@ -370,13 +370,13 @@ assignment = do
 letStmt :: Bool -> Parser RawStmt
 letStmt mandatoryLet = do
   if mandatoryLet
-    then do
+    then
       keyword "LET" $> ()
     else
-      optional (keyword "LET") $> ()
+      optional (try (keyword "LET")) $> ()
 
   assignments <- commaSeparated assignment
-  return (LetStmt assignments)
+  return LetStmt {letAssignments = assignments}
 
 usingClause :: Parser UsingClause
 usingClause = do
@@ -386,42 +386,28 @@ usingClause = do
 printStmt :: Parser RawStmt
 printStmt = do
   k <- try (keyword "PRINT" $> Left ()) <|> (keyword "PAUSE" $> Right ())
-  let kw = case k of
-        Left () -> PrintKindPrint
-        Right () -> PrintKindPause
   maybeUsing <- optional (usingClause <* symbol ';')
   firstExpr <- expression
   commaExpr <- optional (symbol ',' *> expression)
-
-  case commaExpr of
+  commaFormat <- case commaExpr of
     Just expr -> do
-      return
-        ( PrintStmt
-            { printKind = kw,
-              printCommaFormat =
-                PrintCommaFormat
-                  { printCommaFormatExpr1 = firstExpr,
-                    printCommaFormatExpr2 = expr
-                  }
-            }
-        )
+      return PrintCommaFormat {printCommaFormatExpr1 = firstExpr, printCommaFormatExpr2 = expr}
     Nothing -> do
       restExprs <- many (try (symbol ';' *> expression))
       semi <- optional (symbol ';')
       return
-        ( PrintStmt
-            { printKind = kw,
-              printCommaFormat =
-                PrintSemicolonFormat
-                  { printSemicolonFormatUsingClause = maybeUsing,
-                    printSemicolonFormatExprs = firstExpr : restExprs,
-                    printSemicolonFormatEnding =
-                      case semi of
-                        Just _ -> PrintEndingNoNewLine
-                        Nothing -> PrintEndingNewLine
-                  }
-            }
-        )
+        PrintSemicolonFormat
+          { printSemicolonFormatUsingClause = maybeUsing,
+            printSemicolonFormatExprs = firstExpr : restExprs,
+            printSemicolonFormatEnding =
+              case semi of
+                Just _ -> PrintEndingNoNewLine
+                Nothing -> PrintEndingNewLine
+          }
+
+  return $ case k of
+    Left () -> PrintStmt {printCommaFormat = commaFormat}
+    Right () -> PauseStmt {pauseCommaFormat = commaFormat}
 
 gPrintStmt :: Parser RawStmt
 gPrintStmt = do
@@ -546,9 +532,15 @@ beepOptionalParamsP = do
 beepStmt :: Parser RawStmt
 beepStmt = do
   _ <- keyword "BEEP"
-  repetitions <- expression
-  optionalParams <- optional beepOptionalParamsP
-  return BeepStmt {beepStmtRepetitionsExpr = repetitions, beepStmtOptionalParams = optionalParams}
+
+  k <- optional (try (keyword "ON" $> Left ()) <|> (keyword "OFF" $> Right ()))
+  case k of
+    Just (Left ()) -> return BeepOnOffStmt {beepOn = True}
+    Just (Right ()) -> return BeepOnOffStmt {beepOn = False}
+    Nothing -> do
+      repetitions <- expression
+      optionalParams <- optional beepOptionalParamsP
+      return BeepStmt {beepStmtRepetitionsExpr = repetitions, beepStmtOptionalParams = optionalParams}
 
 returnStmt :: Parser RawStmt
 returnStmt = keyword "RETURN" $> ReturnStmt
@@ -670,7 +662,7 @@ line :: Parser RawLine
 line = do
   lineNumber <- word16
   lineLabel <- optional (stringLiteral <* optional (symbol ':'))
-  lineStmts <- sepBy (stmt False) (symbol ':')
+  lineStmts <- stmt False `sepBy` symbol ':'
   -- if there are no stmts the label wasn't a label it was a print statement
   case (lineLabel, lineStmts) of
     (Just label, []) -> do
@@ -681,8 +673,7 @@ line = do
             lineLabel = Nothing,
             lineStmts =
               [ PrintStmt
-                  { printKind = PrintKindPrint,
-                    printCommaFormat =
+                  { printCommaFormat =
                       PrintSemicolonFormat
                         { printSemicolonFormatUsingClause = Nothing,
                           printSemicolonFormatExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],

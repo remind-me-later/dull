@@ -4,7 +4,6 @@ module Ast.Types
     Ident (..),
     Expr (..),
     PrintEnding (..),
-    PrintOrPause (..),
     Assignment (..),
     PokeKind (..),
     Stmt (..),
@@ -261,15 +260,6 @@ instance Show PrintEnding where
   show PrintEndingNewLine = ""
   show PrintEndingNoNewLine = ";"
 
-data PrintOrPause where
-  PrintKindPrint :: PrintOrPause
-  PrintKindPause :: PrintOrPause
-  deriving (Eq)
-
-instance Show PrintOrPause where
-  show PrintKindPrint = "PRINT"
-  show PrintKindPause = "PAUSE"
-
 -- FIXME: maybe this should allow also variables
 data UsingClause where
   UsingClause :: {usingClauseExpr :: String} -> UsingClause
@@ -324,6 +314,10 @@ data BeepOptionalParams et where
     BeepOptionalParams et
   deriving (Eq)
 
+instance Show (BeepOptionalParams et) where
+  show (BeepOptionalParams {beepFrequency, beepDuration}) =
+    ", " ++ show beepFrequency ++ ", " ++ show beepDuration
+
 data PrintCommaFormat et where
   PrintCommaFormat ::
     { printCommaFormatExpr1 :: Expr et,
@@ -360,11 +354,12 @@ instance Show GPrintSeparator where
 data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
   IfThenStmt :: {ifCondition :: Expr et, ifThenStmt :: Stmt et} -> Stmt et
-  -- FIXME: the PRINT statement can swparate the screen in two sections, with
-  -- the first and second section being comma separated, skip for now
   PrintStmt ::
-    { printKind :: PrintOrPause,
-      printCommaFormat :: PrintCommaFormat et
+    { printCommaFormat :: PrintCommaFormat et
+    } ->
+    Stmt et
+  PauseStmt ::
+    { pauseCommaFormat :: PrintCommaFormat et
     } ->
     Stmt et
   UsingStmt ::
@@ -416,6 +411,10 @@ data Stmt et where
       beepStmtOptionalParams :: Maybe (BeepOptionalParams et)
     } ->
     Stmt et
+  BeepOnOffStmt ::
+    { beepOn :: Bool -- True for BEEP ON, False for BEEP OFF
+    } ->
+    Stmt et
   ReturnStmt :: Stmt et
   PokeStmt ::
     { pokeKind :: PokeKind,
@@ -444,8 +443,8 @@ data Stmt et where
 instance Show (Stmt et) where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
   show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
-  show (PrintStmt {printKind, printCommaFormat}) =
-    show printKind ++ " " ++ show printCommaFormat
+  show (PrintStmt {printCommaFormat}) = "PRINT " ++ show printCommaFormat
+  show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ show pauseCommaFormat
   show (UsingStmt usingClause) = "USING " ++ show usingClause
   show (InputStmt maybePrintExpr me) =
     "INPUT "
@@ -468,13 +467,8 @@ instance Show (Stmt et) where
   show (GprintStmt exprs sep) =
     "GPRINT " ++ intercalate (show sep) (show <$> exprs)
   show (GCursorStmt e) = "GCURSOR " ++ show e
-  show (BeepStmt repetitions optionalParams) =
-    "BEEP "
-      ++ show repetitions
-      ++ case optionalParams of
-        Just (BeepOptionalParams {beepFrequency, beepDuration}) ->
-          show beepFrequency ++ ", " ++ show beepDuration
-        Nothing -> ""
+  show (BeepStmt repetitions optionalParams) = "BEEP " ++ show repetitions ++ show optionalParams
+  show (BeepOnOffStmt beepOn) = "BEEP " ++ if beepOn then "ON" else "OFF"
   show (CursorStmt e) = "CURSOR " ++ show e
   show ReturnStmt = "RETURN"
   show (PokeStmt kind exprs) =
