@@ -163,11 +163,6 @@ lvalue =
         <|> lvalueArrayAccess
     )
 
-stringVariableOrLiteral :: Parser StringVariableOrLiteral
-stringVariableOrLiteral =
-  try (StringLiteral <$> stringLiteral)
-    <|> (StringVariable <$> ident)
-
 functionCall :: Parser RawFunction
 functionCall =
   try midFunCall
@@ -181,6 +176,7 @@ functionCall =
     <|> try valFunCall
     <|> try strFunCall
     <|> try chrFunCall
+    <|> try absFunCall
     <|> sgnFunCall
   where
     rndFunCall = do
@@ -201,7 +197,7 @@ functionCall =
     midFunCall = do
       _ <- keyword "MID$"
       _ <- symbol '('
-      strExpr <- stringVariableOrLiteral
+      strExpr <- expression
       _ <- symbol ','
       startExpr <- expression
       _ <- symbol ','
@@ -211,7 +207,7 @@ functionCall =
     leftFunCall = do
       _ <- keyword "LEFT$"
       _ <- symbol '('
-      strExpr <- stringVariableOrLiteral
+      strExpr <- expression
       _ <- symbol ','
       lengthExpr <- expression
       _ <- symbol ')'
@@ -219,7 +215,7 @@ functionCall =
     rightFunCall = do
       _ <- keyword "RIGHT$"
       _ <- symbol '('
-      strExpr <- stringVariableOrLiteral
+      strExpr <- expression
       _ <- symbol ','
       lengthExpr <- expression
       _ <- symbol ')'
@@ -236,6 +232,9 @@ functionCall =
     chrFunCall = do
       _ <- keyword "CHR$"
       ChrFun <$> expressionFactor
+    absFunCall = do
+      _ <- keyword "ABS"
+      AbsFun <$> expressionFactor
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -465,32 +464,18 @@ lprintStmt = do
 gPrintStmt :: Parser RawStmt
 gPrintStmt = do
   _ <- keyword "GPRINT"
-  firstExpr <- expression
-  sep <- optional ((try (symbol ',') $> Left ()) <|> (symbol ';' $> Right ()))
-  case sep of
-    Nothing -> do
-      return
-        ( GprintStmt
-            { gprintExprs = [firstExpr],
-              gprintSeparator = GPrintSeparatorComma -- Doesn't matter, we only have one expression
-            }
-        )
-    Just (Left _) -> do
-      restExprs <- expression `sepBy` symbol ','
-      return
-        ( GprintStmt
-            { gprintExprs = firstExpr : restExprs,
-              gprintSeparator = GPrintSeparatorComma
-            }
-        )
-    Just (Right _) -> do
-      restExprs <- expression `sepBy` symbol ';'
-      return
-        ( GprintStmt
-            { gprintExprs = firstExpr : restExprs,
-              gprintSeparator = GPrintSeparatorSemicolon
-            }
-        )
+  exprs <-
+    many
+      ( do
+          expr <- expression
+          sep <- optional (try (symbol ',') <|> symbol ';')
+          case sep of
+            Just ',' -> return (expr, GPrintSeparatorComma)
+            Just ';' -> return (expr, GPrintSeparatorSemicolon)
+            _ -> return (expr, GPrintSeparatorSemicolon)
+      )
+
+  return GprintStmt {gprintExprs = exprs}
 
 gCursorStmt :: Parser RawStmt
 gCursorStmt = do

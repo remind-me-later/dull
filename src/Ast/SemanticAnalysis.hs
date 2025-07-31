@@ -6,7 +6,6 @@ where
 import Ast.Types
 import Control.Monad (unless, when)
 import Control.Monad.State
-import Data.Functor (void)
 import Data.Maybe (fromMaybe, isJust)
 import SymbolTable
 import TypeSystem
@@ -114,26 +113,17 @@ analyzeLValue (LValueFixedMemoryAreaVar name hasDollar) =
   let ty = if hasDollar then BasicStringType else BasicNumericType
    in return (LValueFixedMemoryAreaVar {lValueFixedMemoryAreaVarName = name, lValueFixedMemoryAreaHasDollar = hasDollar}, ty)
 
-analyzeStrVariableOrLiteral :: StringVariableOrLiteral -> State SemanticAnalysisState BasicType
-analyzeStrVariableOrLiteral (StringLiteral _) = return BasicStringType
-analyzeStrVariableOrLiteral (StringVariable ident) = do
-  analyzedId <- analyzeIdentAndInsertIntoTable ident
-  case analyzedId of
-    BasicStringType -> return BasicStringType
-    BasicNumericType -> error "String variable expected, but numeric variable found"
-    _ -> error "Unexpected type for string variable"
-
 analyzeFunction :: RawFunction -> State SemanticAnalysisState (TypedFunction, BasicType)
 analyzeFunction ident = case ident of
   MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} -> do
-    strType <- analyzeStrVariableOrLiteral midFunStringExpr
+    strType <- analyzeExpr midFunStringExpr
     startType <- analyzeExpr midFunStartExpr
     lengthType <- analyzeExpr midFunLengthExpr
-    if strType == BasicStringType && Ast.Types.exprType startType == BasicNumericType && Ast.Types.exprType lengthType == BasicNumericType
+    if Ast.Types.exprType strType == BasicStringType && Ast.Types.exprType startType == BasicNumericType && Ast.Types.exprType lengthType == BasicNumericType
       then
         return
           ( MidFun
-              { midFunStringExpr,
+              { midFunStringExpr = strType,
                 midFunStartExpr = startType,
                 midFunLengthExpr = lengthType
               },
@@ -141,22 +131,22 @@ analyzeFunction ident = case ident of
           )
       else error "MID$ function requires a string and numeric expressions for start and length"
   LeftFun {leftFunStringExpr, leftFunLengthExpr} -> do
-    strType <- analyzeStrVariableOrLiteral leftFunStringExpr
+    strType <- analyzeExpr leftFunStringExpr
     lengthType <- analyzeExpr leftFunLengthExpr
-    if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
+    if Ast.Types.exprType strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
       then
         return
-          ( LeftFun {leftFunStringExpr, leftFunLengthExpr = lengthType},
+          ( LeftFun {leftFunStringExpr = strType, leftFunLengthExpr = lengthType},
             BasicStringType
           )
       else error "LEFT$ function requires a string and a numeric expression for length"
   RightFun {rightFunStringExpr, rightFunLengthExpr} -> do
-    strType <- analyzeStrVariableOrLiteral rightFunStringExpr
+    strType <- analyzeExpr rightFunStringExpr
     lengthType <- analyzeExpr rightFunLengthExpr
-    if strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
+    if Ast.Types.exprType strType == BasicStringType && Ast.Types.exprType lengthType == BasicNumericType
       then
         return
-          ( RightFun {rightFunStringExpr, rightFunLengthExpr = lengthType},
+          ( RightFun {rightFunStringExpr = strType, rightFunLengthExpr = lengthType},
             BasicStringType
           )
       else error "RIGHT$ function requires a string and a numeric expression for length"
@@ -203,6 +193,11 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType exprType == BasicNumericType
       then return (ChrFun {chrFunExpr = exprType}, BasicStringType)
       else error "CHR$ function requires a numeric expression"
+  AbsFun {absFunExpr} -> do
+    exprType <- analyzeExpr absFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (AbsFun {absFunExpr = exprType}, BasicNumericType)
+      else error "ABS function requires a numeric expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
@@ -468,10 +463,6 @@ analyzeStmt (LPrintStmt maybeCommaFormat) = do
     Nothing -> return (LPrintStmt {lprintCommaFormat = Nothing})
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
-  -- add string literals to the symbol table
-  case inputPrintExpr of
-    Just s -> void $ analyzeStrVariableOrLiteral (StringLiteral s)
-    Nothing -> return ()
   (analyzedLValue, _) <- analyzeLValue inputDestination
   return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = analyzedLValue})
 analyzeStmt EndStmt = return EndStmt
@@ -513,10 +504,9 @@ analyzeStmt (WaitStmt waitForExpr) = do
     Nothing -> return WaitStmt {waitForExpr = Nothing} -- No expression means wait indefinitely
 analyzeStmt ClsStmt = return ClsStmt
 analyzeStmt RandomStmt = return RandomStmt
-analyzeStmt (GprintStmt gprintExprs gprintSeparator) = do
-  analyzedExprs <- mapM analyzeExpr gprintExprs
-
-  return (GprintStmt {gprintExprs = analyzedExprs, gprintSeparator = gprintSeparator})
+analyzeStmt (GprintStmt gprintExprs) = do
+  analyzedExprs <- mapM (analyzeExpr . fst) gprintExprs
+  return (GprintStmt {gprintExprs = zip analyzedExprs (snd <$> gprintExprs)})
 analyzeStmt (GCursorStmt gCursorExpr) = do
   gCursorType <- analyzeExpr gCursorExpr
 

@@ -14,7 +14,6 @@ module Ast.Types
     LValue (..),
     PseudoVariable (..),
     UnaryOperator (..),
-    StringVariableOrLiteral (..),
     UsingClause (..),
     ExprInner (..),
     RawProgram,
@@ -71,29 +70,20 @@ instance Show BinOperator where
   show AndOp = "AND"
   show CaretOp = "^"
 
-data StringVariableOrLiteral where
-  StringLiteral :: String -> StringVariableOrLiteral
-  StringVariable :: Ident -> StringVariableOrLiteral
-  deriving (Eq)
-
-instance Show StringVariableOrLiteral where
-  show (StringLiteral str) = "\"" ++ str ++ "\""
-  show (StringVariable ident) = show ident
-
 data Function et where
   MidFun ::
-    { midFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
+    { midFunStringExpr :: Expr et, -- the string to extract from
       midFunStartExpr :: Expr et, -- the start position (1-based)
       midFunLengthExpr :: Expr et -- the length of the substring
     } ->
     Function et
   LeftFun ::
-    { leftFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
+    { leftFunStringExpr :: Expr et, -- the string to extract from
       leftFunLengthExpr :: Expr et -- the length of the substring
     } ->
     Function et
   RightFun ::
-    { rightFunStringExpr :: StringVariableOrLiteral, -- the string to extract from
+    { rightFunStringExpr :: Expr et, -- the string to extract from
       rightFunLengthExpr :: Expr et -- the length of the substring
     } ->
     Function et
@@ -133,6 +123,10 @@ data Function et where
     { chrFunExpr :: Expr et -- the numeric expression to convert to a character
     } ->
     Function et
+  AbsFun ::
+    { absFunExpr :: Expr et -- the numeric expression to get the absolute value of
+    } ->
+    Function et
   deriving (Eq)
 
 instance Show (Function et) where
@@ -166,6 +160,8 @@ instance Show (Function et) where
     "(STR$ " ++ show expr ++ ")"
   show ChrFun {chrFunExpr = expr} =
     "(CHR$ " ++ show expr ++ ")"
+  show AbsFun {absFunExpr = expr} =
+    "(ABS " ++ show expr ++ ")"
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -372,7 +368,7 @@ instance Show (PrintCommaFormat et) where
   show (PrintSemicolonFormat maybeUsingClause exprs ending) =
     case maybeUsingClause of
       Just usingClause ->
-        "USING " ++ show usingClause ++ "; " ++ intercalate "; " (show <$> exprs) ++ show ending
+        show usingClause ++ "; " ++ intercalate "; " (show <$> exprs) ++ show ending
       Nothing ->
         intercalate "; " (show <$> exprs) ++ show ending
 
@@ -438,8 +434,7 @@ data Stmt et where
   ClsStmt :: Stmt et
   RandomStmt :: Stmt et
   GprintStmt ::
-    { gprintExprs :: [Expr et],
-      gprintSeparator :: GPrintSeparator
+    { gprintExprs :: [(Expr et, GPrintSeparator)]
     } ->
     Stmt et
   GCursorStmt :: {gCursorExpr :: Expr et} -> Stmt et
@@ -502,8 +497,10 @@ instance Show (Stmt et) where
     "WAIT " ++ maybe "" show maybeExpr
   show ClsStmt = "CLS"
   show RandomStmt = "RANDOM"
-  show (GprintStmt exprs sep) =
-    "GPRINT " ++ intercalate (show sep) (show <$> exprs)
+  show (GprintStmt exprs) =
+    "GPRINT "
+      ++ concatMap (\(e, sep) -> show e ++ show sep) (init exprs)
+      ++ show (last exprs)
   show (GCursorStmt e) = "GCURSOR " ++ show e
   show (BeepStmt repetitions optionalParams) = "BEEP " ++ show repetitions ++ show optionalParams
   show (BeepOnOffStmt beepOn) = "BEEP " ++ if beepOn then "ON" else "OFF"
