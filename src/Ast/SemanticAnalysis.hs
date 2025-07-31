@@ -109,9 +109,16 @@ analyzeLValue (LValue2DArrayAccess ident rowIndex colIndex) = do
 analyzeLValue (LValuePseudoVar pseudoVar) = do
   ty <- analyzePsuedoVar pseudoVar
   return (LValuePseudoVar pseudoVar, ty)
-analyzeLValue (LValueFixedMemoryAreaVar name hasDollar) =
+analyzeLValue (LValueFixedMemoryAreaVar indexExpr hasDollar) = do
   let ty = if hasDollar then BasicStringType else BasicNumericType
-   in return (LValueFixedMemoryAreaVar {lValueFixedMemoryAreaVarName = name, lValueFixedMemoryAreaHasDollar = hasDollar}, ty)
+  indexType <- analyzeExpr indexExpr
+  case Ast.Types.exprType indexType of
+    BasicNumericType ->
+      return
+        ( LValueFixedMemoryAreaVar {lValueFixedMemoryAreaIndex = indexType, lValueFixedMemoryAreaHasDollar = hasDollar},
+          ty
+        )
+    _ -> error "Fixed memory area index must be numeric"
 
 analyzeFunction :: RawFunction -> State SemanticAnalysisState (TypedFunction, BasicType)
 analyzeFunction ident = case ident of
@@ -198,6 +205,11 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType exprType == BasicNumericType
       then return (AbsFun {absFunExpr = exprType}, BasicNumericType)
       else error "ABS function requires a numeric expression"
+  LenFun {lenFunExpr} -> do
+    exprType <- analyzeExpr lenFunExpr
+    if Ast.Types.exprType exprType == BasicStringType
+      then return (LenFun {lenFunExpr = exprType}, BasicNumericType)
+      else error "LEN function requires a string expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
@@ -554,8 +566,11 @@ analyzeStmt (DataStmt exprs) = do
   analyzedExprs <- mapM analyzeExpr exprs
   return (DataStmt analyzedExprs)
 analyzeStmt (RestoreStmt restoreLineOrLabelExpr) = do
-  expr <- analyzeExpr restoreLineOrLabelExpr
-  return (RestoreStmt {restoreLineOrLabelExpr = expr})
+  case restoreLineOrLabelExpr of
+    Just expr -> do
+      analyzedExpr <- analyzeExpr expr
+      return (RestoreStmt {restoreLineOrLabelExpr = Just analyzedExpr})
+    Nothing -> return (RestoreStmt {restoreLineOrLabelExpr = Nothing})
 analyzeStmt ArunStmt = return ArunStmt
 analyzeStmt LockStmt = return LockStmt
 analyzeStmt UnlockStmt = return UnlockStmt

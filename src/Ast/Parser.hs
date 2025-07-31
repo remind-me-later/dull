@@ -35,10 +35,20 @@ sc = skipMany (satisfy (`elem` [' ', '\t', '\r']))
 lex :: Parser a -> Parser a
 lex p = p <* sc
 
+exponentPart :: Parser Int
+exponentPart = do
+  _ <- char 'E'
+  sign <- optional (char '+' <|> char '-')
+  digits <- many1 (satisfy (`elem` ['0' .. '9']))
+  let exponent' = read digits :: Int
+  return $ case sign of
+    Just '-' -> -exponent'
+    _ -> exponent'
+
 decimalNumber :: Parser Double -- FIXME: should use the Number representation of BASIC
 decimalNumber = Ast.Parser.lex $ do
   wholePart <- many (satisfy (`elem` ['0' .. '9']))
-  case wholePart of
+  res <- case wholePart of
     [] -> do
       -- now we must have a decimal part
       _ <- char '.'
@@ -50,6 +60,11 @@ decimalNumber = Ast.Parser.lex $ do
       case decimalPart of
         Just d -> return (read (wholePart ++ "." ++ d))
         Nothing -> return (read wholePart)
+  -- parse optional exponent part
+  maybeExponent <- optional (try exponentPart)
+  case maybeExponent of
+    Just exponent' -> return (res * (10 ^^ exponent'))
+    Nothing -> return res
 
 -- hex number begin with &
 hexNumber :: Parser Word16
@@ -117,11 +132,11 @@ lvalueFixedMemoryArea = do
   _ <- char '@'
   hasDollar <- optional (char '$')
   _ <- symbol '('
-  name <- satisfy (`elem` ['A' .. 'Z'])
+  expr <- expression
   _ <- symbol ')'
   return
     ( LValueFixedMemoryAreaVar
-        { lValueFixedMemoryAreaVarName = name,
+        { lValueFixedMemoryAreaIndex = expr,
           lValueFixedMemoryAreaHasDollar = isJust hasDollar
         }
     )
@@ -177,6 +192,7 @@ functionCall =
     <|> try strFunCall
     <|> try chrFunCall
     <|> try absFunCall
+    <|> try lenFunCall
     <|> sgnFunCall
   where
     rndFunCall = do
@@ -235,6 +251,9 @@ functionCall =
     absFunCall = do
       _ <- keyword "ABS"
       AbsFun <$> expressionFactor
+    lenFunCall = do
+      _ <- keyword "LEN"
+      LenFun <$> expression
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -641,7 +660,7 @@ readStmt = do
 restoreStmt :: Parser RawStmt
 restoreStmt = do
   _ <- keyword "RESTORE"
-  RestoreStmt <$> expression
+  RestoreStmt <$> optional expression
 
 arunStmt :: Parser RawStmt
 arunStmt = keyword "ARUN" $> ArunStmt

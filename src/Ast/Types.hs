@@ -127,6 +127,10 @@ data Function et where
     { absFunExpr :: Expr et -- the numeric expression to get the absolute value of
     } ->
     Function et
+  LenFun ::
+    { lenFunExpr :: Expr et -- the string expression to get the length of
+    } ->
+    Function et
   deriving (Eq)
 
 instance Show (Function et) where
@@ -162,6 +166,8 @@ instance Show (Function et) where
     "(CHR$ " ++ show expr ++ ")"
   show AbsFun {absFunExpr = expr} =
     "(ABS " ++ show expr ++ ")"
+  show LenFun {lenFunExpr = expr} =
+    "(LEN " ++ show expr ++ ")"
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -204,7 +210,7 @@ data LValue et where
     LValue et
   LValuePseudoVar :: PseudoVariable -> LValue et
   LValueFixedMemoryAreaVar ::
-    { lValueFixedMemoryAreaVarName :: Char,
+    { lValueFixedMemoryAreaIndex :: Expr et,
       lValueFixedMemoryAreaHasDollar :: Bool -- True if the variable is a string variable
     } ->
     LValue et
@@ -217,10 +223,10 @@ instance Show (LValue et) where
   show (LValue2DArrayAccess ident rowIndex colIndex) =
     show ident ++ "(" ++ show rowIndex ++ ", " ++ show colIndex ++ ")"
   show (LValuePseudoVar pseudoVar) = show pseudoVar
-  show (LValueFixedMemoryAreaVar name hasDollar) =
+  show (LValueFixedMemoryAreaVar idx hasDollar) =
     if hasDollar
-      then "@$(" ++ [name] ++ ")"
-      else "@(" ++ [name] ++ ")"
+      then "@$(" ++ show idx ++ ")"
+      else "@(" ++ show idx ++ ")"
 
 data UnaryOperator where
   UnaryMinusOp :: UnaryOperator
@@ -467,7 +473,7 @@ data Stmt et where
     Stmt et
   DataStmt :: [Expr et] -> Stmt et
   RestoreStmt ::
-    { restoreLineOrLabelExpr :: Expr et
+    { restoreLineOrLabelExpr :: Maybe (Expr et)
     } ->
     Stmt et
   ArunStmt :: Stmt et
@@ -521,7 +527,7 @@ instance Show (Stmt et) where
   show (DimStmt decls) = "DIM " ++ intercalate ", " (show <$> decls)
   show (ReadStmt ids) = "READ " ++ intercalate ", " (show <$> ids)
   show (DataStmt exprs) = "DATA " ++ intercalate ", " (show <$> exprs)
-  show (RestoreStmt n) = "RESTORE " ++ show n
+  show (RestoreStmt n) = "RESTORE " ++ maybe "" show n
   show ArunStmt = "ARUN"
   show LockStmt = "LOCK"
   show UnlockStmt = "UNLOCK"
