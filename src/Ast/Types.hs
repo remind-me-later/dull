@@ -27,6 +27,7 @@ module Ast.Types
     BeepOptionalParams (..),
     PrintCommaFormat (..),
     GPrintSeparator (..),
+    Number (..),
     identName,
   )
 where
@@ -37,7 +38,66 @@ import Data.Map qualified
 import Data.Word (Word16, Word8)
 import Numeric (showHex)
 
-type Number = Double
+newtype Number = Number
+  { numberRepr :: Double
+  }
+  deriving (Eq)
+
+instance Show Number where
+  show (Number n) =
+    let (wholePart, fractionalPart) = properFraction n :: (Integer, Double)
+        wholeStr = show wholePart
+        fractionalStr = if fractionalPart == 0 then "" else show (abs fractionalPart)
+     in if null fractionalStr
+          then wholeStr
+          else wholeStr ++ "." ++ dropWhile (== '0') (drop 1 fractionalStr)
+
+-- Precedence and associativity for binary operators
+precedence :: BinOperator -> Int
+precedence OrOp = 1
+precedence AndOp = 1
+precedence EqualOp = 3
+precedence NotEqualOp = 3
+precedence LessThanOp = 3
+precedence LessThanOrEqualOp = 3
+precedence GreaterThanOp = 3
+precedence GreaterThanOrEqualOp = 3
+precedence AddOp = 4
+precedence SubtractOp = 4
+precedence MultiplyOp = 5
+precedence DivideOp = 5
+precedence CaretOp = 6
+
+isLeftAssociative :: BinOperator -> Bool
+isLeftAssociative CaretOp = False -- Right associative
+isLeftAssociative _ = True
+
+-- Helper functions for precedence-aware printing
+showExprWithContext :: Int -> Bool -> Expr et -> String
+showExprWithContext parentPrec isRightSide (Expr {exprInner = inner}) =
+  showExprInnerWithContext parentPrec isRightSide inner
+
+showExprInnerWithContext :: Int -> Bool -> ExprInner et -> String
+showExprInnerWithContext _ _ (UnaryExpr op expr) =
+  show op ++ showExprWithContext 7 False expr -- Unary has highest precedence
+showExprInnerWithContext parentPrec isRightSide (BinExpr left op right) =
+  let myPrec = precedence op
+      leftAssoc = isLeftAssociative op
+      needsParens =
+        myPrec < parentPrec
+          || (myPrec == parentPrec && isRightSide && leftAssoc)
+          || (myPrec == parentPrec && not isRightSide && not leftAssoc)
+      leftStr = showExprWithContext myPrec False left
+      rightStr = showExprWithContext myPrec True right
+      result = leftStr ++ " " ++ show op ++ " " ++ rightStr
+   in if needsParens then "(" ++ result ++ ")" else result
+showExprInnerWithContext _ _ (DecNumLitExpr n) = show n
+showExprInnerWithContext _ _ (HexNumLitExpr h) =
+  let showHexAllCaps x = map toUpper (showHex x "")
+   in '&' : showHexAllCaps h
+showExprInnerWithContext _ _ (LValueExpr lval) = show lval
+showExprInnerWithContext _ _ (StrLitExpr s) = "\"" ++ s ++ "\""
+showExprInnerWithContext _ _ (FunCallExpr f) = show f
 
 data BinOperator where
   AddOp :: BinOperator
@@ -135,39 +195,39 @@ data Function et where
 
 instance Show (Function et) where
   show MidFun {midFunStringExpr = str, midFunStartExpr = start, midFunLengthExpr = len} =
-    "MID(" ++ show str ++ ", " ++ show start ++ ", " ++ show len ++ ")"
+    "MID(" ++ showExprWithContext 0 False str ++ ", " ++ showExprWithContext 0 False start ++ ", " ++ showExprWithContext 0 False len ++ ")"
   show LeftFun {leftFunStringExpr = str, leftFunLengthExpr = len} =
-    "LEFT(" ++ show str ++ ", " ++ show len ++ ")"
+    "LEFT(" ++ showExprWithContext 0 False str ++ ", " ++ showExprWithContext 0 False len ++ ")"
   show RightFun {rightFunStringExpr = str, rightFunLengthExpr = len} =
-    "RIGHT(" ++ show str ++ ", " ++ show len ++ ")"
+    "RIGHT(" ++ showExprWithContext 0 False str ++ ", " ++ showExprWithContext 0 False len ++ ")"
   show PointFun {pointFunPositionExpr = pos} =
-    "(POINT " ++ show pos ++ ")"
+    "POINT " ++ showExprWithContext 8 False pos -- Higher than any binary operator
   show
     RndFun
       { rndRangeEnd = end
       } =
-      "(RND " ++ show end ++ ")"
+      "RND " ++ showExprWithContext 8 False end
   show IntFun {intFunExpr = expr} =
-    "(INT " ++ show expr ++ ")"
+    "INT " ++ showExprWithContext 8 False expr
   show SgnFun {sgnFunExpr = expr} =
-    "(SGN " ++ show expr ++ ")"
+    "SGN " ++ showExprWithContext 8 False expr
   show
     AsciiFun
       { asciiFunArgument = arg
       } =
-      "(ASC " ++ show arg ++ ")"
+      "ASC " ++ showExprWithContext 8 False arg
   show StatusFun {statusFunArg = arg} =
-    "(STATUS " ++ show arg ++ ")"
+    "STATUS " ++ show arg
   show ValFun {valFunExpr = expr} =
-    "(VAL " ++ show expr ++ ")"
+    "VAL " ++ showExprWithContext 8 False expr
   show StrFun {strFunExpr = expr} =
-    "(STR$ " ++ show expr ++ ")"
+    "STR$ " ++ showExprWithContext 8 False expr
   show ChrFun {chrFunExpr = expr} =
-    "(CHR$ " ++ show expr ++ ")"
+    "CHR$ " ++ showExprWithContext 8 False expr
   show AbsFun {absFunExpr = expr} =
-    "(ABS " ++ show expr ++ ")"
+    "ABS " ++ showExprWithContext 8 False expr
   show LenFun {lenFunExpr = expr} =
-    "(LEN " ++ show expr ++ ")"
+    "LEN " ++ showExprWithContext 8 False expr
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -250,8 +310,8 @@ data ExprInner et where
   deriving (Eq)
 
 instance Show (ExprInner et) where
-  show (UnaryExpr op expr) = show op ++ show expr
-  show (BinExpr left op right) = "(" ++ show left ++ " " ++ show op ++ " " ++ show right ++ ")"
+  show (UnaryExpr op expr) = show op ++ showExprWithContext 7 False expr
+  show (BinExpr left op right) = showExprInnerWithContext 0 False (BinExpr left op right)
   show (DecNumLitExpr n) = show n
   show (HexNumLitExpr h) =
     let showHexAllCaps x = map toUpper (showHex x "")
@@ -485,9 +545,21 @@ data Stmt et where
     Stmt et
   deriving (Eq)
 
+showLetStmt :: Bool -> [Assignment et] -> String
+showLetStmt isMandatoryLet assignments =
+  if isMandatoryLet
+    then "LET " ++ intercalate ", " (show <$> assignments)
+    else intercalate ", " (show <$> assignments)
+
 instance Show (Stmt et) where
-  show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
-  show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
+  show (LetStmt assignments) = showLetStmt False assignments
+  show (IfThenStmt cond s) =
+    "IF "
+      ++ show cond
+      ++ case s of
+        LetStmt letStmt -> " THEN " ++ showLetStmt True letStmt
+        GoToStmt l -> " " ++ show l
+        _ -> " " ++ show s
   show (PrintStmt {printCommaFormat}) = "PRINT " ++ maybe "" show printCommaFormat
   show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ maybe "" show pauseCommaFormat
   show (UsingStmt usingClause) = "USING " ++ show usingClause
@@ -511,7 +583,7 @@ instance Show (Stmt et) where
   show RandomStmt = "RANDOM"
   show (GprintStmt exprs) =
     "GPRINT "
-      ++ concatMap (\(e, sep) -> show e ++ show sep) (init exprs)
+      ++ concatMap (\(e, sep) -> show e ++ show sep ++ " ") (init exprs)
       ++ ( \(e, sep) ->
              show e ++ case sep of
                GPrintSeparatorComma -> ","

@@ -46,7 +46,7 @@ exponentPart = do
     Just '-' -> -exponent'
     _ -> exponent'
 
-decimalNumber :: Parser Double -- FIXME: should use the Number representation of BASIC
+decimalNumber :: Parser Number
 decimalNumber = Ast.Parser.lex $ do
   wholePart <- many (satisfy (`elem` ['0' .. '9']))
   res <- case wholePart of
@@ -64,8 +64,8 @@ decimalNumber = Ast.Parser.lex $ do
   -- parse optional exponent part
   maybeExponent <- optional (try exponentPart)
   case maybeExponent of
-    Just exponent' -> return (res * (10 ^^ exponent'))
-    Nothing -> return res
+    Just exponent' -> return Number {numberRepr = res * (10 ^^ exponent')}
+    Nothing -> return Number {numberRepr = res}
 
 -- hex number begin with &
 hexNumber :: Parser Word16
