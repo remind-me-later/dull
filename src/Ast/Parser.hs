@@ -5,6 +5,7 @@ where
 
 import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
+import Control.Monad (when)
 import Data.Functor (($>))
 import Data.Map qualified
 import Data.Maybe (isJust)
@@ -99,6 +100,10 @@ ident :: Parser Ident
 ident = Ast.Parser.lex $ do
   -- Look ahead to see the next 3 characters
   lookahead <- try (lookAhead (many (satisfy (`elem` ['A' .. 'Z']))))
+
+  when
+    (lookahead == "OR")
+    (fail "Identifier cannot be 'OR'")
 
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
 
@@ -209,7 +214,7 @@ functionCall =
       IntFun <$> expression
     pointFunCall = do
       _ <- keyword "POINT"
-      PointFun <$> expression
+      PointFun <$> expressionFactor
     midFunCall = do
       _ <- keyword "MID$"
       _ <- symbol '('
@@ -389,8 +394,8 @@ expression = logicalExpr
       left <- unaryLogicalExpr
       maybeOp <-
         optional
-          ( try (binOperator AndOp)
-              <|> binOperator OrOp
+          ( (try (keyword "AND") $> AndOp)
+              <|> (keyword "OR" $> OrOp)
           )
       case maybeOp of
         Just op -> do
@@ -430,27 +435,34 @@ printStmt :: Parser RawStmt
 printStmt = do
   k <- try (keyword "PRINT" $> Left ()) <|> (keyword "PAUSE" $> Right ())
   maybeUsing <- optional (usingClause <* symbol ';')
-  firstExpr <- expression
-  commaExpr <- optional (symbol ',' *> expression)
-  commaFormat <- case commaExpr of
-    Just expr -> do
-      return PrintCommaFormat {printCommaFormatExpr1 = firstExpr, printCommaFormatExpr2 = expr}
-    Nothing -> do
-      restExprs <- many (try (symbol ';' *> expression))
-      semi <- optional (symbol ';')
-      return
-        PrintSemicolonFormat
-          { printSemicolonFormatUsingClause = maybeUsing,
-            printSemicolonFormatExprs = firstExpr : restExprs,
-            printSemicolonFormatEnding =
-              case semi of
-                Just _ -> PrintEndingNoNewLine
-                Nothing -> PrintEndingNewLine
-          }
+  firstExpr <- optional expression
 
-  return $ case k of
-    Left () -> PrintStmt {printCommaFormat = commaFormat}
-    Right () -> PauseStmt {pauseCommaFormat = commaFormat}
+  case firstExpr of
+    Nothing -> do
+      return $ case k of
+        Left () -> PrintStmt {printCommaFormat = Nothing}
+        Right () -> PauseStmt {pauseCommaFormat = Nothing}
+    Just firstExpr' -> do
+      commaExpr <- optional (symbol ',' *> expression)
+      commaFormat <- case commaExpr of
+        Just expr -> do
+          return PrintCommaFormat {printCommaFormatExpr1 = firstExpr', printCommaFormatExpr2 = expr}
+        Nothing -> do
+          restExprs <- many (try (symbol ';' *> expression))
+          semi <- optional (symbol ';')
+          return
+            PrintSemicolonFormat
+              { printSemicolonFormatUsingClause = maybeUsing,
+                printSemicolonFormatExprs = firstExpr' : restExprs,
+                printSemicolonFormatEnding =
+                  case semi of
+                    Just _ -> PrintEndingNoNewLine
+                    Nothing -> PrintEndingNewLine
+              }
+
+      return $ case k of
+        Left () -> PrintStmt {printCommaFormat = Just commaFormat}
+        Right () -> PauseStmt {pauseCommaFormat = Just commaFormat}
 
 lprintStmt :: Parser RawStmt
 lprintStmt = do
@@ -682,7 +694,7 @@ onGotoGosubStmt = do
   _ <- keyword "ON"
   expr <- expression
   gotoOrGosub <- (keyword "GOTO" $> Left ()) <|> (keyword "GOSUB" $> Right ())
-  targets <- commaSeparated word16
+  targets <- commaSeparated expression
   case gotoOrGosub of
     Left () ->
       return
@@ -702,7 +714,7 @@ onErrorGotoStmt = do
   _ <- keyword "ON"
   _ <- keyword "ERROR"
   _ <- keyword "GOTO"
-  target <- word16
+  target <- expression
   return OnErrorGotoStmt {onErrorGotoTarget = target}
 
 stmt :: Bool -> Parser RawStmt
@@ -756,11 +768,12 @@ line = do
             lineStmts =
               [ PrintStmt
                   { printCommaFormat =
-                      PrintSemicolonFormat
-                        { printSemicolonFormatUsingClause = Nothing,
-                          printSemicolonFormatExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],
-                          printSemicolonFormatEnding = PrintEndingNewLine
-                        }
+                      Just
+                        PrintSemicolonFormat
+                          { printSemicolonFormatUsingClause = Nothing,
+                            printSemicolonFormatExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],
+                            printSemicolonFormatEnding = PrintEndingNewLine
+                          }
                   }
               ]
           }

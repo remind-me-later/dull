@@ -393,11 +393,11 @@ data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
   IfThenStmt :: {ifCondition :: Expr et, ifThenStmt :: Stmt et} -> Stmt et
   PrintStmt ::
-    { printCommaFormat :: PrintCommaFormat et
+    { printCommaFormat :: Maybe (PrintCommaFormat et)
     } ->
     Stmt et
   PauseStmt ::
-    { pauseCommaFormat :: PrintCommaFormat et
+    { pauseCommaFormat :: Maybe (PrintCommaFormat et)
     } ->
     Stmt et
   LPrintStmt ::
@@ -427,16 +427,16 @@ data Stmt et where
   GoSubStmt :: {gosubTarget :: Expr et} -> Stmt et
   OnGoToStmt ::
     { onGotoExpr :: Expr et,
-      onGotoTargets :: [Word16] -- the targets are line numbers
+      onGotoTargets :: [Expr et]
     } ->
     Stmt et
   OnGoSubStmt ::
     { onGosubExpr :: Expr et,
-      onGosubTargets :: [Word16] -- the targets are line numbers
+      onGosubTargets :: [Expr et]
     } ->
     Stmt et
   OnErrorGotoStmt ::
-    { onErrorGotoTarget :: Word16 -- the target is a line number
+    { onErrorGotoTarget :: Expr et
     } ->
     Stmt et
   WaitStmt ::
@@ -488,8 +488,8 @@ data Stmt et where
 instance Show (Stmt et) where
   show (LetStmt assignments) = "LET " ++ intercalate ", " (show <$> assignments)
   show (IfThenStmt cond s) = "IF " ++ show cond ++ " THEN " ++ show s
-  show (PrintStmt {printCommaFormat}) = "PRINT " ++ show printCommaFormat
-  show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ show pauseCommaFormat
+  show (PrintStmt {printCommaFormat}) = "PRINT " ++ maybe "" show printCommaFormat
+  show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ maybe "" show pauseCommaFormat
   show (UsingStmt usingClause) = "USING " ++ show usingClause
   show (InputStmt maybePrintExpr me) =
     "INPUT "

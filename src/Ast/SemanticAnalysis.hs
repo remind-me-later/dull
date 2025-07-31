@@ -391,54 +391,62 @@ analyzeStmt (IfThenStmt condition thenStmt) = do
   return (IfThenStmt conditionType thenStmt')
 analyzeStmt (PrintStmt printCommaFormat) = do
   case printCommaFormat of
-    PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-      expr1Type <- analyzeExpr printCommaFormatExpr1
-      expr2Type <- analyzeExpr printCommaFormatExpr2
+    Nothing -> return (PrintStmt Nothing)
+    Just commaFormat -> do
+      case commaFormat of
+        PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+          expr1Type <- analyzeExpr printCommaFormatExpr1
+          expr2Type <- analyzeExpr printCommaFormatExpr2
 
-      -- FIXME: this form should be made up of a tring and a numeric expression, but check
+          -- FIXME: this form should be made up of a tring and a numeric expression, but check
 
-      return
-        ( PrintStmt
-            { printCommaFormat = PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
-            }
-        )
-    PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
-      analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+          return
+            ( PrintStmt
+                { printCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+                }
+            )
+        PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+          analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
 
-      return
-        ( PrintStmt
-            { printCommaFormat =
-                PrintSemicolonFormat
-                  { printSemicolonFormatUsingClause,
-                    printSemicolonFormatExprs = analyzedExprs,
-                    printSemicolonFormatEnding = printSemicolonFormatEnding
-                  }
-            }
-        )
+          return
+            ( PrintStmt
+                { printCommaFormat =
+                    Just
+                      PrintSemicolonFormat
+                        { printSemicolonFormatUsingClause,
+                          printSemicolonFormatExprs = analyzedExprs,
+                          printSemicolonFormatEnding = printSemicolonFormatEnding
+                        }
+                }
+            )
 analyzeStmt (PauseStmt pauseCommaFormat) = do
   case pauseCommaFormat of
-    PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-      expr1Type <- analyzeExpr printCommaFormatExpr1
-      expr2Type <- analyzeExpr printCommaFormatExpr2
+    Nothing -> return (PauseStmt Nothing)
+    Just commaFormat -> do
+      case commaFormat of
+        PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+          expr1Type <- analyzeExpr printCommaFormatExpr1
+          expr2Type <- analyzeExpr printCommaFormatExpr2
 
-      return
-        ( PauseStmt
-            { pauseCommaFormat = PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
-            }
-        )
-    PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
-      analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+          return
+            ( PauseStmt
+                { pauseCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+                }
+            )
+        PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+          analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
 
-      return
-        ( PauseStmt
-            { pauseCommaFormat =
-                PrintSemicolonFormat
-                  { printSemicolonFormatUsingClause,
-                    printSemicolonFormatExprs = analyzedExprs,
-                    printSemicolonFormatEnding = printSemicolonFormatEnding
-                  }
-            }
-        )
+          return
+            ( PauseStmt
+                { pauseCommaFormat =
+                    Just
+                      PrintSemicolonFormat
+                        { printSemicolonFormatUsingClause,
+                          printSemicolonFormatExprs = analyzedExprs,
+                          printSemicolonFormatEnding = printSemicolonFormatEnding
+                        }
+                }
+            )
 analyzeStmt (LPrintStmt maybeCommaFormat) = do
   case maybeCommaFormat of
     Just commaFormat -> do
@@ -580,15 +588,26 @@ analyzeStmt (OnGoToStmt onGotoExpr onGotoTargets) = do
   when (Ast.Types.exprType exprType /= BasicNumericType) $
     error "On Goto statement requires a numeric expression"
 
-  return (OnGoToStmt {onGotoExpr = exprType, onGotoTargets = onGotoTargets})
+  onGotoTargets' <- mapM analyzeExpr onGotoTargets
+  unless (all (\et -> Ast.Types.exprType et == BasicNumericType) onGotoTargets') $
+    error "On Goto targets must be numeric expressions"
+
+  return (OnGoToStmt {onGotoExpr = exprType, onGotoTargets = onGotoTargets'})
 analyzeStmt (OnGoSubStmt onGoSubExpr onGoSubTargets) = do
   exprType <- analyzeExpr onGoSubExpr
   when (Ast.Types.exprType exprType /= BasicNumericType) $
     error "On GoSub statement requires a numeric expression"
 
-  return (OnGoSubStmt {onGosubExpr = exprType, onGosubTargets = onGoSubTargets})
-analyzeStmt (OnErrorGotoStmt target) =
-  return (OnErrorGotoStmt {onErrorGotoTarget = target})
+  onGoSubTargets' <- mapM analyzeExpr onGoSubTargets
+  unless (all (\et -> Ast.Types.exprType et == BasicNumericType) onGoSubTargets') $
+    error "On GoSub targets must be numeric expressions"
+
+  return (OnGoSubStmt {onGosubExpr = exprType, onGosubTargets = onGoSubTargets'})
+analyzeStmt (OnErrorGotoStmt target) = do
+  targetType <- analyzeExpr target
+  when (Ast.Types.exprType targetType /= BasicNumericType) $
+    error "On Error Goto statement requires a numeric expression"
+  return (OnErrorGotoStmt {onErrorGotoTarget = targetType})
 analyzeStmt (CallStmt callExpr) = do
   analyzedCallExpr <- analyzeExpr callExpr
   case Ast.Types.exprType analyzedCallExpr of
