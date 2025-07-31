@@ -208,10 +208,10 @@ functionCall =
       AsciiFun <$> expressionFactor
     sgnFunCall = do
       _ <- keyword "SGN"
-      SgnFun <$> expression
+      SgnFun <$> expressionFactor
     intFunCall = do
       _ <- keyword "INT"
-      IntFun <$> expression
+      IntFun <$> expressionFactor
     pointFunCall = do
       _ <- keyword "POINT"
       PointFun <$> expressionFactor
@@ -249,7 +249,7 @@ functionCall =
       ValFun <$> expressionFactor
     strFunCall = do
       _ <- keyword "STR$"
-      StrFun <$> expression
+      StrFun <$> expressionFactor
     chrFunCall = do
       _ <- keyword "CHR$"
       ChrFun <$> expressionFactor
@@ -258,7 +258,7 @@ functionCall =
       AbsFun <$> expressionFactor
     lenFunCall = do
       _ <- keyword "LEN"
-      LenFun <$> expression
+      LenFun <$> expressionFactor
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -429,7 +429,7 @@ letStmt mandatoryLet = do
 usingClause :: Parser UsingClause
 usingClause = do
   _ <- keyword "USING"
-  UsingClause <$> stringLiteral
+  UsingClause <$> optional stringLiteral
 
 printStmt :: Parser RawStmt
 printStmt = do

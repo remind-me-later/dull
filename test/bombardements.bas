@@ -30,11 +30,11 @@
 280 BEEP 3,100,100:CURSOR 22:PRINT USING "####";W:RETURN
 290 GCURSOR P-2:PRINT "*"
 300 FOR I=0TO 20:POKE# 64000,RND 256-1:NEXT I
-310 WAIT :USING "":PRINT "*** SCORE *** :";W
+310 WAIT :USING :PRINT "*** SCORE *** :";W
 330 END
 340 PAUSE "Destroying large blocs..."
 350 PAUSE "gives more points."
 360 PAUSE "You fly closer to the..."
 370 PAUSE "ground at each passage."
-380 PAUSE "SPACE : drop bomb (1/time).":PAUSE ""
+380 PAUSE "SPACE : drop bomb (1/time).":PAUSE
 390 RETURN

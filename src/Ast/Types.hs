@@ -282,11 +282,11 @@ instance Show PrintEnding where
 
 -- FIXME: maybe this should allow also variables
 data UsingClause where
-  UsingClause :: {usingClauseExpr :: String} -> UsingClause
+  UsingClause :: {usingClauseExpr :: Maybe String} -> UsingClause
   deriving (Eq)
 
 instance Show UsingClause where
-  show (UsingClause expr) = "USING " ++ show expr
+  show (UsingClause expr) = "USING " ++ maybe "" (\e -> "\"" ++ e ++ "\"") expr
 
 data Assignment et where
   Assignment ::
@@ -440,7 +440,7 @@ data Stmt et where
     } ->
     Stmt et
   WaitStmt ::
-    { waitForExpr :: Maybe (Expr et) -- TODO: should be in range 0-65535, how do we enforce this?
+    { waitForExpr :: Maybe (Expr et)
     } ->
     Stmt et
   ClsStmt :: Stmt et
@@ -512,9 +512,14 @@ instance Show (Stmt et) where
   show (GprintStmt exprs) =
     "GPRINT "
       ++ concatMap (\(e, sep) -> show e ++ show sep) (init exprs)
-      ++ show (last exprs)
+      ++ ( \(e, sep) ->
+             show e ++ case sep of
+               GPrintSeparatorComma -> ","
+               GPrintSeparatorSemicolon -> ""
+         )
+        (last exprs)
   show (GCursorStmt e) = "GCURSOR " ++ show e
-  show (BeepStmt repetitions optionalParams) = "BEEP " ++ show repetitions ++ show optionalParams
+  show (BeepStmt repetitions optionalParams) = "BEEP " ++ show repetitions ++ maybe "" show optionalParams
   show (BeepOnOffStmt beepOn) = "BEEP " ++ if beepOn then "ON" else "OFF"
   show (CursorStmt e) = "CURSOR " ++ show e
   show ReturnStmt = "RETURN"
