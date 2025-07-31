@@ -347,10 +347,13 @@ analyzeAssignment (Assignment lValue expr _) = do
 analyzeBeepOptionalParams :: BeepOptionalParams () -> State SemanticAnalysisState (BeepOptionalParams BasicType)
 analyzeBeepOptionalParams (BeepOptionalParams frequency duration) = do
   analyzedFrequency <- analyzeExpr frequency
-  analyzedDuration <- analyzeExpr duration
-  if Ast.Types.exprType analyzedFrequency == BasicNumericType && Ast.Types.exprType analyzedDuration == BasicNumericType
-    then return (BeepOptionalParams {beepFrequency = analyzedFrequency, beepDuration = analyzedDuration})
-    else error "Beep optional parameters must be numeric expressions"
+  case duration of
+    Just dur -> do
+      analyzedDuration <- analyzeExpr dur
+      if Ast.Types.exprType analyzedFrequency == BasicNumericType && Ast.Types.exprType analyzedDuration == BasicNumericType
+        then return (BeepOptionalParams {beepFrequency = analyzedFrequency, beepDuration = Just analyzedDuration})
+        else error "Beep optional parameters must be numeric expressions"
+    Nothing -> return (BeepOptionalParams {beepFrequency = analyzedFrequency, beepDuration = Nothing})
 
 analyzeDimInner :: DimInner -> State SemanticAnalysisState ()
 analyzeDimInner dimInner = do
@@ -569,6 +572,8 @@ analyzeStmt (OnGoSubStmt onGoSubExpr onGoSubTargets) = do
     error "On GoSub statement requires a numeric expression"
 
   return (OnGoSubStmt {onGosubExpr = exprType, onGosubTargets = onGoSubTargets})
+analyzeStmt (OnErrorGotoStmt target) =
+  return (OnErrorGotoStmt {onErrorGotoTarget = target})
 analyzeStmt (CallStmt callExpr) = do
   analyzedCallExpr <- analyzeExpr callExpr
   case Ast.Types.exprType analyzedCallExpr of

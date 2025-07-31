@@ -339,14 +339,16 @@ instance Show DimInner where
 data BeepOptionalParams et where
   BeepOptionalParams ::
     { beepFrequency :: Expr et,
-      beepDuration :: Expr et
+      beepDuration :: Maybe (Expr et)
     } ->
     BeepOptionalParams et
   deriving (Eq)
 
 instance Show (BeepOptionalParams et) where
   show (BeepOptionalParams {beepFrequency, beepDuration}) =
-    ", " ++ show beepFrequency ++ ", " ++ show beepDuration
+    ", " ++ show beepFrequency ++ case beepDuration of
+      Just duration -> ", " ++ show duration
+      Nothing -> ""
 
 data PrintCommaFormat et where
   PrintCommaFormat ::
@@ -425,6 +427,10 @@ data Stmt et where
   OnGoSubStmt ::
     { onGosubExpr :: Expr et,
       onGosubTargets :: [Word16] -- the targets are line numbers
+    } ->
+    Stmt et
+  OnErrorGotoStmt ::
+    { onErrorGotoTarget :: Word16 -- the target is a line number
     } ->
     Stmt et
   WaitStmt ::
@@ -525,6 +531,7 @@ instance Show (Stmt et) where
     "ON " ++ show expr ++ " GOSUB " ++ intercalate ", " (show <$> targets)
   show (CallStmt expr) = "CALL " ++ show expr
   show (LPrintStmt maybeCommaFormat) = "LPRINT " ++ maybe "" show maybeCommaFormat
+  show (OnErrorGotoStmt target) = "ON ERROR GOTO " ++ show target
 
 type LineNumber = Word16
 

@@ -563,8 +563,7 @@ beepOptionalParamsP :: Parser (BeepOptionalParams ())
 beepOptionalParamsP = do
   _ <- symbol ','
   frequency <- expression
-  _ <- symbol ','
-  duration <- expression
+  duration <- optional (symbol ',' *> expression)
   return BeepOptionalParams {beepFrequency = frequency, beepDuration = duration}
 
 beepStmt :: Parser RawStmt
@@ -679,6 +678,14 @@ onGotoGosubStmt = do
             onGosubTargets = targets
           }
 
+onErrorGotoStmt :: Parser RawStmt
+onErrorGotoStmt = do
+  _ <- keyword "ON"
+  _ <- keyword "ERROR"
+  _ <- keyword "GOTO"
+  target <- word16
+  return OnErrorGotoStmt {onErrorGotoTarget = target}
+
 stmt :: Bool -> Parser RawStmt
 stmt mandatoryLet =
   try endStmt
@@ -709,6 +716,7 @@ stmt mandatoryLet =
     <|> try lockStmt
     <|> try unlockStmt
     <|> try onGotoGosubStmt
+    <|> try onErrorGotoStmt
     <|> try callStmt
     <|> try lprintStmt
     <|> letStmt mandatoryLet
