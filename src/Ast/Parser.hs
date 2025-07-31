@@ -503,7 +503,7 @@ gPrintStmt = do
           case sep of
             Just ',' -> return (expr, GPrintSeparatorComma)
             Just ';' -> return (expr, GPrintSeparatorSemicolon)
-            _ -> return (expr, GPrintSeparatorSemicolon)
+            _ -> return (expr, GPrintSeparatorEmpty)
       )
 
   return GprintStmt {gprintExprs = exprs}

@@ -70,6 +70,8 @@ precedence CaretOp = 6
 
 isLeftAssociative :: BinOperator -> Bool
 isLeftAssociative CaretOp = False -- Right associative
+isLeftAssociative OrOp = False
+isLeftAssociative AndOp = False
 isLeftAssociative _ = True
 
 -- Helper functions for precedence-aware printing
@@ -443,11 +445,13 @@ instance Show (PrintCommaFormat et) where
 data GPrintSeparator where
   GPrintSeparatorComma :: GPrintSeparator
   GPrintSeparatorSemicolon :: GPrintSeparator
+  GPrintSeparatorEmpty :: GPrintSeparator -- used for the last expression in a GPRINT statement
   deriving (Eq)
 
 instance Show GPrintSeparator where
   show GPrintSeparatorComma = ","
   show GPrintSeparatorSemicolon = ";"
+  show GPrintSeparatorEmpty = ""
 
 data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
@@ -585,9 +589,7 @@ instance Show (Stmt et) where
     "GPRINT "
       ++ concatMap (\(e, sep) -> show e ++ show sep ++ " ") (init exprs)
       ++ ( \(e, sep) ->
-             show e ++ case sep of
-               GPrintSeparatorComma -> ","
-               GPrintSeparatorSemicolon -> ""
+             show e ++ show sep
          )
         (last exprs)
   show (GCursorStmt e) = "GCURSOR " ++ show e
