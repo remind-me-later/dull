@@ -55,7 +55,7 @@ instance Show Number where
 -- Precedence and associativity for binary operators
 precedence :: BinOperator -> Int
 precedence OrOp = 1
-precedence AndOp = 1
+precedence AndOp = 2
 precedence EqualOp = 3
 precedence NotEqualOp = 3
 precedence LessThanOp = 3
@@ -69,10 +69,7 @@ precedence DivideOp = 5
 precedence CaretOp = 6
 
 isLeftAssociative :: BinOperator -> Bool
-isLeftAssociative CaretOp = False -- Right associative
-isLeftAssociative OrOp = False
-isLeftAssociative AndOp = False
-isLeftAssociative _ = True
+isLeftAssociative _ = False
 
 -- Helper functions for precedence-aware printing
 showExprWithContext :: Int -> Bool -> Expr et -> String
@@ -91,7 +88,11 @@ showExprInnerWithContext parentPrec isRightSide (BinExpr left op right) =
           || (myPrec == parentPrec && not isRightSide && not leftAssoc)
       leftStr = showExprWithContext myPrec False left
       rightStr = showExprWithContext myPrec True right
-      result = leftStr ++ " " ++ show op ++ " " ++ rightStr
+      -- result = leftStr ++ show op ++ rightStr
+      result = case op of
+        OrOp -> leftStr ++ " OR " ++ rightStr
+        AndOp -> leftStr ++ " AND " ++ rightStr
+        _ -> leftStr ++ show op ++ rightStr -- For other operators, use the default spacing
    in if needsParens then "(" ++ result ++ ")" else result
 showExprInnerWithContext _ _ (DecNumLitExpr n) = show n
 showExprInnerWithContext _ _ (HexNumLitExpr h) =
@@ -197,11 +198,11 @@ data Function et where
 
 instance Show (Function et) where
   show MidFun {midFunStringExpr = str, midFunStartExpr = start, midFunLengthExpr = len} =
-    "MID(" ++ showExprWithContext 0 False str ++ ", " ++ showExprWithContext 0 False start ++ ", " ++ showExprWithContext 0 False len ++ ")"
+    "MID(" ++ showExprWithContext 0 False str ++ "," ++ showExprWithContext 0 False start ++ "," ++ showExprWithContext 0 False len ++ ")"
   show LeftFun {leftFunStringExpr = str, leftFunLengthExpr = len} =
-    "LEFT(" ++ showExprWithContext 0 False str ++ ", " ++ showExprWithContext 0 False len ++ ")"
+    "LEFT(" ++ showExprWithContext 0 False str ++ "," ++ showExprWithContext 0 False len ++ ")"
   show RightFun {rightFunStringExpr = str, rightFunLengthExpr = len} =
-    "RIGHT(" ++ showExprWithContext 0 False str ++ ", " ++ showExprWithContext 0 False len ++ ")"
+    "RIGHT(" ++ showExprWithContext 0 False str ++ "," ++ showExprWithContext 0 False len ++ ")"
   show PointFun {pointFunPositionExpr = pos} =
     "POINT " ++ showExprWithContext 8 False pos -- Higher than any binary operator
   show
@@ -283,7 +284,7 @@ instance Show (LValue et) where
   show (LValueArrayAccess ident index) =
     show ident ++ "(" ++ show index ++ ")"
   show (LValue2DArrayAccess ident rowIndex colIndex) =
-    show ident ++ "(" ++ show rowIndex ++ ", " ++ show colIndex ++ ")"
+    show ident ++ "(" ++ show rowIndex ++ "," ++ show colIndex ++ ")"
   show (LValuePseudoVar pseudoVar) = show pseudoVar
   show (LValueFixedMemoryAreaVar idx hasDollar) =
     if hasDollar
@@ -361,7 +362,7 @@ data Assignment et where
 
 instance Show (Assignment et) where
   show (Assignment lValue expr _) =
-    show lValue ++ " = " ++ show expr
+    show lValue ++ "=" ++ show expr
 
 data PokeKind where
   Me0 :: PokeKind
@@ -397,7 +398,7 @@ instance Show DimInner where
     show dimIdent
       ++ "("
       ++ show dimRows
-      ++ ", "
+      ++ ","
       ++ show dimCols
       ++ ")"
       ++ case dimStringLength of
@@ -414,8 +415,8 @@ data BeepOptionalParams et where
 
 instance Show (BeepOptionalParams et) where
   show (BeepOptionalParams {beepFrequency, beepDuration}) =
-    ", " ++ show beepFrequency ++ case beepDuration of
-      Just duration -> ", " ++ show duration
+    "," ++ show beepFrequency ++ case beepDuration of
+      Just duration -> "," ++ show duration
       Nothing -> ""
 
 data PrintCommaFormat et where
@@ -434,13 +435,13 @@ data PrintCommaFormat et where
 
 instance Show (PrintCommaFormat et) where
   show (PrintCommaFormat e1 e2) =
-    show e1 ++ ", " ++ show e2
+    show e1 ++ "," ++ show e2
   show (PrintSemicolonFormat maybeUsingClause exprs ending) =
     case maybeUsingClause of
       Just usingClause ->
-        show usingClause ++ "; " ++ intercalate "; " (show <$> exprs) ++ show ending
+        show usingClause ++ ";" ++ intercalate ";" (show <$> exprs) ++ show ending
       Nothing ->
-        intercalate "; " (show <$> exprs) ++ show ending
+        intercalate ";" (show <$> exprs) ++ show ending
 
 data GPrintSeparator where
   GPrintSeparatorComma :: GPrintSeparator
@@ -552,8 +553,8 @@ data Stmt et where
 showLetStmt :: Bool -> [Assignment et] -> String
 showLetStmt isMandatoryLet assignments =
   if isMandatoryLet
-    then "LET " ++ intercalate ", " (show <$> assignments)
-    else intercalate ", " (show <$> assignments)
+    then "LET " ++ intercalate "," (show <$> assignments)
+    else intercalate "," (show <$> assignments)
 
 instance Show (Stmt et) where
   show (LetStmt assignments) = showLetStmt False assignments
@@ -561,7 +562,7 @@ instance Show (Stmt et) where
     "IF "
       ++ show cond
       ++ case s of
-        LetStmt letStmt -> " THEN " ++ showLetStmt True letStmt
+        LetStmt letStmt -> " " ++ showLetStmt True letStmt
         GoToStmt l -> " " ++ show l
         _ -> " " ++ show s
   show (PrintStmt {printCommaFormat}) = "PRINT " ++ maybe "" show printCommaFormat
@@ -569,7 +570,7 @@ instance Show (Stmt et) where
   show (UsingStmt usingClause) = "USING " ++ show usingClause
   show (InputStmt maybePrintExpr me) =
     "INPUT "
-      ++ maybe "" (\e -> show e ++ "; ") maybePrintExpr
+      ++ maybe "" (\e -> show e ++ ";") maybePrintExpr
       ++ show me
   show EndStmt = "END"
   show Comment = "REM"
@@ -602,18 +603,18 @@ instance Show (Stmt et) where
       ++ case kind of
         Me0 -> " "
         Me1 -> "# "
-      ++ intercalate ", " (show <$> exprs)
-  show (DimStmt decls) = "DIM " ++ intercalate ", " (show <$> decls)
-  show (ReadStmt ids) = "READ " ++ intercalate ", " (show <$> ids)
-  show (DataStmt exprs) = "DATA " ++ intercalate ", " (show <$> exprs)
+      ++ intercalate "," (show <$> exprs)
+  show (DimStmt decls) = "DIM " ++ intercalate "," (show <$> decls)
+  show (ReadStmt ids) = "READ " ++ intercalate "," (show <$> ids)
+  show (DataStmt exprs) = "DATA " ++ intercalate "," (show <$> exprs)
   show (RestoreStmt n) = "RESTORE " ++ maybe "" show n
   show ArunStmt = "ARUN"
   show LockStmt = "LOCK"
   show UnlockStmt = "UNLOCK"
   show (OnGoToStmt expr targets) =
-    "ON " ++ show expr ++ " GOTO " ++ intercalate ", " (show <$> targets)
+    "ON " ++ show expr ++ " GOTO " ++ intercalate "," (show <$> targets)
   show (OnGoSubStmt expr targets) =
-    "ON " ++ show expr ++ " GOSUB " ++ intercalate ", " (show <$> targets)
+    "ON " ++ show expr ++ " GOSUB " ++ intercalate "," (show <$> targets)
   show (CallStmt expr) = "CALL " ++ show expr
   show (LPrintStmt maybeCommaFormat) = "LPRINT " ++ maybe "" show maybeCommaFormat
   show (OnErrorGotoStmt target) = "ON ERROR GOTO " ++ show target
@@ -634,9 +635,9 @@ data Line et where
 
 instance Show (Line et) where
   show (Line n Nothing stmts) =
-    show n ++ " " ++ intercalate " : " (show <$> stmts)
+    show n ++ " " ++ intercalate ":" (show <$> stmts)
   show (Line n (Just label) stmts) =
-    show n ++ " \"" ++ label ++ "\" " ++ intercalate ": " (show <$> stmts)
+    show n ++ " \"" ++ label ++ "\"" ++ intercalate ":" (show <$> stmts)
 
 newtype Program et where
   Program :: {programLines :: Data.Map.Map LineNumber (Line et)} -> Program et

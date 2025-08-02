@@ -314,23 +314,23 @@ expressionFactor =
       return Expr {exprInner = FunCallExpr fun, exprType = ()}
 
 expression :: Parser RawExpr
-expression = logicalExpr
+expression = orExpr
   where
+    -- Right-associative: a ^ b ^ c = a ^ (b ^ c)
     exponentExpr = do
       left <- expressionFactor
-      maybeOp <- optional (binOperator CaretOp)
+      maybeOp <- optional (try (binOperator CaretOp))
       case maybeOp of
         Just op -> do
-          right <- exponentExpr
+          right <- exponentExpr -- Right-associative: recurse on same level
           return Expr {exprInner = BinExpr left op right, exprType = ()}
         Nothing -> return left
 
     unaryOpExpr = do
       maybeOp <-
         optional
-          ( try
-              (unaryOperator UnaryPlusOp)
-              <|> unaryOperator UnaryMinusOp
+          ( try (unaryOperator UnaryPlusOp)
+              <|> try (unaryOperator UnaryMinusOp)
           )
       case maybeOp of
         Just op -> do
@@ -338,32 +338,31 @@ expression = logicalExpr
           return Expr {exprInner = UnaryExpr op right, exprType = ()}
         Nothing -> exponentExpr
 
+    -- Right-associative
     mulDivExpr = do
       left <- unaryOpExpr
-      maybeOp <-
-        optional
-          ( try (binOperator MultiplyOp)
-              <|> binOperator DivideOp
+      rest <-
+        many
+          ( do
+              op <- try (binOperator MultiplyOp) <|> try (binOperator DivideOp)
+              right <- mulDivExpr
+              return (op, right)
           )
-      case maybeOp of
-        Just op -> do
-          right <- mulDivExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ()}
-        Nothing -> return left
+      return $ foldl (\acc (op, right) -> Expr {exprInner = BinExpr acc op right, exprType = ()}) left rest
 
+    -- Right-associative
     addSubExpr = do
       left <- mulDivExpr
-      maybeOp <-
-        optional
-          ( try (binOperator AddOp)
-              <|> binOperator SubtractOp
+      rest <-
+        many
+          ( do
+              op <- try (binOperator AddOp) <|> try (binOperator SubtractOp)
+              right <- addSubExpr
+              return (op, right)
           )
-      case maybeOp of
-        Just op -> do
-          right <- addSubExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ()}
-        Nothing -> return left
+      return $ foldl (\acc (op, right) -> Expr {exprInner = BinExpr acc op right, exprType = ()}) left rest
 
+    -- Right-associative: A = B = C < D = E = F
     comparisonExpr = do
       left <- addSubExpr
       maybeOp <-
@@ -374,7 +373,7 @@ expression = logicalExpr
               <|> try (binOperator LessThanOrEqualOp) -- <=
               <|> try (binOperator LessThanOp) -- <
               <|> try (binOperator GreaterThanOrEqualOp) -- >=
-              <|> binOperator GreaterThanOp -- >
+              <|> try (binOperator GreaterThanOp) -- >
           )
       case maybeOp of
         Just op -> do
@@ -383,25 +382,34 @@ expression = logicalExpr
         Nothing -> return left
 
     unaryLogicalExpr = do
-      maybeOp <- optional (unaryOperator UnaryNotOp)
+      maybeOp <- optional (try (unaryOperator UnaryNotOp))
       case maybeOp of
         Just op -> do
           right <- unaryLogicalExpr
           return Expr {exprInner = UnaryExpr op right, exprType = ()}
         Nothing -> comparisonExpr
 
-    logicalExpr = do
+    andExpr = do
       left <- unaryLogicalExpr
-      maybeOp <-
-        optional
-          ( (try (keyword "AND") $> AndOp)
-              <|> (keyword "OR" $> OrOp)
+      rest <-
+        many
+          ( do
+              op <- try (binOperator AndOp)
+              right <- andExpr
+              return (op, right)
           )
-      case maybeOp of
-        Just op -> do
-          right <- logicalExpr
-          return Expr {exprInner = BinExpr left op right, exprType = ()}
-        Nothing -> return left
+      return $ foldl (\acc (op, right) -> Expr {exprInner = BinExpr acc op right, exprType = ()}) left rest
+
+    orExpr = do
+      left <- andExpr
+      rest <-
+        many
+          ( do
+              op <- try (binOperator OrOp)
+              right <- orExpr
+              return (op, right)
+          )
+      return $ foldl (\acc (op, right) -> Expr {exprInner = BinExpr acc op right, exprType = ()}) left rest
 
 assignment :: Parser RawAssignment
 assignment = do
@@ -750,7 +758,7 @@ stmt mandatoryLet =
     <|> try onErrorGotoStmt
     <|> try callStmt
     <|> try lprintStmt
-    <|> letStmt mandatoryLet
+    <|> try (letStmt mandatoryLet)
 
 line :: Parser RawLine
 line = do
