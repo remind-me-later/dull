@@ -5,6 +5,7 @@ module SymbolTable
     insertVariable,
     lookupSymbol,
     insertLabel,
+    lookupLabel,
   )
 where
 
@@ -89,6 +90,10 @@ insertLabel label line st@SymbolTable {labelToLineMap} =
    in if alreadyInLabels
         then st
         else st {labelToLineMap = newLabels}
+
+lookupLabel :: String -> SymbolTable -> Maybe Word16
+lookupLabel label SymbolTable {labelToLineMap} =
+  Data.Map.lookup label labelToLineMap
 
 lookupSymbol :: Ident -> SymbolTable -> Maybe Variable
 lookupSymbol name SymbolTable {symbolMap} =

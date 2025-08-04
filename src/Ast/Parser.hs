@@ -765,29 +765,8 @@ line = do
   lineNumber <- word16
   lineLabel <- optional (stringLiteral <* optional (symbol ':'))
   lineStmts <- stmt False `sepBy` symbol ':'
-  -- if there are no stmts the label wasn't a label it was a print statement
-  case (lineLabel, lineStmts) of
-    (Just label, []) -> do
-      _ <- newline
-      return
-        Line
-          { lineNumber,
-            lineLabel = Nothing,
-            lineStmts =
-              [ PrintStmt
-                  { printCommaFormat =
-                      Just
-                        PrintSemicolonFormat
-                          { printSemicolonFormatUsingClause = Nothing,
-                            printSemicolonFormatExprs = [Expr {exprInner = StrLitExpr label, exprType = ()}],
-                            printSemicolonFormatEnding = PrintEndingNewLine
-                          }
-                  }
-              ]
-          }
-    _ -> do
-      _ <- newline
-      return Line {lineNumber, lineLabel, lineStmts}
+  _ <- newline
+  return Line {lineNumber, lineLabel, lineStmts}
 
 program :: Parser RawProgram
 program = do

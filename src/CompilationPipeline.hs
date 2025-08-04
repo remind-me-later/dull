@@ -44,7 +44,7 @@ compileProgram fileName contents = do
             CompilationResult
               { compiledProgram = prog',
                 finalSymbolTable = finalState,
-                translatedBytes = translatedBytes
+                translatedBytes = translatedBytes finalState
               }
 
   case result of

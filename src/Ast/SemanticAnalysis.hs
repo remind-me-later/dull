@@ -377,6 +377,15 @@ analyzeDimInner dimInner = do
       _ <- analyzeDimAndInsertIntoTable (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength})
       return ()
 
+-- Goto targets can be numeric expressions or string literals (labels)
+analyzeGotoTarget :: RawExpr -> State SemanticAnalysisState TypedExpr
+analyzeGotoTarget expr = do
+  analyzedExpr <- analyzeExpr expr
+  case Ast.Types.exprType analyzedExpr of
+    BasicNumericType -> return analyzedExpr
+    BasicStringType -> return analyzedExpr
+    _ -> error "Goto target must be a numeric expression or a string literal (label)"
+
 analyzeStmt :: RawStmt -> State SemanticAnalysisState TypedStmt
 analyzeStmt (LetStmt assignments) = do
   analyzedAssignments <- mapM analyzeAssignment assignments
@@ -510,11 +519,11 @@ analyzeStmt (NextStmt nextIdent) = do
   return NextStmt {nextIdent = nextIdent}
 analyzeStmt ClearStmt = return ClearStmt
 analyzeStmt (GoToStmt gotoTarget) = do
-  exprType <- analyzeExpr gotoTarget
+  exprType <- analyzeGotoTarget gotoTarget
 
   return (GoToStmt {gotoTarget = exprType})
 analyzeStmt (GoSubStmt gosubTarget) = do
-  exprType <- analyzeExpr gosubTarget
+  exprType <- analyzeGotoTarget gosubTarget
 
   return (GoSubStmt {gosubTarget = exprType})
 analyzeStmt (WaitStmt waitForExpr) = do
@@ -588,7 +597,7 @@ analyzeStmt (OnGoToStmt onGotoExpr onGotoTargets) = do
   when (Ast.Types.exprType exprType /= BasicNumericType) $
     error "On Goto statement requires a numeric expression"
 
-  onGotoTargets' <- mapM analyzeExpr onGotoTargets
+  onGotoTargets' <- mapM analyzeGotoTarget onGotoTargets
   unless (all (\et -> Ast.Types.exprType et == BasicNumericType) onGotoTargets') $
     error "On Goto targets must be numeric expressions"
 
@@ -598,13 +607,13 @@ analyzeStmt (OnGoSubStmt onGoSubExpr onGoSubTargets) = do
   when (Ast.Types.exprType exprType /= BasicNumericType) $
     error "On GoSub statement requires a numeric expression"
 
-  onGoSubTargets' <- mapM analyzeExpr onGoSubTargets
+  onGoSubTargets' <- mapM analyzeGotoTarget onGoSubTargets
   unless (all (\et -> Ast.Types.exprType et == BasicNumericType) onGoSubTargets') $
     error "On GoSub targets must be numeric expressions"
 
   return (OnGoSubStmt {onGosubExpr = exprType, onGosubTargets = onGoSubTargets'})
 analyzeStmt (OnErrorGotoStmt target) = do
-  targetType <- analyzeExpr target
+  targetType <- analyzeGotoTarget target
   when (Ast.Types.exprType targetType /= BasicNumericType) $
     error "On Error Goto statement requires a numeric expression"
   return (OnErrorGotoStmt {onErrorGotoTarget = targetType})
