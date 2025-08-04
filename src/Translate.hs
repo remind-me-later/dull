@@ -73,6 +73,18 @@ translateFunction PeekFun {peekMemoryArea, peekFunAddress} =
   -- Peek# code: 0xF16E
   [0xF1, if peekMemoryArea == Me0 then 0x6F else 0x6E]
     ++ translateExpr peekFunAddress
+translateFunction LnFun {lnFunExpr} =
+  -- Code: 0xF176
+  [0xF1, 0x76] ++ translateExpr lnFunExpr
+translateFunction LogFun {logFunExpr} =
+  -- Code: 0xF177
+  [0xF1, 0x77] ++ translateExpr logFunExpr
+translateFunction DmsFun {dmsFunExpr} =
+  -- Code: 0xF166
+  [0xF1, 0x66] ++ translateExpr dmsFunExpr
+translateFunction DegFun {degFunExpr} =
+  -- Code: 0xF165
+  [0xF1, 0x65] ++ translateExpr degFunExpr
 
 translatePseudoVariable :: PseudoVariable -> [Word8]
 translatePseudoVariable TimePseudoVar = [0xF1, 0x5B]
@@ -346,9 +358,9 @@ translateStmt (OnErrorGotoStmt target) =
   -- Error code: 0xF1B4
   -- Goto code: 0xF192
   [0xF1, 0x9C, 0xF1, 0xB4, 0xF1, 0x92] ++ translateExpr target
-translateStmt (CallStmt expr) =
+translateStmt (CallStmt expr maybeCallVariable) =
   -- Call code: 0xF18A
-  [0xF1, 0x8A] ++ translateExpr expr
+  [0xF1, 0x8A] ++ translateExpr expr ++ maybe [] (\v -> fromIntegral (fromEnum ',') : translateLValue v) maybeCallVariable
 translateStmt (LPrintStmt maybeCommaFormat) =
   -- LPrint code: 0xF0B9
   [0xF0, 0xB9] ++ maybe [] translatePrintCommaFormat maybeCommaFormat

@@ -191,6 +191,26 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType addressType == BasicNumericType
       then return (PeekFun {peekMemoryArea = peekMemoryArea, peekFunAddress = addressType}, BasicNumericType)
       else error "PEEK function requires a numeric expression for address"
+  LnFun {lnFunExpr} -> do
+    exprType <- analyzeExpr lnFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (LnFun {lnFunExpr = exprType}, BasicNumericType)
+      else error "LN function requires a numeric expression"
+  LogFun {logFunExpr} -> do
+    exprType <- analyzeExpr logFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (LogFun {logFunExpr = exprType}, BasicNumericType)
+      else error "LOG function requires a numeric expression"
+  DmsFun {dmsFunExpr} -> do
+    exprType <- analyzeExpr dmsFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (DmsFun {dmsFunExpr = exprType}, BasicNumericType)
+      else error "DMS function requires a numeric expression"
+  DegFun {degFunExpr} -> do
+    exprType <- analyzeExpr degFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (DegFun {degFunExpr = exprType}, BasicNumericType)
+      else error "DEG function requires a numeric expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
@@ -259,7 +279,7 @@ analyzeExprInner (BinExpr left op right) = do
         then return (BinExpr analyzedLeft GreaterThanOp analyzedRight, BasicNumericType)
         else error "Greater than can only be applied to expressions of the same type"
     LessThanOrEqualOp ->
-      if leftType == BasicNumericType && rightType == BasicNumericType
+      if leftType == rightType
         then return (BinExpr analyzedLeft LessThanOrEqualOp analyzedRight, BasicNumericType)
         else error "Less than or equal can only be applied to numeric expressions"
     GreaterThanOrEqualOp ->
@@ -587,10 +607,15 @@ analyzeStmt (OnGoSubStmt onGoSubExpr onGoSubTargets) = do
 analyzeStmt (OnErrorGotoStmt target) = do
   targetType <- analyzeExpr target
   return (OnErrorGotoStmt {onErrorGotoTarget = targetType})
-analyzeStmt (CallStmt callExpr) = do
+analyzeStmt (CallStmt callExpr maybeCallVariable) = do
   analyzedCallExpr <- analyzeExpr callExpr
   case Ast.Types.exprType analyzedCallExpr of
-    BasicNumericType -> return (CallStmt {callExpression = analyzedCallExpr})
+    BasicNumericType ->
+      case maybeCallVariable of
+        Just callVar -> do
+          (callVarType, _ty) <- analyzeLValue callVar
+          return (CallStmt {callExpression = analyzedCallExpr, maybeCallVariable = Just callVarType})
+        Nothing -> return (CallStmt {callExpression = analyzedCallExpr, maybeCallVariable = Nothing})
     _ -> error "Call statement requires a numeric expression"
 analyzeStmt (BeepOnOffStmt beepOn) = return (BeepOnOffStmt {beepOn = beepOn})
 analyzeStmt TextStmt = return TextStmt

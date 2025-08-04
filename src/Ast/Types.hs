@@ -269,6 +269,22 @@ data Function et where
       peekFunAddress :: Expr et -- the address to peek from, must be a numeric expression
     } ->
     Function et
+  LnFun ::
+    { lnFunExpr :: Expr et -- the numeric expression to get the natural logarithm of
+    } ->
+    Function et
+  LogFun ::
+    { logFunExpr :: Expr et -- the numeric expression to get the base-10 logarithm of
+    } ->
+    Function et
+  DmsFun ::
+    { dmsFunExpr :: Expr et
+    } ->
+    Function et
+  DegFun ::
+    { degFunExpr :: Expr et
+    } ->
+    Function et
   deriving (Eq)
 
 instance Show (Function et) where
@@ -312,6 +328,14 @@ instance Show (Function et) where
         Me0 -> " "
         Me1 -> "# "
       ++ showExprWithContext 8 False addr
+  show LnFun {lnFunExpr = expr} =
+    "LN " ++ showExprWithContext 8 False expr
+  show LogFun {logFunExpr = expr} =
+    "LOG " ++ showExprWithContext 8 False expr
+  show DmsFun {dmsFunExpr = expr} =
+    "DMS " ++ showExprWithContext 8 False expr
+  show DegFun {degFunExpr = expr} =
+    "DEG " ++ showExprWithContext 8 False expr
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -624,7 +648,8 @@ data Stmt et where
   LockStmt :: Stmt et
   UnlockStmt :: Stmt et
   CallStmt ::
-    { callExpression :: Expr et
+    { callExpression :: Expr et,
+      maybeCallVariable :: Maybe (LValue et) -- Optional variable to store the result of the call
     } ->
     Stmt et
   -- Printer
@@ -709,7 +734,7 @@ instance Show (Stmt et) where
     "ON " ++ show expr ++ " GOTO " ++ intercalate "," (show <$> targets)
   show (OnGoSubStmt expr targets) =
     "ON " ++ show expr ++ " GOSUB " ++ intercalate "," (show <$> targets)
-  show (CallStmt expr) = "CALL " ++ show expr
+  show (CallStmt expr maybeCallVariable) = "CALL " ++ show expr ++ maybe "" (\v -> ", " ++ show v) maybeCallVariable
   show (LPrintStmt maybeCommaFormat) = "LPRINT " ++ maybe "" show maybeCommaFormat
   show (OnErrorGotoStmt target) = "ON ERROR GOTO " ++ show target
   show TextStmt = "TEXT"

@@ -16,11 +16,15 @@
 | ghosthouse             | [x]    |                                        |
 | invader                | [x]    |                                        |
 | invasion_force         | [ ]    |                                        |
+| jackpot                | [x]    |                                        |
+| labyrinthe             | [x]    |                                        |
 | micromur               | [x]    |                                        |
 | minenboot              | [x]    |                                        |
 | mole                   | [x]    |                                        |
+| monstres&merveilles    | [x]    |                                        |
 | piles_jr               | [x]    |                                        |
 | rase_mottes            | [x]    |                                        |
+| slalom                 | [x]    |                                        |
 | tank                   | [x]    |                                        |
 | tempter                | [ ]    | IF without THEN clause in line 40      |
 | trio                   | [x]    |                                        |

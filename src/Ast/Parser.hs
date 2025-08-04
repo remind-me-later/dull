@@ -192,6 +192,10 @@ functionCall =
     <|> try lenFunCall
     <|> try peekFunCall
     <|> try sgnFunCall
+    <|> try lnFunCall
+    <|> try logFunCall
+    <|> try dmsFunCall
+    <|> try degFunCall
   where
     rndFunCall = do
       _ <- keyword "RND"
@@ -263,6 +267,18 @@ functionCall =
               Nothing -> Me0,
             peekFunAddress = addr
           }
+    lnFunCall = do
+      _ <- keyword "LN"
+      LnFun <$> expressionFactor
+    logFunCall = do
+      _ <- keyword "LOG"
+      LogFun <$> expressionFactor
+    dmsFunCall = do
+      _ <- keyword "DMS"
+      DmsFun <$> expressionFactor
+    degFunCall = do
+      _ <- keyword "DEG"
+      DegFun <$> expressionFactor
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -699,7 +715,8 @@ callStmt :: Parser RawStmt
 callStmt = do
   _ <- keyword "CALL"
   expr <- expression
-  return CallStmt {callExpression = expr}
+  maybeCallVar <- optional (symbol ',' *> lvalue)
+  return CallStmt {callExpression = expr, maybeCallVariable = maybeCallVar}
 
 onGotoGosubStmt :: Parser RawStmt
 onGotoGosubStmt = do
