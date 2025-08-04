@@ -5,7 +5,7 @@
 | atterisage             | [ ]    | Wrong using clause parsing in line 38  |
 | bataille-dans-l-espace | [x]    |                                        |
 | bathyscap              | [x]    |                                        |
-| blackjack              | [ ]    | Weird IF at line 64                    |
+| blackjack              | [x]    |                                        |
 | bombardments           | [x]    |                                        |
 | bowling                | [x]    |                                        |
 | donkey_kong            | [x]    |                                        |
