@@ -1,23 +1,23 @@
 ## Programs that parse (unchecked run)
 
-| Program        | Parses | Comments                                      |
-| -------------- | ------ | --------------------------------------------- |
-| bathyscap      | [x]    |                                               |
-| blackjack      | [ ]    | Weird IF at line 64                           |
-| bombardments   | [x]    |                                               |
-| donkey_kong    | [x]    |                                               |
-| dungeonquest   | [x]    |                                               |
-| formula1       | [x]    |                                               |
-| ghosthouse     | [ ]    | Undeclared array S with DIM keyword in line 1 |
-| invader        | [x]    |                                               |
-| invasion_force | [ ]    |                                               |
-| micromur       | [x]    |                                               |
-| minenboot      | [ ]    | Weird IF concatenation in line 27             |
-| piles_jr       | [x]    |                                               |
-| rase_mottes    | [x]    |                                               |
-| tank           | [x]    |                                               |
-| tempter        | [ ]    | Extra semicolon at line end in line 17        |
-| trio           | [x]    |                                               |
+| Program        | Parses | Comments                               |
+| -------------- | ------ | -------------------------------------- |
+| bathyscap      | [x]    |                                        |
+| blackjack      | [ ]    | Weird IF at line 64                    |
+| bombardments   | [x]    |                                        |
+| donkey_kong    | [x]    |                                        |
+| dungeonquest   | [x]    |                                        |
+| formula1       | [x]    |                                        |
+| ghosthouse     | [x]    |                                        |
+| invader        | [x]    |                                        |
+| invasion_force | [ ]    |                                        |
+| micromur       | [x]    |                                        |
+| minenboot      | [ ]    | Weird IF concatenation in line 27      |
+| piles_jr       | [x]    |                                        |
+| rase_mottes    | [x]    |                                        |
+| tank           | [x]    |                                        |
+| tempter        | [ ]    | Extra semicolon at line end in line 17 |
+| trio           | [x]    |                                        |
 
 ## Thanks
 
