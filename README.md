@@ -2,12 +2,14 @@
 
 | Program                | Parses | Comments                               |
 | ---------------------- | ------ | -------------------------------------- |
-| atterisage             | [ ]    | Wrong using clause parsing in line 38  |
+| atterisage             | [ ]    | Wrong using clause parsing in line 310 |
 | bataille-dans-l-espace | [x]    |                                        |
 | bathyscap              | [x]    |                                        |
+| battlecars             | [ ]    | 3 letter variable name 'VMA'           |
 | blackjack              | [x]    |                                        |
 | bombardments           | [x]    |                                        |
 | bowling                | [x]    |                                        |
+| dames                  | [ ]    | Printer commands missing               |
 | donkey_kong            | [x]    |                                        |
 | dungeonquest           | [x]    |                                        |
 | formula1               | [x]    |                                        |
@@ -16,10 +18,11 @@
 | invasion_force         | [ ]    |                                        |
 | micromur               | [x]    |                                        |
 | minenboot              | [x]    |                                        |
+| mole                   | [x]    |                                        |
 | piles_jr               | [x]    |                                        |
 | rase_mottes            | [x]    |                                        |
 | tank                   | [x]    |                                        |
-| tempter                | [ ]    | Extra semicolon at line end in line 17 |
+| tempter                | [ ]    | IF without THEN clause in line 40      |
 | trio                   | [x]    |                                        |
 
 ## Thanks

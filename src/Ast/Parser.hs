@@ -729,6 +729,30 @@ onErrorGotoStmt = do
   target <- expression
   return OnErrorGotoStmt {onErrorGotoTarget = target}
 
+textStmt :: Parser RawStmt
+textStmt = keyword "TEXT" $> TextStmt
+
+graphStmt :: Parser RawStmt
+graphStmt = keyword "GRAPH" $> GraphStmt
+
+colorStmt :: Parser RawStmt
+colorStmt = do
+  _ <- keyword "COLOR"
+  expr <- expression
+  return ColorStmt {colorExpr = expr}
+
+csizeStmt :: Parser RawStmt
+csizeStmt = do
+  _ <- keyword "CSIZE"
+  expr <- expression
+  return CSizeStmt {characterSizeExpr = expr}
+
+lfStmt :: Parser RawStmt
+lfStmt = do
+  _ <- keyword "LF"
+  expr <- expression
+  return LfStmt {lineFeedExpr = expr}
+
 stmt :: Bool -> Parser RawStmt
 stmt mandatoryLet =
   try endStmt
@@ -762,6 +786,11 @@ stmt mandatoryLet =
     <|> try onErrorGotoStmt
     <|> try callStmt
     <|> try lprintStmt
+    <|> try textStmt
+    <|> try graphStmt
+    <|> try colorStmt
+    <|> try csizeStmt
+    <|> try lfStmt
     <|> try (letStmt mandatoryLet)
 
 line :: Parser RawLine

@@ -593,6 +593,23 @@ analyzeStmt (CallStmt callExpr) = do
     BasicNumericType -> return (CallStmt {callExpression = analyzedCallExpr})
     _ -> error "Call statement requires a numeric expression"
 analyzeStmt (BeepOnOffStmt beepOn) = return (BeepOnOffStmt {beepOn = beepOn})
+analyzeStmt TextStmt = return TextStmt
+analyzeStmt GraphStmt = return GraphStmt
+analyzeStmt (ColorStmt colorExpr) = do
+  analyzedColorExpr <- analyzeExpr colorExpr
+  case Ast.Types.exprType analyzedColorExpr of
+    BasicNumericType -> return (ColorStmt {colorExpr = analyzedColorExpr})
+    _ -> error "Color statement requires a numeric expression"
+analyzeStmt (CSizeStmt cSizeExpr) = do
+  analyzedCSizeExpr <- analyzeExpr cSizeExpr
+  case Ast.Types.exprType analyzedCSizeExpr of
+    BasicNumericType -> return (CSizeStmt {characterSizeExpr = analyzedCSizeExpr})
+    _ -> error "CSize statement requires a numeric expression"
+analyzeStmt (LfStmt lfExpr) = do
+  analyzedLfExpr <- analyzeExpr lfExpr
+  case Ast.Types.exprType analyzedLfExpr of
+    BasicNumericType -> return (LfStmt {lineFeedExpr = analyzedLfExpr})
+    _ -> error "LF statement requires a numeric expression"
 
 analyzeLine :: RawLine -> State SemanticAnalysisState TypedLine
 analyzeLine (Line lineNumber lineLabel lineStmts) = do

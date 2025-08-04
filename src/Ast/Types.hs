@@ -627,6 +627,21 @@ data Stmt et where
     { callExpression :: Expr et
     } ->
     Stmt et
+  -- Printer
+  TextStmt :: Stmt et
+  GraphStmt :: Stmt et
+  ColorStmt ::
+    { colorExpr :: Expr et
+    } ->
+    Stmt et
+  CSizeStmt ::
+    { characterSizeExpr :: Expr et
+    } ->
+    Stmt et
+  LfStmt ::
+    { lineFeedExpr :: Expr et
+    } ->
+    Stmt et
   deriving (Eq)
 
 showLetStmt :: Bool -> [Assignment et] -> String
@@ -697,6 +712,11 @@ instance Show (Stmt et) where
   show (CallStmt expr) = "CALL " ++ show expr
   show (LPrintStmt maybeCommaFormat) = "LPRINT " ++ maybe "" show maybeCommaFormat
   show (OnErrorGotoStmt target) = "ON ERROR GOTO " ++ show target
+  show TextStmt = "TEXT"
+  show GraphStmt = "GRAPH"
+  show (ColorStmt expr) = "COLOR " ++ show expr
+  show (CSizeStmt expr) = "CSIZE " ++ show expr
+  show (LfStmt expr) = "LF " ++ show expr
 
 type LineNumber = Word16
 

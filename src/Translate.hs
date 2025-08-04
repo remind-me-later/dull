@@ -352,6 +352,21 @@ translateStmt (CallStmt expr) =
 translateStmt (LPrintStmt maybeCommaFormat) =
   -- LPrint code: 0xF0B9
   [0xF0, 0xB9] ++ maybe [] translatePrintCommaFormat maybeCommaFormat
+translateStmt TextStmt =
+  -- Text code: 0xE686
+  [0xE6, 0x86]
+translateStmt GraphStmt =
+  -- Graph code: 0xE681
+  [0xE6, 0x81]
+translateStmt (ColorStmt colorExpr) =
+  -- Color code: 0xF0B5
+  [0xF0, 0xB5] ++ translateExpr colorExpr
+translateStmt (CSizeStmt characterSizeExpr) =
+  -- CSize code: 0xE680
+  [0xE6, 0x80] ++ translateExpr characterSizeExpr
+translateStmt (LfStmt lineFeedExpr) =
+  -- LF code: 0xF0B6
+  [0xF0, 0xB6] ++ translateExpr lineFeedExpr
 
 -- FIXME: translate line labels
 -- First we put the word16 line number in two adjacent bytes, then the length of the line in bytes,
