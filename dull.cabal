@@ -37,6 +37,7 @@ executable dull
     build-depends:    base >= 4.21
                         , containers >= 0.7
                         , optparse-applicative >= 0.19
+                        , bytestring >= 0.12
                         , dull
     hs-source-dirs:   app
     default-language: GHC2021
