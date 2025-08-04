@@ -3,8 +3,6 @@ module Translate where
 import Ast.Types
 import Data.List (intercalate)
 import Data.Word (Word8)
-import SymbolTable (SymbolTable, lookupLabel)
-import TypeSystem
 
 translateDecimalNumber :: DecimalNumber -> [Word8]
 translateDecimalNumber n = map (fromIntegral . fromEnum) (show n)
@@ -12,7 +10,7 @@ translateDecimalNumber n = map (fromIntegral . fromEnum) (show n)
 translateBinaryNumber :: BinaryNumber -> [Word8]
 translateBinaryNumber n = map (fromIntegral . fromEnum) (show n)
 
-translateFunction :: Function BasicType -> [Word8]
+translateFunction :: Function et -> [Word8]
 translateFunction MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} =
   -- Code: 0xF17B
   [0xF1, 0x7B, fromIntegral $ fromEnum '(']
@@ -69,6 +67,11 @@ translateFunction AbsFun {absFunExpr} =
 translateFunction LenFun {lenFunExpr} =
   -- Code: 0xF164
   [0xF1, 0x64] ++ translateExpr lenFunExpr
+translateFunction PeekFun {peekMemoryArea, peekFunAddress} =
+  -- Peek code: 0xF16F
+  -- Peek# code: 0xF16E
+  [0xF1, if peekMemoryArea == Me0 then 0x6F else 0x6E]
+    ++ translateExpr peekFunAddress
 
 translatePseudoVariable :: PseudoVariable -> [Word8]
 translatePseudoVariable TimePseudoVar = [0xF1, 0x5B]
@@ -77,7 +80,7 @@ translatePseudoVariable InkeyPseudoVar = [0xF1, 0x5C]
 translateIdent :: Ident -> [Word8]
 translateIdent ident = map (fromIntegral . fromEnum) (show ident)
 
-translateLValue :: LValue BasicType -> [Word8]
+translateLValue :: LValue et -> [Word8]
 translateLValue lvalue = map (fromIntegral . fromEnum) (show lvalue)
 
 unaryOperatorByteSize :: UnaryOperator -> Int
@@ -102,11 +105,11 @@ translateBinOperator AndOp =
 translateBinOperator op = map (fromIntegral . fromEnum) (show op)
 
 -- Helper functions for precedence-aware printing
-showExprWithContext :: Int -> Bool -> Expr BasicType -> [Word8]
+showExprWithContext :: Int -> Bool -> Expr et -> [Word8]
 showExprWithContext parentPrec isRightSide (Expr {exprInner = inner}) =
   showExprInnerWithContext parentPrec isRightSide inner
 
-showExprInnerWithContext :: Int -> Bool -> ExprInner BasicType -> [Word8]
+showExprInnerWithContext :: Int -> Bool -> ExprInner et -> [Word8]
 showExprInnerWithContext _ _ (UnaryExpr op expr) =
   translateUnaryOperator op ++ showExprWithContext 7 False expr -- Unary has highest precedence
 showExprInnerWithContext parentPrec isRightSide (BinExpr left op right) =
@@ -130,7 +133,7 @@ showExprInnerWithContext _ _ (StrLitExpr s) =
   [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) s ++ [fromIntegral $ fromEnum '"']
 showExprInnerWithContext _ _ (FunCallExpr f) = translateFunction f
 
-translateExprInner :: ExprInner BasicType -> [Word8]
+translateExprInner :: ExprInner et -> [Word8]
 translateExprInner (UnaryExpr op expr) =
   translateUnaryOperator op ++ showExprWithContext 7 False expr
 translateExprInner (BinExpr left op right) =
@@ -142,7 +145,7 @@ translateExprInner (StrLitExpr s) =
   [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) s ++ [fromIntegral $ fromEnum '"']
 translateExprInner (FunCallExpr f) = translateFunction f
 
-translateExpr :: Expr BasicType -> [Word8]
+translateExpr :: Expr et -> [Word8]
 translateExpr Expr {exprInner} = translateExprInner exprInner
 
 translatePrintEnding :: PrintEnding -> [Word8]
@@ -156,14 +159,14 @@ translateUsingClause (UsingClause (Just expr)) =
   -- Code: 0xF085
   [0xF0, 0x85] ++ map (fromIntegral . fromEnum) expr
 
-translateAssignment :: Assignment BasicType -> [Word8]
+translateAssignment :: Assignment et -> [Word8]
 translateAssignment (Assignment lValue expr _) =
   translateLValue lValue ++ [fromIntegral $ fromEnum '='] ++ translateExpr expr
 
 translateDimInner :: DimInner -> [Word8]
 translateDimInner i = map (fromIntegral . fromEnum) (show i)
 
-translateBeepOptionalParams :: BeepOptionalParams BasicType -> [Word8]
+translateBeepOptionalParams :: BeepOptionalParams et -> [Word8]
 translateBeepOptionalParams (BeepOptionalParams {beepFrequency, beepDuration}) =
   [fromIntegral $ fromEnum ',']
     ++ translateExpr beepFrequency
@@ -171,7 +174,7 @@ translateBeepOptionalParams (BeepOptionalParams {beepFrequency, beepDuration}) =
       Just duration -> fromIntegral (fromEnum ',') : translateExpr duration
       Nothing -> []
 
-translatePrintCommaFormat :: PrintCommaFormat BasicType -> [Word8]
+translatePrintCommaFormat :: PrintCommaFormat et -> [Word8]
 translatePrintCommaFormat (PrintCommaFormat e1 e2) =
   translateExpr e1 ++ [fromIntegral $ fromEnum ','] ++ translateExpr e2
 translatePrintCommaFormat (PrintSemicolonFormat maybeUsingClause exprs ending) =
@@ -190,7 +193,7 @@ translateGPrintSeparator GPrintSeparatorComma = [fromIntegral $ fromEnum ',']
 translateGPrintSeparator GPrintSeparatorSemicolon = [fromIntegral $ fromEnum ';']
 translateGPrintSeparator GPrintSeparatorEmpty = []
 
-translateLetStmt :: Bool -> [Assignment BasicType] -> [Word8]
+translateLetStmt :: Bool -> [Assignment et] -> [Word8]
 translateLetStmt isMandatoryLet assignments =
   if isMandatoryLet
     then
@@ -199,55 +202,35 @@ translateLetStmt isMandatoryLet assignments =
     else
       intercalate [fromIntegral $ fromEnum ','] (translateAssignment <$> assignments)
 
--- All numeric expressions are valid goto targets.
--- Only string literals are valid, if the target is a label translate it into the corresponding line number.
-translateGotoTarget :: Expr BasicType -> SymbolTable -> [Word8]
-translateGotoTarget Expr {exprInner, exprType} symbolTable =
-  case exprType of
-    BasicStringType ->
-      case exprInner of
-        StrLitExpr s -> case lookupLabel s symbolTable of
-          Just lineNumber ->
-            -- Translate label to line number
-            [fromIntegral (lineNumber `div` 256), fromIntegral (lineNumber `mod` 256)]
-          Nothing ->
-            -- Invalid label, should not happen if semantic analysis is correct
-            error $ "Invalid label: " ++ s
-        _ ->
-          -- Invalid goto target, should not happen if semantic analysis is correct
-          error "Invalid goto target: expected string literal"
-    BasicNumericType -> translateExprInner exprInner
-    _ -> error "Invalid goto target: expected numeric expression or string literal"
-
-translateStmt :: Stmt BasicType -> SymbolTable -> [Word8]
-translateStmt (LetStmt assignments) _ = translateLetStmt False assignments
-translateStmt (IfThenStmt cond s) symbolTable =
+translateStmt :: Stmt et -> [Word8]
+translateStmt (LetStmt assignments) = translateLetStmt False assignments
+translateStmt (IfThenStmt cond s) =
   -- If code: 0xF196H
   [0xF1, 0x96]
     ++ translateExpr cond
     ++ case s of
       LetStmt letStmt -> fromIntegral (fromEnum ' ') : translateLetStmt True letStmt
-      GoToStmt l -> translateGotoTarget l symbolTable
-      _ -> fromIntegral (fromEnum ' ') : translateStmt s symbolTable
-translateStmt (PrintStmt {printCommaFormat}) _ =
+      GoToStmt l -> fromIntegral (fromEnum ' ') : translateExpr l
+      _ -> fromIntegral (fromEnum ' ') : translateStmt s
+translateStmt (PrintStmt {printCommaFormat}) =
   -- Print code: 0xF097
   [0xF0, 0x97] ++ maybe [] translatePrintCommaFormat printCommaFormat
-translateStmt (PauseStmt {pauseCommaFormat}) _ =
+translateStmt (PauseStmt {pauseCommaFormat}) =
   -- Pause code: 0xF1A2
   [0xF1, 0xA2] ++ maybe [] translatePrintCommaFormat pauseCommaFormat
-translateStmt (UsingStmt usingClause) _ = translateUsingClause usingClause
-translateStmt (InputStmt maybePrintExpr me) _ =
+translateStmt (UsingStmt usingClause) = translateUsingClause usingClause
+translateStmt (InputStmt maybePrintExpr me) =
   -- Input code: 0xF091
   [0xF0, 0x91]
     ++ maybe [] (\e -> map (fromIntegral . fromEnum) e ++ [fromIntegral $ fromEnum ';']) maybePrintExpr
     ++ translateLValue me
-translateStmt EndStmt _ =
+translateStmt EndStmt =
   -- End code: 0xF18E
   [0xF1, 0x8E]
-translateStmt Comment _ =
+translateStmt Comment =
   -- Comment code: 0xF1AB
   [0xF1, 0xAB]
-translateStmt (ForStmt assign to step) _ =
+translateStmt (ForStmt assign to step) =
   -- For code: 0xF1A5
   -- To code: 0xF1B1
   -- Step code: 0xF1AD
@@ -259,28 +242,28 @@ translateStmt (ForStmt assign to step) _ =
     ++ case step of
       Just s -> [0xF1, 0xAD] ++ translateExpr s -- "STEP"
       Nothing -> []
-translateStmt (NextStmt i) _ =
+translateStmt (NextStmt i) =
   -- Next code: 0xF19A
   [0xF1, 0x9A] ++ translateIdent i
-translateStmt ClearStmt _ =
+translateStmt ClearStmt =
   -- Clear code: 0xF187
   [0xF1, 0x87]
-translateStmt (GoToStmt target) symbolTable =
+translateStmt (GoToStmt target) =
   -- GoTo code: 0xF192
-  [0xF1, 0x92] ++ translateGotoTarget target symbolTable
-translateStmt (GoSubStmt target) symbolTable =
+  [0xF1, 0x92] ++ translateExpr target
+translateStmt (GoSubStmt target) =
   -- GoSub code: 0xF194
-  [0xF1, 0x94] ++ translateGotoTarget target symbolTable
-translateStmt (WaitStmt maybeExpr) _ =
+  [0xF1, 0x94] ++ translateExpr target
+translateStmt (WaitStmt maybeExpr) =
   -- Wait code: 0xF1B3
   [0xF1, 0xB3] ++ maybe [] translateExpr maybeExpr
-translateStmt ClsStmt _ =
+translateStmt ClsStmt =
   -- Cls code: 0xF088
   [0xF0, 0x88]
-translateStmt RandomStmt _ =
+translateStmt RandomStmt =
   -- Random code: 0xF1A8
   [0xF1, 0xA8]
-translateStmt (GprintStmt exprs) _ =
+translateStmt (GprintStmt exprs) =
   -- GPrint code: 0xF09F
   [0xF0, 0x9F]
     ++ concatMap (\(e, sep) -> translateExpr e ++ translateGPrintSeparator sep) (init exprs)
@@ -288,81 +271,82 @@ translateStmt (GprintStmt exprs) _ =
            translateExpr e ++ translateGPrintSeparator sep
        )
       (last exprs)
-translateStmt (GCursorStmt e) _ =
+translateStmt (GCursorStmt e) =
   -- GCursor code: 0xF093
   [0xF0, 0x93] ++ translateExpr e
-translateStmt (BeepStmt repetitions optionalParams) _ =
+translateStmt (BeepStmt repetitions optionalParams) =
   -- Beep code: 0xF182
   [0xF1, 0x82] ++ translateExpr repetitions ++ maybe [] translateBeepOptionalParams optionalParams
-translateStmt (BeepOnOffStmt beepOn) _ =
+translateStmt (BeepOnOffStmt beepOn) =
   -- Beep code: 0xF182
   -- On code: 0xF19C
   -- Off code: 0xF19E
   [0xF1, 0x82]
     ++ [0xF1, if beepOn then 0x9C else 0x9E]
-translateStmt (CursorStmt e) _ =
+translateStmt (CursorStmt e) =
   -- Cursor code: 0xF084
   [0xF0, 0x84] ++ translateExpr e
-translateStmt ReturnStmt _ =
+translateStmt ReturnStmt =
   -- Return code: 0xF199
   [0xF1, 0x99]
-translateStmt (PokeStmt kind exprs) _ =
+translateStmt (PokeStmt kind exprs) =
   -- Poke code: 0xF1A1
   -- Poke# code: 0xF1A0
   [0xF1, if kind == Me0 then 0xA1 else 0xA0]
     ++ intercalate [fromIntegral $ fromEnum ','] (translateExpr <$> exprs)
-translateStmt (DimStmt decls) _ =
+translateStmt (DimStmt decls) =
   -- Dim code: 0xF18B
   [0xF1, 0x8B] ++ intercalate [fromIntegral $ fromEnum ','] (translateDimInner <$> decls)
-translateStmt (ReadStmt ids) _ =
+translateStmt (ReadStmt ids) =
   -- Read code: 0xF1A6
   [0xF1, 0xA6] ++ intercalate [fromIntegral $ fromEnum ','] (translateLValue <$> ids)
-translateStmt (DataStmt exprs) _ =
+translateStmt (DataStmt exprs) =
   -- Data code: 0xF18D
   [0xF1, 0x8D] ++ intercalate [fromIntegral $ fromEnum ','] (translateExpr <$> exprs)
-translateStmt (RestoreStmt n) _ =
+translateStmt (RestoreStmt n) =
   -- Restore code: 0xF1A7
   [0xF1, 0xA7] ++ maybe [] translateExpr n
-translateStmt ArunStmt _ =
+translateStmt ArunStmt =
   -- Arun code: 0xF181
   [0xF1, 0x81]
-translateStmt LockStmt _ =
+translateStmt LockStmt =
   -- Lock code: 0xF1B5
   [0xF1, 0xB5]
-translateStmt UnlockStmt _ =
+translateStmt UnlockStmt =
   -- Unlock code: 0xF1B6
   [0xF1, 0xB6]
-translateStmt (OnGoToStmt expr targets) symbolTable =
+translateStmt (OnGoToStmt expr targets) =
   -- On code: 0xF19C
   -- Goto code: 0xF192
-  [0xF1, 0x9C] ++ translateExpr expr ++ [0xF1, 0x92] ++ intercalate [fromIntegral $ fromEnum ','] ((`translateGotoTarget` symbolTable) <$> targets)
-translateStmt (OnGoSubStmt expr targets) symbolTable =
+  [0xF1, 0x9C] ++ translateExpr expr ++ [0xF1, 0x92] ++ intercalate [fromIntegral $ fromEnum ','] (translateExpr <$> targets)
+translateStmt (OnGoSubStmt expr targets) =
   -- On code: 0xF19C
   -- Gosub code: 0xF194
-  [0xF1, 0x9C] ++ translateExpr expr ++ [0xF1, 0x94] ++ intercalate [fromIntegral $ fromEnum ','] ((`translateGotoTarget` symbolTable) <$> targets)
-translateStmt (OnErrorGotoStmt target) symbolTable =
+  [0xF1, 0x9C] ++ translateExpr expr ++ [0xF1, 0x94] ++ intercalate [fromIntegral $ fromEnum ','] (translateExpr <$> targets)
+translateStmt (OnErrorGotoStmt target) =
   -- On code: 0xF19C
   -- Error code: 0xF1B4
   -- Goto code: 0xF192
-  [0xF1, 0x9C, 0xF1, 0xB4, 0xF1, 0x92] ++ translateGotoTarget target symbolTable
-translateStmt (CallStmt expr) _ =
+  [0xF1, 0x9C, 0xF1, 0xB4, 0xF1, 0x92] ++ translateExpr target
+translateStmt (CallStmt expr) =
   -- Call code: 0xF18A
   [0xF1, 0x8A] ++ translateExpr expr
-translateStmt (LPrintStmt maybeCommaFormat) _ =
+translateStmt (LPrintStmt maybeCommaFormat) =
   -- LPrint code: 0xF0B9
   [0xF0, 0xB9] ++ maybe [] translatePrintCommaFormat maybeCommaFormat
 
 -- FIXME: translate line labels
 -- First we put the word16 line number in two adjacent bytes, then the length of the line in bytes,
 -- then the translated statements, and we end with a carriage return byte (0x0D).
-translateLine :: Line BasicType -> SymbolTable -> [Word8]
-translateLine Line {lineNumber, lineLabel = _, lineStmts} symbolTable =
+translateLine :: Line et -> [Word8]
+translateLine Line {lineNumber, lineLabel = _, lineStmts} =
   let lineNumBytes = [fromIntegral (lineNumber `div` 256), fromIntegral (lineNumber `mod` 256)]
-      stmtsBytes = concatMap (`translateStmt` symbolTable) lineStmts ++ [0x0D] -- Carriage return byte
+      stmtsBytes = concatMap translateStmt lineStmts
       lengthBytes = [fromIntegral (length stmtsBytes)]
-   in lineNumBytes ++ lengthBytes ++ stmtsBytes
+      carriageReturnByte = [0x0D] -- Carriage return byte
+   in lineNumBytes ++ lengthBytes ++ stmtsBytes ++ carriageReturnByte
 
 -- At the end of the program we add a 0xFF byte to indicate the end of the program.
-translateProgram :: Program BasicType -> SymbolTable -> [Word8]
-translateProgram Program {programLines} symbolTable =
-  concatMap (`translateLine` symbolTable) programLines ++ [0xFF] -- End of program byte
+translateProgram :: Program et -> [Word8]
+translateProgram Program {programLines} =
+  concatMap translateLine programLines ++ [0xFF] -- End of program byte

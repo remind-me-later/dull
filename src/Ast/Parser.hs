@@ -198,7 +198,8 @@ functionCall =
     <|> try chrFunCall
     <|> try absFunCall
     <|> try lenFunCall
-    <|> sgnFunCall
+    <|> try peekFunCall
+    <|> try sgnFunCall
   where
     rndFunCall = do
       _ <- keyword "RND"
@@ -259,6 +260,17 @@ functionCall =
     lenFunCall = do
       _ <- keyword "LEN"
       LenFun <$> expressionFactor
+    peekFunCall = do
+      _ <- keyword "PEEK"
+      me1 <- optional (char '#' $> ())
+      addr <- expressionFactor
+      return
+        PeekFun
+          { peekMemoryArea = case me1 of
+              Just _ -> Me1
+              Nothing -> Me0,
+            peekFunAddress = addr
+          }
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do

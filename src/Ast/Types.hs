@@ -5,7 +5,7 @@ module Ast.Types
     Expr (..),
     PrintEnding (..),
     Assignment (..),
-    PokeKind (..),
+    MemoryArea (..),
     Stmt (..),
     LineNumber,
     Line (..),
@@ -264,6 +264,11 @@ data Function et where
     { lenFunExpr :: Expr et -- the string expression to get the length of
     } ->
     Function et
+  PeekFun ::
+    { peekMemoryArea :: MemoryArea, -- the memory area to peek from, Me0 or Me1
+      peekFunAddress :: Expr et -- the address to peek from, must be a numeric expression
+    } ->
+    Function et
   deriving (Eq)
 
 instance Show (Function et) where
@@ -301,6 +306,12 @@ instance Show (Function et) where
     "ABS " ++ showExprWithContext 8 False expr
   show LenFun {lenFunExpr = expr} =
     "LEN " ++ showExprWithContext 8 False expr
+  show PeekFun {peekMemoryArea = area, peekFunAddress = addr} =
+    "PEEK"
+      ++ case area of
+        Me0 -> " "
+        Me1 -> "# "
+      ++ showExprWithContext 8 False addr
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -432,9 +443,9 @@ instance Show (Assignment et) where
   show (Assignment lValue expr _) =
     show lValue ++ "=" ++ show expr
 
-data PokeKind where
-  Me0 :: PokeKind
-  Me1 :: PokeKind
+data MemoryArea where
+  Me0 :: MemoryArea
+  Me1 :: MemoryArea
   deriving (Eq)
 
 data DimInner where
@@ -595,7 +606,7 @@ data Stmt et where
     Stmt et
   ReturnStmt :: Stmt et
   PokeStmt ::
-    { pokeKind :: PokeKind,
+    { pokeKind :: MemoryArea,
       pokeExprs :: [Expr et]
     } ->
     Stmt et
