@@ -767,10 +767,17 @@ stmt mandatoryLet =
 line :: Parser RawLine
 line = do
   lineNumber <- word16
-  lineLabel <- optional (stringLiteral <* optional (symbol ':'))
-  lineStmts <- stmt False `sepBy` symbol ':'
+  lineLabel <- optional (stringLiteral <* many (symbol ':'))
+  lineStmts <- optional (stmt False) `sepBy` many1 (symbol ':')
   _ <- newline
-  return Line {lineNumber, lineLabel, lineStmts}
+  let lineStmts' =
+        map
+          ( \x -> case x of
+              Just stmt' -> stmt'
+              Nothing -> error "Unexpected empty statement in line"
+          )
+          (filter isJust lineStmts)
+  return Line {lineNumber, lineLabel, lineStmts = lineStmts'}
 
 program :: Parser RawProgram
 program = do
