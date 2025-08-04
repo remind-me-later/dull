@@ -35,11 +35,11 @@ instance Show Variable where
           ++ ")*"
           ++ show strArrLength
       BasicNum2DArrType {num2DArrRows, num2DArrCols} ->
-        "(" ++ show num2DArrRows ++ ", " ++ show num2DArrCols ++ ")"
+        "(" ++ show num2DArrRows ++ "," ++ show num2DArrCols ++ ")"
       BasicStr2DArrType {str2DArrRows, str2DArrCols, str2DArrLength} ->
         "$("
           ++ show str2DArrRows
-          ++ ", "
+          ++ ","
           ++ show str2DArrCols
           ++ ")*"
           ++ show str2DArrLength
@@ -64,9 +64,9 @@ data SymbolTable where
 instance Show SymbolTable where
   show SymbolTable {symbolMap, labelToLineMap} =
     "vars: {"
-      ++ intercalate ", " (show <$> elems symbolMap)
+      ++ intercalate "," (show <$> elems symbolMap)
       ++ "}, labels: {"
-      ++ intercalate ", " (show <$> toList labelToLineMap)
+      ++ intercalate "," (show <$> toList labelToLineMap)
       ++ "}"
 
 emptySymbolTable :: SymbolTable
