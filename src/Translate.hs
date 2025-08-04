@@ -358,10 +358,9 @@ translateStmt (LPrintStmt maybeCommaFormat) _ =
 translateLine :: Line BasicType -> SymbolTable -> [Word8]
 translateLine Line {lineNumber, lineLabel = _, lineStmts} symbolTable =
   let lineNumBytes = [fromIntegral (lineNumber `div` 256), fromIntegral (lineNumber `mod` 256)]
-      stmtsBytes = concatMap (`translateStmt` symbolTable) lineStmts
+      stmtsBytes = concatMap (`translateStmt` symbolTable) lineStmts ++ [0x0D] -- Carriage return byte
       lengthBytes = [fromIntegral (length stmtsBytes)]
-      carriageReturnByte = [0x0D] -- Carriage return byte
-   in lineNumBytes ++ lengthBytes ++ stmtsBytes ++ carriageReturnByte
+   in lineNumBytes ++ lengthBytes ++ stmtsBytes
 
 -- At the end of the program we add a 0xFF byte to indicate the end of the program.
 translateProgram :: Program BasicType -> SymbolTable -> [Word8]
