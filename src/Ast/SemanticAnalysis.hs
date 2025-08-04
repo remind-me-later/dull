@@ -153,8 +153,13 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType exprType == BasicNumericType
       then return (SgnFun {sgnFunExpr = exprType}, BasicNumericType)
       else error "SGN function requires a numeric expression"
-  StatusFun {statusFunArg} ->
-    return (StatusFun {statusFunArg}, BasicNumericType)
+  StatusFun {statusFunArg} -> do
+    argType <- analyzeExpr statusFunArg
+
+    when (Ast.Types.exprType argType /= BasicNumericType) $
+      error "STATUS function requires a numeric expression"
+
+    return (StatusFun {statusFunArg = argType}, BasicNumericType)
   ValFun {valFunExpr} -> do
     exprType <- analyzeExpr valFunExpr
 

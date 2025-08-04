@@ -9,7 +9,7 @@ import Control.Monad (when)
 import Data.Functor (($>))
 import Data.Map qualified
 import Data.Maybe (isJust)
-import Data.Word (Word16, Word8)
+import Data.Word (Word16)
 import Text.Parsec
   ( ParsecT,
     char,
@@ -81,14 +81,6 @@ word16 :: Parser Word16
 word16 = Ast.Parser.lex $ do
   digits <- many1 (satisfy (`elem` ['0' .. '9']))
   return (read digits)
-
-word8 :: Parser Word8
-word8 = Ast.Parser.lex $ do
-  digits <- many1 (satisfy (`elem` ['0' .. '9']))
-  let num = read digits :: Integer
-  if num > 255
-    then fail "Word8 out of bounds (0-255)"
-    else return (fromIntegral num)
 
 keyword :: String -> Parser String
 keyword kw = Ast.Parser.lex $ string kw
@@ -244,7 +236,7 @@ functionCall =
       return (RightFun {rightFunStringExpr = strExpr, rightFunLengthExpr = lengthExpr})
     statusFunCall = do
       _ <- keyword "STATUS"
-      StatusFun <$> word8
+      StatusFun <$> expression
     valFunCall = do
       _ <- keyword "VAL"
       ValFun <$> expressionFactor

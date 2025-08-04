@@ -52,7 +52,7 @@ translateFunction SgnFun {sgnFunExpr} =
   [0xF1, 0x79] ++ translateExpr sgnFunExpr
 translateFunction StatusFun {statusFunArg} =
   -- Code: 0xF167
-  [0xF1, 0x67, statusFunArg] -- statusFunArg is a Word8
+  [0xF1, 0x67] ++ translateExpr statusFunArg
 translateFunction ValFun {valFunExpr} =
   -- Code: 0xF162
   [0xF1, 0x62] ++ translateExpr valFunExpr

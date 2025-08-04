@@ -40,7 +40,7 @@ where
 import Data.Char (toUpper)
 import Data.List (intercalate)
 import Data.Map qualified
-import Data.Word (Word16, Word8)
+import Data.Word (Word16)
 import Numeric (showHex)
 
 newtype DecimalNumber = DecimalNumber
@@ -241,7 +241,7 @@ data Function et where
     } ->
     Function et
   StatusFun ::
-    { statusFunArg :: Word8
+    { statusFunArg :: Expr et
     } ->
     Function et
   ValFun ::
