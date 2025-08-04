@@ -46,7 +46,7 @@ exponentPart = do
     Just '-' -> -exponent'
     _ -> exponent'
 
-decimalNumber :: Parser Number
+decimalNumber :: Parser DecimalNumber
 decimalNumber = Ast.Parser.lex $ do
   wholePart <- many (satisfy (`elem` ['0' .. '9']))
   res <- case wholePart of
@@ -64,18 +64,18 @@ decimalNumber = Ast.Parser.lex $ do
   -- parse optional exponent part
   maybeExponent <- optional (try exponentPart)
   case maybeExponent of
-    Just exponent' -> return Number {numberRepr = res * (10 ^^ exponent')}
-    Nothing -> return Number {numberRepr = res}
+    Just exponent' -> return $ newDecimalNumber (res * (10 ^^ exponent'))
+    Nothing -> return $ newDecimalNumber res
 
 -- hex number begin with &
-hexNumber :: Parser Word16
+hexNumber :: Parser BinaryNumber
 hexNumber = Ast.Parser.lex $ do
   _ <- char '&'
   hexDigits <- many1 (satisfy (`elem` ['0' .. '9'] ++ ['A' .. 'F']))
   let num = read ("0x" ++ hexDigits) :: Integer
   if num > fromIntegral (maxBound :: Word16)
     then fail "Hex number out of bounds for Word16"
-    else return (fromIntegral num)
+    else return $ newBinaryNumber (fromIntegral num)
 
 word16 :: Parser Word16
 word16 = Ast.Parser.lex $ do
@@ -130,7 +130,7 @@ ident = Ast.Parser.lex $ do
 pseudoVariable :: Parser PseudoVariable
 pseudoVariable =
   try (keyword "TIME" $> TimePseudoVar)
-    <|> keyword "INKEY$" $> InkeyPseudoVar
+    <|> try (keyword "INKEY$" $> InkeyPseudoVar)
 
 lvalueFixedMemoryArea :: Parser RawLValue
 lvalueFixedMemoryArea = do

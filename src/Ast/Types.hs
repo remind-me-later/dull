@@ -27,8 +27,13 @@ module Ast.Types
     BeepOptionalParams (..),
     PrintCommaFormat (..),
     GPrintSeparator (..),
-    Number (..),
+    DecimalNumber (..),
     identName,
+    newDecimalNumber,
+    BinaryNumber (..),
+    newBinaryNumber,
+    precedence,
+    isLeftAssociative,
   )
 where
 
@@ -38,19 +43,86 @@ import Data.Map qualified
 import Data.Word (Word16, Word8)
 import Numeric (showHex)
 
-newtype Number = Number
+newtype DecimalNumber = DecimalNumber
   { numberRepr :: Double
   }
   deriving (Eq)
 
-instance Show Number where
-  show (Number n) =
-    let (wholePart, fractionalPart) = properFraction n :: (Integer, Double)
-        wholeStr = show wholePart
-        fractionalStr = if fractionalPart == 0 then "" else show (abs fractionalPart)
-     in if null fractionalStr
-          then wholeStr
-          else wholeStr ++ "." ++ dropWhile (== '0') (drop 1 fractionalStr)
+instance Show DecimalNumber where
+  show (DecimalNumber n) =
+    let absN = abs n
+     in if absN >= 1e6 || (absN > 0 && absN < 1e-4)
+          then formatScientific n
+          else formatRegular n
+    where
+      formatScientific x =
+        let sign = if x < 0 then "-" else ""
+            absX = abs x
+            exp' = floor (logBase 10 absX) :: Integer
+            mantissa = absX / (10 ** fromIntegral exp')
+            -- Format mantissa to remove trailing zeros
+            mantissaStr = formatMantissa mantissa
+         in sign ++ mantissaStr ++ "E" ++ show exp'
+
+      formatMantissa m =
+        let rounded = fromIntegral (round (m * 1e10) :: Integer) / 1e10 :: Double
+            str = show rounded
+         in if '.' `elem` str
+              then
+                reverse . dropWhile (== '0') . reverse $
+                  if last str == '.' then init str else str
+              else str
+
+      formatRegular x =
+        let (wholePart, fractionalPart) = properFraction x :: (Integer, Double)
+            wholeStr = show wholePart
+            fractionalStr = if fractionalPart == 0 then "" else show (abs fractionalPart)
+         in if null fractionalStr
+              then wholeStr
+              else wholeStr ++ "." ++ dropWhile (== '0') (drop 1 fractionalStr)
+
+-- Check mantissa fits in 10 digit decimal number
+-- And exponent fits in Int8
+newDecimalNumber :: Double -> DecimalNumber
+newDecimalNumber n =
+  if n == 0
+    then DecimalNumber {numberRepr = n}
+    else
+      let absN = abs n
+          exp' = floor (logBase 10 absN) :: Int
+          mantissa = absN / (10 ** fromIntegral exp')
+          -- Ensure mantissa is in [1.0, 10.0) range due to floating point precision issues
+          (normalizedMantissa, normalizedExp) =
+            if mantissa >= 10.0
+              then (mantissa / 10.0, exp' + 1)
+              else (mantissa, exp')
+          -- Convert mantissa to integer representation to check digit count
+          mantissaInt = round (normalizedMantissa * 1e9) :: Integer
+          mantissaIntAbs = abs mantissaInt
+       in if normalizedExp < -128 || normalizedExp > 127 || mantissaIntAbs >= 10000000000
+            then
+              error $
+                "DecimalNumber: number out of range (mantissa too large or exponent out of Int8 range): "
+                  ++ show n
+                  ++ " (mantissa: "
+                  ++ show mantissaInt
+                  ++ ", exponent: "
+                  ++ show normalizedExp
+                  ++ ")"
+            else DecimalNumber {numberRepr = n}
+
+newtype BinaryNumber = BinaryNumber
+  { binaryRepr :: Word16
+  }
+  deriving (Eq)
+
+instance Show BinaryNumber where
+  show (BinaryNumber n) =
+    let showHexAllCaps x = map toUpper (showHex x "")
+     in '&' : showHexAllCaps n
+
+newBinaryNumber :: Word16 -> BinaryNumber
+newBinaryNumber n = BinaryNumber {binaryRepr = n}
 
 -- Precedence and associativity for binary operators
 precedence :: BinOperator -> Int
@@ -95,9 +167,7 @@ showExprInnerWithContext parentPrec isRightSide (BinExpr left op right) =
         _ -> leftStr ++ show op ++ rightStr -- For other operators, use the default spacing
    in if needsParens then "(" ++ result ++ ")" else result
 showExprInnerWithContext _ _ (DecNumLitExpr n) = show n
-showExprInnerWithContext _ _ (HexNumLitExpr h) =
-  let showHexAllCaps x = map toUpper (showHex x "")
-   in '&' : showHexAllCaps h
+showExprInnerWithContext _ _ (HexNumLitExpr h) = show h
 showExprInnerWithContext _ _ (LValueExpr lval) = show lval
 showExprInnerWithContext _ _ (StrLitExpr s) = "\"" ++ s ++ "\""
 showExprInnerWithContext _ _ (FunCallExpr f) = show f
@@ -305,8 +375,8 @@ instance Show UnaryOperator where
 data ExprInner et where
   UnaryExpr :: UnaryOperator -> Expr et -> ExprInner et
   BinExpr :: Expr et -> BinOperator -> Expr et -> ExprInner et
-  DecNumLitExpr :: Number -> ExprInner et
-  HexNumLitExpr :: Word16 -> ExprInner et
+  DecNumLitExpr :: DecimalNumber -> ExprInner et
+  HexNumLitExpr :: BinaryNumber -> ExprInner et
   LValueExpr :: LValue et -> ExprInner et
   StrLitExpr :: String -> ExprInner et
   FunCallExpr :: Function et -> ExprInner et
@@ -316,9 +386,7 @@ instance Show (ExprInner et) where
   show (UnaryExpr op expr) = show op ++ showExprWithContext 7 False expr
   show (BinExpr left op right) = showExprInnerWithContext 0 False (BinExpr left op right)
   show (DecNumLitExpr n) = show n
-  show (HexNumLitExpr h) =
-    let showHexAllCaps x = map toUpper (showHex x "")
-     in '&' : showHexAllCaps h
+  show (HexNumLitExpr h) = show h
   show (LValueExpr lval) = show lval
   show (StrLitExpr s) = "\"" ++ s ++ "\""
   show (FunCallExpr f) = show f
@@ -567,7 +635,7 @@ instance Show (Stmt et) where
         _ -> " " ++ show s
   show (PrintStmt {printCommaFormat}) = "PRINT " ++ maybe "" show printCommaFormat
   show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ maybe "" show pauseCommaFormat
-  show (UsingStmt usingClause) = "USING " ++ show usingClause
+  show (UsingStmt usingClause) = show usingClause
   show (InputStmt maybePrintExpr me) =
     "INPUT "
       ++ maybe "" (\e -> show e ++ ";") maybePrintExpr

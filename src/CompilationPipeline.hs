@@ -9,7 +9,9 @@ import Ast.Parser (parseProgram)
 import Ast.SemanticAnalysis (analyzeProgram)
 import Ast.Types (Program)
 import Control.Exception (SomeException, try)
+import Data.Word (Word8)
 import SymbolTable (SymbolTable)
+import Translate (translateProgram)
 import TypeSystem (BasicType)
 
 data CompilationError
@@ -20,7 +22,8 @@ data CompilationError
 
 data CompilationResult = CompilationResult
   { compiledProgram :: Program BasicType,
-    finalSymbolTable :: SymbolTable
+    finalSymbolTable :: SymbolTable,
+    translatedBytes :: [Word8]
   }
   deriving (Show, Eq)
 
@@ -34,11 +37,14 @@ compileProgram fileName contents = do
       Right prog -> do
         -- Stage 2: Type check and semantic analysis
         let (prog', finalState) = analyzeProgram prog
+        -- Stage 3: Translation to bytecode
+        let translatedBytes = translateProgram prog'
         return $
           Right $
             CompilationResult
               { compiledProgram = prog',
-                finalSymbolTable = finalState
+                finalSymbolTable = finalState,
+                translatedBytes = translatedBytes
               }
 
   case result of
