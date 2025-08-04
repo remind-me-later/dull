@@ -211,6 +211,26 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType exprType == BasicNumericType
       then return (DegFun {degFunExpr = exprType}, BasicNumericType)
       else error "DEG function requires a numeric expression"
+  TanFun {tanFunExpr} -> do
+    exprType <- analyzeExpr tanFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (TanFun {tanFunExpr = exprType}, BasicNumericType)
+      else error "TAN function requires a numeric expression"
+  CosFun {cosFunExpr} -> do
+    exprType <- analyzeExpr cosFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (CosFun {cosFunExpr = exprType}, BasicNumericType)
+      else error "COS function requires a numeric expression"
+  SinFun {sinFunExpr} -> do
+    exprType <- analyzeExpr sinFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (SinFun {sinFunExpr = exprType}, BasicNumericType)
+      else error "SIN function requires a numeric expression"
+  SqrtFun {sqrtFunExpr} -> do
+    exprType <- analyzeExpr sqrtFunExpr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return (SqrtFun {sqrtFunExpr = exprType}, BasicNumericType)
+      else error "√ function requires a numeric expression"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
@@ -635,6 +655,7 @@ analyzeStmt (LfStmt lfExpr) = do
   case Ast.Types.exprType analyzedLfExpr of
     BasicNumericType -> return (LfStmt {lineFeedExpr = analyzedLfExpr})
     _ -> error "LF statement requires a numeric expression"
+analyzeStmt RadianStmt = return RadianStmt
 
 analyzeLine :: RawLine -> State SemanticAnalysisState TypedLine
 analyzeLine (Line lineNumber lineLabel lineStmts) = do

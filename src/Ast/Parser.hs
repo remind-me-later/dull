@@ -196,6 +196,10 @@ functionCall =
     <|> try logFunCall
     <|> try dmsFunCall
     <|> try degFunCall
+    <|> try tanFunCall
+    <|> try cosFunCall
+    <|> try sinFunCall
+    <|> try sqrtFunCall
   where
     rndFunCall = do
       _ <- keyword "RND"
@@ -279,6 +283,18 @@ functionCall =
     degFunCall = do
       _ <- keyword "DEG"
       DegFun <$> expressionFactor
+    tanFunCall = do
+      _ <- keyword "TAN"
+      TanFun <$> expressionFactor
+    cosFunCall = do
+      _ <- keyword "COS"
+      CosFun <$> expressionFactor
+    sinFunCall = do
+      _ <- keyword "SIN"
+      SinFun <$> expressionFactor
+    sqrtFunCall = do
+      _ <- keyword "√" <|> keyword "SQR"
+      SqrtFun <$> expressionFactor
 
 stringLiteral :: Parser String
 stringLiteral = Ast.Parser.lex $ do
@@ -629,7 +645,7 @@ beepStmt :: Parser RawStmt
 beepStmt = do
   _ <- keyword "BEEP"
 
-  k <- optional (try (keyword "ON" $> Left ()) <|> (keyword "OFF" $> Right ()))
+  k <- optional (try (keyword "ON" $> Left ()) <|> try (keyword "OFF" $> Right ()))
   case k of
     Just (Left ()) -> return BeepOnOffStmt {beepOn = True}
     Just (Right ()) -> return BeepOnOffStmt {beepOn = False}
@@ -770,6 +786,9 @@ lfStmt = do
   expr <- expression
   return LfStmt {lineFeedExpr = expr}
 
+radianStmt :: Parser RawStmt
+radianStmt = keyword "RADIAN" $> RadianStmt
+
 stmt :: Bool -> Parser RawStmt
 stmt mandatoryLet =
   try endStmt
@@ -808,6 +827,7 @@ stmt mandatoryLet =
     <|> try colorStmt
     <|> try csizeStmt
     <|> try lfStmt
+    <|> try radianStmt
     <|> try (letStmt mandatoryLet)
 
 line :: Parser RawLine

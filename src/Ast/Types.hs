@@ -285,6 +285,22 @@ data Function et where
     { degFunExpr :: Expr et
     } ->
     Function et
+  TanFun ::
+    { tanFunExpr :: Expr et
+    } ->
+    Function et
+  CosFun ::
+    { cosFunExpr :: Expr et
+    } ->
+    Function et
+  SinFun ::
+    { sinFunExpr :: Expr et
+    } ->
+    Function et
+  SqrtFun ::
+    { sqrtFunExpr :: Expr et -- the numeric expression to get the square root of
+    } ->
+    Function et
   deriving (Eq)
 
 instance Show (Function et) where
@@ -336,6 +352,14 @@ instance Show (Function et) where
     "DMS " ++ showExprWithContext 8 False expr
   show DegFun {degFunExpr = expr} =
     "DEG " ++ showExprWithContext 8 False expr
+  show TanFun {tanFunExpr = expr} =
+    "TAN " ++ showExprWithContext 8 False expr
+  show CosFun {cosFunExpr = expr} =
+    "COS " ++ showExprWithContext 8 False expr
+  show SinFun {sinFunExpr = expr} =
+    "SIN " ++ showExprWithContext 8 False expr
+  show SqrtFun {sqrtFunExpr = expr} =
+    "√" ++ showExprWithContext 8 False expr
 
 -- like varibles, but built-in
 data PseudoVariable where
@@ -652,6 +676,7 @@ data Stmt et where
       maybeCallVariable :: Maybe (LValue et) -- Optional variable to store the result of the call
     } ->
     Stmt et
+  RadianStmt :: Stmt et
   -- Printer
   TextStmt :: Stmt et
   GraphStmt :: Stmt et
@@ -742,6 +767,7 @@ instance Show (Stmt et) where
   show (ColorStmt expr) = "COLOR " ++ show expr
   show (CSizeStmt expr) = "CSIZE " ++ show expr
   show (LfStmt expr) = "LF " ++ show expr
+  show RadianStmt = "RADIAN"
 
 type LineNumber = Word16
 

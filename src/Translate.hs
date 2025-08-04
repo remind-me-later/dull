@@ -85,6 +85,18 @@ translateFunction DmsFun {dmsFunExpr} =
 translateFunction DegFun {degFunExpr} =
   -- Code: 0xF165
   [0xF1, 0x65] ++ translateExpr degFunExpr
+translateFunction TanFun {tanFunExpr} =
+  -- Code: 0xF17F
+  [0xF1, 0x7F] ++ translateExpr tanFunExpr
+translateFunction CosFun {cosFunExpr} =
+  -- Code: 0xF17E
+  [0xF1, 0x7E] ++ translateExpr cosFunExpr
+translateFunction SinFun {sinFunExpr} =
+  -- Code: 0xF17D
+  [0xF1, 0x7D] ++ translateExpr sinFunExpr
+translateFunction SqrtFun {sqrtFunExpr} =
+  -- Code: 0xF16B
+  [0xF1, 0x6B] ++ translateExpr sqrtFunExpr
 
 translatePseudoVariable :: PseudoVariable -> [Word8]
 translatePseudoVariable TimePseudoVar = [0xF1, 0x5B]
@@ -379,6 +391,9 @@ translateStmt (CSizeStmt characterSizeExpr) =
 translateStmt (LfStmt lineFeedExpr) =
   -- LF code: 0xF0B6
   [0xF0, 0xB6] ++ translateExpr lineFeedExpr
+translateStmt RadianStmt =
+  -- Radian code: 0xF1AA
+  [0xF1, 0xAA]
 
 -- FIXME: translate line labels
 -- First we put the word16 line number in two adjacent bytes, then the length of the line in bytes,
