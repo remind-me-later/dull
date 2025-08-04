@@ -3,7 +3,6 @@ module SymbolTable
     SymbolTable (..),
     emptySymbolTable,
     insertVariable,
-    lookupSymbol,
     insertLabel,
     lookupLabel,
   )
@@ -32,15 +31,6 @@ instance Show Variable where
       BasicStrArrType -> "$(?)"
       BasicNum2DArrType -> "(?,?)"
       BasicStr2DArrType -> "$(?,?)"
-
-data GotoTargetData where
-  IsBranch :: GotoTargetData
-  IsFunctionCall :: GotoTargetData
-  deriving (Eq, Ord)
-
-instance Show GotoTargetData where
-  show IsBranch = "GOTO"
-  show IsFunctionCall = "GOSUB"
 
 data SymbolTable where
   SymbolTable ::
@@ -82,7 +72,3 @@ insertLabel label line st@SymbolTable {labelToLineMap} =
 lookupLabel :: String -> SymbolTable -> Maybe Word16
 lookupLabel label SymbolTable {labelToLineMap} =
   Data.Map.lookup label labelToLineMap
-
-lookupSymbol :: Ident -> SymbolTable -> Maybe Variable
-lookupSymbol name SymbolTable {symbolMap} =
-  Data.Map.lookup name symbolMap
