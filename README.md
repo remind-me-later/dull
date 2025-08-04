@@ -3,7 +3,7 @@
 | Program        | Parses | Comments                                      |
 | -------------- | ------ | --------------------------------------------- |
 | bathyscap      | [x]    |                                               |
-| blackjack      | [ ]    |                                               |
+| blackjack      | [ ]    | Weird IF at line 64                           |
 | bombardments   | [x]    |                                               |
 | donkey_kong    | [x]    |                                               |
 | dungeonquest   | [x]    |                                               |
@@ -12,7 +12,12 @@
 | invader        | [x]    |                                               |
 | invasion_force | [ ]    |                                               |
 | micromur       | [x]    |                                               |
-| minenboot      | [ ]    | Weird if concatenation in line 27             |
+| minenboot      | [ ]    | Weird IF concatenation in line 27             |
+| piles_jr       | [x]    |                                               |
+| rase_mottes    | [x]    |                                               |
+| tank           | [x]    |                                               |
+| tempter        | [ ]    | Extra semicolon at line end in line 17        |
+| trio           | [x]    |                                               |
 
 ## Thanks
 

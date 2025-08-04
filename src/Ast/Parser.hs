@@ -647,14 +647,14 @@ pokeStmt = do
         exprs
     )
 
-dimDecl :: Parser DimInner
+dimDecl :: Parser (DimInner ())
 dimDecl = do
   identifier <- ident
   _ <- symbol '('
-  dimRows <- word8
-  maybeCols <- optional (symbol ',' *> word8)
+  dimRows <- expression
+  maybeCols <- optional (symbol ',' *> expression)
   _ <- symbol ')'
-  maybeStrLen <- optional (binOperator MultiplyOp *> word8)
+  maybeStrLen <- optional (binOperator MultiplyOp *> expression)
 
   case maybeCols of
     Just cols ->

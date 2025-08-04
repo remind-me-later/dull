@@ -13,26 +13,11 @@ import Data.Word (Word8)
 data BasicType where
   BasicStringType :: BasicType
   BasicNumericType :: BasicType
-  BasicNumArrType ::
-    { numericArrSize :: Word8
-    } ->
-    BasicType
-  BasicStrArrType ::
-    { strArrSize :: Word8,
-      strArrLength :: Word8
-    } ->
-    BasicType
-  BasicNum2DArrType ::
-    { num2DArrRows :: Word8,
-      num2DArrCols :: Word8
-    } ->
-    BasicType
-  BasicStr2DArrType ::
-    { str2DArrRows :: Word8,
-      str2DArrCols :: Word8,
-      str2DArrLength :: Word8
-    } ->
-    BasicType
+  -- Array sizes are not known at compile time
+  BasicNumArrType :: BasicType
+  BasicStrArrType :: BasicType
+  BasicNum2DArrType :: BasicType
+  BasicStr2DArrType :: BasicType
   deriving (Show, Eq)
 
 defaultStringLength :: Word8

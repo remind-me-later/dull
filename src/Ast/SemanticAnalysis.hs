@@ -6,7 +6,7 @@ where
 import Ast.Types
 import Control.Monad (unless, when)
 import Control.Monad.State
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (isJust)
 import SymbolTable
 import TypeSystem
 
@@ -41,12 +41,6 @@ insertVariableInState :: Ident -> BasicType -> SemanticAnalysisState -> Semantic
 insertVariableInState sym ty (SemanticAnalysisState symTable) =
   SemanticAnalysisState {symbolTable = insertVariable sym ty symTable}
 
-lookupSymbolInState :: Ident -> SemanticAnalysisState -> Variable
-lookupSymbolInState name (SemanticAnalysisState symTable) =
-  case lookupSymbol name symTable of
-    Just sym -> sym
-    Nothing -> error $ "Symbol not found: " ++ show name
-
 analyzeIdentAndInsertIntoTable :: Ident -> State SemanticAnalysisState BasicType
 analyzeIdentAndInsertIntoTable id'@Ident {identHasDollar} =
   let ty = if identHasDollar then BasicStringType else BasicNumericType
@@ -62,49 +56,26 @@ analyzeLValue :: RawLValue -> State SemanticAnalysisState (TypedLValue, BasicTyp
 analyzeLValue (LValueIdent ident) = do
   ty <- analyzeIdentAndInsertIntoTable ident
   return (LValueIdent ident, ty)
-analyzeLValue (LValueArrayAccess ident expr) = do
-  exprType' <- analyzeExpr expr
-  case Ast.Types.exprType exprType' of
+analyzeLValue (LValueArrayAccess ident index) = do
+  indexType' <- analyzeExpr index
+  case Ast.Types.exprType indexType' of
     BasicNumericType -> do
-      -- Arrays must be declared before use with the DIM statement
-      symbol <- gets (lookupSymbolInState ident)
-      let ty = SymbolTable.variableType symbol
-      case ty of
-        BasicNumArrType {numericArrSize} ->
-          if numericArrSize >= 0
-            then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicNumericType)
-            else error $ "Array " ++ show ident ++ " has invalid size: " ++ show numericArrSize
-        BasicStrArrType {strArrLength, strArrSize} ->
-          if strArrSize >= 0 && strArrLength >= 0
-            then return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = exprType'}, BasicStringType)
-            else
-              error $
-                "String array "
-                  ++ show ident
-                  ++ " has invalid size or length: "
-                  ++ show strArrSize
-                  ++ ", "
-                  ++ show strArrLength
-        t -> error $ "Array " ++ show ident ++ " is not a numeric or string array: " ++ show t
+      case identHasDollar ident of
+        False ->
+          return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = indexType'}, BasicNumericType)
+        True ->
+          return (LValueArrayAccess {lValueArrayIdent = ident, lValueArrayIndex = indexType'}, BasicStringType)
     _ -> error "Array index must be numeric"
 analyzeLValue (LValue2DArrayAccess ident rowIndex colIndex) = do
   rowIndexType <- analyzeExpr rowIndex
   colIndexType <- analyzeExpr colIndex
   case (Ast.Types.exprType rowIndexType, Ast.Types.exprType colIndexType) of
     (BasicNumericType, BasicNumericType) -> do
-      -- Arrays must be declared before use with the DIM statement
-      symbol <- gets (lookupSymbolInState ident)
-      let ty = SymbolTable.variableType symbol
-      case ty of
-        BasicNum2DArrType {num2DArrRows, num2DArrCols} ->
-          if num2DArrRows >= 0 && num2DArrCols >= 0
-            then return (LValue2DArrayAccess {lValue2DArrayIdent = ident, lValue2DArrayRowIndex = rowIndexType, lValue2DArrayColIndex = colIndexType}, BasicNumericType)
-            else error $ "2D array " ++ show ident ++ " has invalid rows or columns: " ++ show num2DArrRows ++ ", " ++ show num2DArrCols
-        BasicStr2DArrType {str2DArrRows, str2DArrCols, str2DArrLength} ->
-          if str2DArrRows >= 0 && str2DArrCols >= 0 && str2DArrLength >= 0
-            then return (LValue2DArrayAccess {lValue2DArrayIdent = ident, lValue2DArrayRowIndex = rowIndexType, lValue2DArrayColIndex = colIndexType}, BasicStringType)
-            else error $ "String 2D array " ++ show ident ++ " has invalid rows, columns or length: " ++ show str2DArrRows ++ ", " ++ show str2DArrCols ++ ", " ++ show str2DArrLength
-        t -> error $ "Array " ++ show ident ++ " is not a numeric or string 2D array: " ++ show t
+      case identHasDollar ident of
+        False ->
+          return (LValue2DArrayAccess {lValue2DArrayIdent = ident, lValue2DArrayRowIndex = rowIndexType, lValue2DArrayColIndex = colIndexType}, BasicNumericType)
+        True ->
+          return (LValue2DArrayAccess {lValue2DArrayIdent = ident, lValue2DArrayRowIndex = rowIndexType, lValue2DArrayColIndex = colIndexType}, BasicStringType)
     _ -> error "Row and column indices must be numeric"
 analyzeLValue (LValuePseudoVar pseudoVar) = do
   ty <- analyzePsuedoVar pseudoVar
@@ -210,6 +181,11 @@ analyzeFunction ident = case ident of
     if Ast.Types.exprType exprType == BasicStringType
       then return (LenFun {lenFunExpr = exprType}, BasicNumericType)
       else error "LEN function requires a string expression"
+  PeekFun {peekMemoryArea, peekFunAddress} -> do
+    addressType <- analyzeExpr peekFunAddress
+    if Ast.Types.exprType addressType == BasicNumericType
+      then return (PeekFun {peekMemoryArea = peekMemoryArea, peekFunAddress = addressType}, BasicNumericType)
+      else error "PEEK function requires a numeric expression for address"
 
 analyzeExprInner :: RawExprInner -> State SemanticAnalysisState (TypedExprInner, BasicType)
 analyzeExprInner (DecNumLitExpr num) = return (DecNumLitExpr num, BasicNumericType)
@@ -308,37 +284,57 @@ analyzeExpr Expr {exprInner} = do
   return Expr {exprInner = analyzedInner, Ast.Types.exprType = innerType}
 
 -- We have to add the arrays to the symbol table
-analyzeDimAndInsertIntoTable :: DimInner -> State SemanticAnalysisState BasicType
+analyzeDimAndInsertIntoTable :: DimInner () -> State SemanticAnalysisState (DimInner BasicType)
 analyzeDimAndInsertIntoTable (DimInner1D {dimIdent, dimSize, dimStringLength}) = do
+  typedDimSize <- analyzeExpr dimSize
+
+  when (Ast.Types.exprType typedDimSize /= BasicNumericType) $
+    error "Array size must be numeric"
+
+  typedDimStringLength <- case dimStringLength of
+    Just strLen -> do
+      analyzedStrLen <- analyzeExpr strLen
+      if Ast.Types.exprType analyzedStrLen == BasicNumericType
+        then return (Just analyzedStrLen)
+        else error "String length must be numeric"
+    Nothing -> return Nothing
+
   case identHasDollar dimIdent of
     False -> do
-      let exprType = BasicNumArrType {numericArrSize = dimSize}
-
       when (isJust dimStringLength) $
         error "Numeric arrays cannot have a string length"
 
-      modify (insertVariableInState dimIdent exprType)
-      return exprType
-    True -> do
-      let concreteLength = fromMaybe defaultStringLength dimStringLength
-          exprType = BasicStrArrType {strArrSize = dimSize, strArrLength = concreteLength}
-      modify (insertVariableInState dimIdent exprType)
-      return exprType
+      modify (insertVariableInState dimIdent BasicNumArrType)
+    True -> modify (insertVariableInState dimIdent BasicStrArrType)
+
+  return (DimInner1D {dimIdent, dimSize = typedDimSize, dimStringLength = typedDimStringLength})
 analyzeDimAndInsertIntoTable (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength}) = do
+  typedDimRows <- analyzeExpr dimRows
+
+  typedDimCols <- analyzeExpr dimCols
+
+  when (Ast.Types.exprType typedDimRows /= BasicNumericType) $
+    error "Array row count must be numeric"
+  when (Ast.Types.exprType typedDimCols /= BasicNumericType) $
+    error "Array column count must be numeric"
+
+  typedDimStringLength <- case dimStringLength of
+    Just strLen -> do
+      analyzedStrLen <- analyzeExpr strLen
+      if Ast.Types.exprType analyzedStrLen == BasicNumericType
+        then return (Just analyzedStrLen)
+        else error "String length must be numeric"
+    Nothing -> return Nothing
+
   case identHasDollar dimIdent of
     False -> do
-      let exprType = BasicNum2DArrType {num2DArrRows = dimRows, num2DArrCols = dimCols}
-
       when (isJust dimStringLength) $
         error "Numeric 2D arrays cannot have a string length"
 
-      modify (insertVariableInState dimIdent exprType)
-      return exprType
-    True -> do
-      let concreteLength = fromMaybe defaultStringLength dimStringLength
-          exprType = BasicStr2DArrType {str2DArrRows = dimRows, str2DArrCols = dimCols, str2DArrLength = concreteLength}
-      modify (insertVariableInState dimIdent exprType)
-      return exprType
+      modify (insertVariableInState dimIdent BasicNum2DArrType)
+    True -> modify (insertVariableInState dimIdent BasicStr2DArrType)
+
+  return (DimInner2D {dimIdent, dimRows = typedDimRows, dimCols = typedDimCols, dimStringLength = typedDimStringLength})
 
 analyzeAssignment :: RawAssignment -> State SemanticAnalysisState TypedAssignment
 analyzeAssignment (Assignment lValue expr _) = do
@@ -367,16 +363,6 @@ analyzeBeepOptionalParams (BeepOptionalParams frequency duration) = do
         else error "Beep optional parameters must be numeric expressions"
     Nothing -> return (BeepOptionalParams {beepFrequency = analyzedFrequency, beepDuration = Nothing})
 
-analyzeDimInner :: DimInner -> State SemanticAnalysisState ()
-analyzeDimInner dimInner = do
-  case dimInner of
-    DimInner1D {dimIdent, dimSize, dimStringLength} -> do
-      _ <- analyzeDimAndInsertIntoTable (DimInner1D {dimIdent, dimSize, dimStringLength})
-      return ()
-    DimInner2D {dimIdent, dimRows, dimCols, dimStringLength} -> do
-      _ <- analyzeDimAndInsertIntoTable (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength})
-      return ()
-
 analyzeStmt :: RawStmt -> State SemanticAnalysisState TypedStmt
 analyzeStmt (LetStmt assignments) = do
   analyzedAssignments <- mapM analyzeAssignment assignments
@@ -389,101 +375,98 @@ analyzeStmt (IfThenStmt condition thenStmt) = do
 
   thenStmt' <- analyzeStmt thenStmt
   return (IfThenStmt conditionType thenStmt')
-analyzeStmt (PrintStmt printCommaFormat) = do
-  case printCommaFormat of
-    Nothing -> return (PrintStmt Nothing)
-    Just commaFormat -> do
-      case commaFormat of
-        PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-          expr1Type <- analyzeExpr printCommaFormatExpr1
-          expr2Type <- analyzeExpr printCommaFormatExpr2
+analyzeStmt (PrintStmt printCommaFormat) = case printCommaFormat of
+  Nothing -> return (PrintStmt Nothing)
+  Just commaFormat -> do
+    case commaFormat of
+      PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+        expr1Type <- analyzeExpr printCommaFormatExpr1
+        expr2Type <- analyzeExpr printCommaFormatExpr2
 
-          -- FIXME: this form should be made up of a tring and a numeric expression, but check
+        -- FIXME: this form should be made up of a tring and a numeric expression, but check
 
-          return
-            ( PrintStmt
-                { printCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
-                }
-            )
-        PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
-          analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+        return
+          ( PrintStmt
+              { printCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+              }
+          )
+      PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+        analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
 
-          return
-            ( PrintStmt
-                { printCommaFormat =
-                    Just
-                      PrintSemicolonFormat
-                        { printSemicolonFormatUsingClause,
-                          printSemicolonFormatExprs = analyzedExprs,
-                          printSemicolonFormatEnding = printSemicolonFormatEnding
+        return
+          ( PrintStmt
+              { printCommaFormat =
+                  Just
+                    PrintSemicolonFormat
+                      { printSemicolonFormatUsingClause,
+                        printSemicolonFormatExprs = analyzedExprs,
+                        printSemicolonFormatEnding = printSemicolonFormatEnding
+                      }
+              }
+          )
+analyzeStmt (PauseStmt pauseCommaFormat) = case pauseCommaFormat of
+  Nothing -> return (PauseStmt Nothing)
+  Just commaFormat -> do
+    case commaFormat of
+      PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+        expr1Type <- analyzeExpr printCommaFormatExpr1
+        expr2Type <- analyzeExpr printCommaFormatExpr2
+
+        return
+          ( PauseStmt
+              { pauseCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
+              }
+          )
+      PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+        analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
+
+        return
+          ( PauseStmt
+              { pauseCommaFormat =
+                  Just
+                    PrintSemicolonFormat
+                      { printSemicolonFormatUsingClause,
+                        printSemicolonFormatExprs = analyzedExprs,
+                        printSemicolonFormatEnding = printSemicolonFormatEnding
+                      }
+              }
+          )
+analyzeStmt (LPrintStmt maybeCommaFormat) = case maybeCommaFormat of
+  Just commaFormat -> do
+    case commaFormat of
+      PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
+        expr1Type <- analyzeExpr printCommaFormatExpr1
+        expr2Type <- analyzeExpr printCommaFormatExpr2
+        return
+          ( LPrintStmt
+              { lprintCommaFormat =
+                  Just
+                    ( PrintCommaFormat
+                        { printCommaFormatExpr1 = expr1Type,
+                          printCommaFormatExpr2 = expr2Type
                         }
-                }
-            )
-analyzeStmt (PauseStmt pauseCommaFormat) = do
-  case pauseCommaFormat of
-    Nothing -> return (PauseStmt Nothing)
-    Just commaFormat -> do
-      case commaFormat of
-        PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-          expr1Type <- analyzeExpr printCommaFormatExpr1
-          expr2Type <- analyzeExpr printCommaFormatExpr2
-
-          return
-            ( PauseStmt
-                { pauseCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
-                }
-            )
-        PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
+                    )
+              }
+          )
+      PrintSemicolonFormat
+        { printSemicolonFormatUsingClause,
+          printSemicolonFormatExprs,
+          printSemicolonFormatEnding
+        } -> do
           analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
-
-          return
-            ( PauseStmt
-                { pauseCommaFormat =
-                    Just
-                      PrintSemicolonFormat
-                        { printSemicolonFormatUsingClause,
-                          printSemicolonFormatExprs = analyzedExprs,
-                          printSemicolonFormatEnding = printSemicolonFormatEnding
-                        }
-                }
-            )
-analyzeStmt (LPrintStmt maybeCommaFormat) = do
-  case maybeCommaFormat of
-    Just commaFormat -> do
-      case commaFormat of
-        PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-          expr1Type <- analyzeExpr printCommaFormatExpr1
-          expr2Type <- analyzeExpr printCommaFormatExpr2
           return
             ( LPrintStmt
                 { lprintCommaFormat =
                     Just
-                      ( PrintCommaFormat
-                          { printCommaFormatExpr1 = expr1Type,
-                            printCommaFormatExpr2 = expr2Type
+                      ( PrintSemicolonFormat
+                          { printSemicolonFormatUsingClause,
+                            printSemicolonFormatExprs = analyzedExprs,
+                            printSemicolonFormatEnding
                           }
                       )
                 }
             )
-        PrintSemicolonFormat
-          { printSemicolonFormatUsingClause,
-            printSemicolonFormatExprs,
-            printSemicolonFormatEnding
-          } -> do
-            analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
-            return
-              ( LPrintStmt
-                  { lprintCommaFormat =
-                      Just
-                        ( PrintSemicolonFormat
-                            { printSemicolonFormatUsingClause,
-                              printSemicolonFormatExprs = analyzedExprs,
-                              printSemicolonFormatEnding
-                            }
-                        )
-                  }
-              )
-    Nothing -> return (LPrintStmt {lprintCommaFormat = Nothing})
+  Nothing -> return (LPrintStmt {lprintCommaFormat = Nothing})
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
 analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
   (analyzedLValue, _) <- analyzeLValue inputDestination
@@ -517,14 +500,13 @@ analyzeStmt (GoSubStmt gosubTarget) = do
   exprType <- analyzeExpr gosubTarget
 
   return (GoSubStmt {gosubTarget = exprType})
-analyzeStmt (WaitStmt waitForExpr) = do
-  case waitForExpr of
-    Just expr -> do
-      exprType <- analyzeExpr expr
-      if Ast.Types.exprType exprType == BasicNumericType
-        then return WaitStmt {waitForExpr = Just exprType}
-        else error "Wait statement requires a numeric expression"
-    Nothing -> return WaitStmt {waitForExpr = Nothing} -- No expression means wait indefinitely
+analyzeStmt (WaitStmt waitForExpr) = case waitForExpr of
+  Just expr -> do
+    exprType <- analyzeExpr expr
+    if Ast.Types.exprType exprType == BasicNumericType
+      then return WaitStmt {waitForExpr = Just exprType}
+      else error "Wait statement requires a numeric expression"
+  Nothing -> return WaitStmt {waitForExpr = Nothing} -- No expression means wait indefinitely
 analyzeStmt ClsStmt = return ClsStmt
 analyzeStmt RandomStmt = return RandomStmt
 analyzeStmt (GprintStmt gprintExprs) = do
@@ -564,8 +546,8 @@ analyzeStmt (PokeStmt pokeKind pokeExprs) = do
 
   return (PokeStmt {pokeKind = pokeKind, pokeExprs = exprTypes})
 analyzeStmt (DimStmt decls) = do
-  mapM_ analyzeDimInner decls
-  return (DimStmt {dimDecls = decls})
+  dimDecls' <- mapM analyzeDimAndInsertIntoTable decls
+  return (DimStmt {dimDecls = dimDecls'})
 -- FIXME: check that data, read and restore are typed correctly
 analyzeStmt (ReadStmt readStmtDestinations) = do
   analyzedLvalues <- mapM analyzeLValue readStmtDestinations
@@ -573,12 +555,11 @@ analyzeStmt (ReadStmt readStmtDestinations) = do
 analyzeStmt (DataStmt exprs) = do
   analyzedExprs <- mapM analyzeExpr exprs
   return (DataStmt analyzedExprs)
-analyzeStmt (RestoreStmt restoreLineOrLabelExpr) = do
-  case restoreLineOrLabelExpr of
-    Just expr -> do
-      analyzedExpr <- analyzeExpr expr
-      return (RestoreStmt {restoreLineOrLabelExpr = Just analyzedExpr})
-    Nothing -> return (RestoreStmt {restoreLineOrLabelExpr = Nothing})
+analyzeStmt (RestoreStmt restoreLineOrLabelExpr) = case restoreLineOrLabelExpr of
+  Just expr -> do
+    analyzedExpr <- analyzeExpr expr
+    return (RestoreStmt {restoreLineOrLabelExpr = Just analyzedExpr})
+  Nothing -> return (RestoreStmt {restoreLineOrLabelExpr = Nothing})
 analyzeStmt ArunStmt = return ArunStmt
 analyzeStmt LockStmt = return LockStmt
 analyzeStmt UnlockStmt = return UnlockStmt
@@ -589,24 +570,17 @@ analyzeStmt (OnGoToStmt onGotoExpr onGotoTargets) = do
     error "On Goto statement requires a numeric expression"
 
   onGotoTargets' <- mapM analyzeExpr onGotoTargets
-  unless (all (\et -> Ast.Types.exprType et == BasicNumericType) onGotoTargets') $
-    error "On Goto targets must be numeric expressions"
-
   return (OnGoToStmt {onGotoExpr = exprType, onGotoTargets = onGotoTargets'})
 analyzeStmt (OnGoSubStmt onGoSubExpr onGoSubTargets) = do
   exprType <- analyzeExpr onGoSubExpr
+
   when (Ast.Types.exprType exprType /= BasicNumericType) $
     error "On GoSub statement requires a numeric expression"
 
   onGoSubTargets' <- mapM analyzeExpr onGoSubTargets
-  unless (all (\et -> Ast.Types.exprType et == BasicNumericType) onGoSubTargets') $
-    error "On GoSub targets must be numeric expressions"
-
   return (OnGoSubStmt {onGosubExpr = exprType, onGosubTargets = onGoSubTargets'})
 analyzeStmt (OnErrorGotoStmt target) = do
   targetType <- analyzeExpr target
-  when (Ast.Types.exprType targetType /= BasicNumericType) $
-    error "On Error Goto statement requires a numeric expression"
   return (OnErrorGotoStmt {onErrorGotoTarget = targetType})
 analyzeStmt (CallStmt callExpr) = do
   analyzedCallExpr <- analyzeExpr callExpr

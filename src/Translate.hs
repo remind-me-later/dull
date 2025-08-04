@@ -3,6 +3,7 @@ module Translate where
 import Ast.Types
 import Data.List (intercalate)
 import Data.Word (Word8)
+import TypeSystem (BasicType)
 
 translateDecimalNumber :: DecimalNumber -> [Word8]
 translateDecimalNumber n = map (fromIntegral . fromEnum) (show n)
@@ -10,7 +11,7 @@ translateDecimalNumber n = map (fromIntegral . fromEnum) (show n)
 translateBinaryNumber :: BinaryNumber -> [Word8]
 translateBinaryNumber n = map (fromIntegral . fromEnum) (show n)
 
-translateFunction :: Function et -> [Word8]
+translateFunction :: Function BasicType -> [Word8]
 translateFunction MidFun {midFunStringExpr, midFunStartExpr, midFunLengthExpr} =
   -- Code: 0xF17B
   [0xF1, 0x7B, fromIntegral $ fromEnum '(']
@@ -80,7 +81,7 @@ translatePseudoVariable InkeyPseudoVar = [0xF1, 0x5C]
 translateIdent :: Ident -> [Word8]
 translateIdent ident = map (fromIntegral . fromEnum) (show ident)
 
-translateLValue :: LValue et -> [Word8]
+translateLValue :: LValue BasicType -> [Word8]
 translateLValue lvalue = map (fromIntegral . fromEnum) (show lvalue)
 
 unaryOperatorByteSize :: UnaryOperator -> Int
@@ -105,11 +106,11 @@ translateBinOperator AndOp =
 translateBinOperator op = map (fromIntegral . fromEnum) (show op)
 
 -- Helper functions for precedence-aware printing
-showExprWithContext :: Int -> Bool -> Expr et -> [Word8]
+showExprWithContext :: Int -> Bool -> Expr BasicType -> [Word8]
 showExprWithContext parentPrec isRightSide (Expr {exprInner = inner}) =
   showExprInnerWithContext parentPrec isRightSide inner
 
-showExprInnerWithContext :: Int -> Bool -> ExprInner et -> [Word8]
+showExprInnerWithContext :: Int -> Bool -> ExprInner BasicType -> [Word8]
 showExprInnerWithContext _ _ (UnaryExpr op expr) =
   translateUnaryOperator op ++ showExprWithContext 7 False expr -- Unary has highest precedence
 showExprInnerWithContext parentPrec isRightSide (BinExpr left op right) =
@@ -133,7 +134,7 @@ showExprInnerWithContext _ _ (StrLitExpr s) =
   [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) s ++ [fromIntegral $ fromEnum '"']
 showExprInnerWithContext _ _ (FunCallExpr f) = translateFunction f
 
-translateExprInner :: ExprInner et -> [Word8]
+translateExprInner :: ExprInner BasicType -> [Word8]
 translateExprInner (UnaryExpr op expr) =
   translateUnaryOperator op ++ showExprWithContext 7 False expr
 translateExprInner (BinExpr left op right) =
@@ -145,7 +146,7 @@ translateExprInner (StrLitExpr s) =
   [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) s ++ [fromIntegral $ fromEnum '"']
 translateExprInner (FunCallExpr f) = translateFunction f
 
-translateExpr :: Expr et -> [Word8]
+translateExpr :: Expr BasicType -> [Word8]
 translateExpr Expr {exprInner} = translateExprInner exprInner
 
 translatePrintEnding :: PrintEnding -> [Word8]
@@ -159,14 +160,31 @@ translateUsingClause (UsingClause (Just expr)) =
   -- Code: 0xF085
   [0xF0, 0x85] ++ map (fromIntegral . fromEnum) expr
 
-translateAssignment :: Assignment et -> [Word8]
+translateAssignment :: Assignment BasicType -> [Word8]
 translateAssignment (Assignment lValue expr _) =
   translateLValue lValue ++ [fromIntegral $ fromEnum '='] ++ translateExpr expr
 
-translateDimInner :: DimInner -> [Word8]
-translateDimInner i = map (fromIntegral . fromEnum) (show i)
+translateDimInner :: DimInner BasicType -> [Word8]
+translateDimInner (DimInner1D {dimIdent, dimSize, dimStringLength}) =
+  translateIdent dimIdent
+    ++ [fromIntegral $ fromEnum '(']
+    ++ translateExpr dimSize
+    ++ [fromIntegral $ fromEnum ')']
+    ++ case dimStringLength of
+      Just len -> fromIntegral (fromEnum '*') : translateExpr len
+      Nothing -> []
+translateDimInner (DimInner2D {dimIdent, dimRows, dimCols, dimStringLength}) =
+  translateIdent dimIdent
+    ++ [fromIntegral $ fromEnum '(']
+    ++ translateExpr dimRows
+    ++ [fromIntegral $ fromEnum ',']
+    ++ translateExpr dimCols
+    ++ [fromIntegral $ fromEnum ')']
+    ++ case dimStringLength of
+      Just len -> fromIntegral (fromEnum '*') : translateExpr len
+      Nothing -> []
 
-translateBeepOptionalParams :: BeepOptionalParams et -> [Word8]
+translateBeepOptionalParams :: BeepOptionalParams BasicType -> [Word8]
 translateBeepOptionalParams (BeepOptionalParams {beepFrequency, beepDuration}) =
   [fromIntegral $ fromEnum ',']
     ++ translateExpr beepFrequency
@@ -174,7 +192,7 @@ translateBeepOptionalParams (BeepOptionalParams {beepFrequency, beepDuration}) =
       Just duration -> fromIntegral (fromEnum ',') : translateExpr duration
       Nothing -> []
 
-translatePrintCommaFormat :: PrintCommaFormat et -> [Word8]
+translatePrintCommaFormat :: PrintCommaFormat BasicType -> [Word8]
 translatePrintCommaFormat (PrintCommaFormat e1 e2) =
   translateExpr e1 ++ [fromIntegral $ fromEnum ','] ++ translateExpr e2
 translatePrintCommaFormat (PrintSemicolonFormat maybeUsingClause exprs ending) =
@@ -193,7 +211,7 @@ translateGPrintSeparator GPrintSeparatorComma = [fromIntegral $ fromEnum ',']
 translateGPrintSeparator GPrintSeparatorSemicolon = [fromIntegral $ fromEnum ';']
 translateGPrintSeparator GPrintSeparatorEmpty = []
 
-translateLetStmt :: Bool -> [Assignment et] -> [Word8]
+translateLetStmt :: Bool -> [Assignment BasicType] -> [Word8]
 translateLetStmt isMandatoryLet assignments =
   if isMandatoryLet
     then
@@ -202,7 +220,7 @@ translateLetStmt isMandatoryLet assignments =
     else
       intercalate [fromIntegral $ fromEnum ','] (translateAssignment <$> assignments)
 
-translateStmt :: Stmt et -> [Word8]
+translateStmt :: Stmt BasicType -> [Word8]
 translateStmt (LetStmt assignments) = translateLetStmt False assignments
 translateStmt (IfThenStmt cond s) =
   -- If code: 0xF196H
@@ -338,7 +356,7 @@ translateStmt (LPrintStmt maybeCommaFormat) =
 -- FIXME: translate line labels
 -- First we put the word16 line number in two adjacent bytes, then the length of the line in bytes,
 -- then the translated statements, and we end with a carriage return byte (0x0D).
-translateLine :: Line et -> [Word8]
+translateLine :: Line BasicType -> [Word8]
 translateLine Line {lineNumber, lineLabel = _, lineStmts} =
   let lineNumBytes = [fromIntegral (lineNumber `div` 256), fromIntegral (lineNumber `mod` 256)]
       stmtsBytes = concatMap translateStmt lineStmts
@@ -347,6 +365,6 @@ translateLine Line {lineNumber, lineLabel = _, lineStmts} =
    in lineNumBytes ++ lengthBytes ++ stmtsBytes ++ carriageReturnByte
 
 -- At the end of the program we add a 0xFF byte to indicate the end of the program.
-translateProgram :: Program et -> [Word8]
+translateProgram :: Program BasicType -> [Word8]
 translateProgram Program {programLines} =
   concatMap translateLine programLines ++ [0xFF] -- End of program byte

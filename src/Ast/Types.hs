@@ -448,23 +448,23 @@ data MemoryArea where
   Me1 :: MemoryArea
   deriving (Eq)
 
-data DimInner where
+data DimInner et where
   DimInner1D ::
     { dimIdent :: Ident,
-      dimSize :: Word8,
-      dimStringLength :: Maybe Word8 -- if Nothing, the default string length is used, only used for string arrays
+      dimSize :: Expr et,
+      dimStringLength :: Maybe (Expr et) -- if Nothing, the default string length is used, only used for string arrays
     } ->
-    DimInner
+    DimInner et
   DimInner2D ::
     { dimIdent :: Ident,
-      dimRows :: Word8,
-      dimCols :: Word8,
-      dimStringLength :: Maybe Word8 -- if Nothing, the default string length is used, only used for string arrays
+      dimRows :: Expr et,
+      dimCols :: Expr et,
+      dimStringLength :: Maybe (Expr et) -- if Nothing, the default string length is used, only used for string arrays
     } ->
-    DimInner
+    DimInner et
   deriving (Eq)
 
-instance Show DimInner where
+instance Show (DimInner et) where
   show (DimInner1D {dimIdent, dimSize, dimStringLength}) =
     show dimIdent
       ++ "("
@@ -610,7 +610,7 @@ data Stmt et where
       pokeExprs :: [Expr et]
     } ->
     Stmt et
-  DimStmt :: {dimDecls :: [DimInner]} -> Stmt et
+  DimStmt :: {dimDecls :: [DimInner et]} -> Stmt et
   ReadStmt ::
     { readStmtDestinations :: [LValue et]
     } ->

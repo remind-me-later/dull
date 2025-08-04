@@ -28,22 +28,10 @@ instance Show Variable where
     variableName ++ case variableType of
       BasicStringType -> "$"
       BasicNumericType -> ""
-      BasicNumArrType {numericArrSize} ->
-        "(" ++ show numericArrSize ++ ")"
-      BasicStrArrType {strArrSize, strArrLength} ->
-        "$("
-          ++ show strArrSize
-          ++ ")*"
-          ++ show strArrLength
-      BasicNum2DArrType {num2DArrRows, num2DArrCols} ->
-        "(" ++ show num2DArrRows ++ "," ++ show num2DArrCols ++ ")"
-      BasicStr2DArrType {str2DArrRows, str2DArrCols, str2DArrLength} ->
-        "$("
-          ++ show str2DArrRows
-          ++ ","
-          ++ show str2DArrCols
-          ++ ")*"
-          ++ show str2DArrLength
+      BasicNumArrType -> "(?)"
+      BasicStrArrType -> "$(?)"
+      BasicNum2DArrType -> "(?,?)"
+      BasicStr2DArrType -> "$(?,?)"
 
 data GotoTargetData where
   IsBranch :: GotoTargetData
