@@ -556,7 +556,13 @@ data PrintCommaFormat et where
   deriving (Eq)
 
 instance Show (PrintCommaFormat et) where
-  show (PrintSemicolonFormat exprs) = concatMap (\(e, sep) -> show e ++ show sep) exprs
+  show (PrintSemicolonFormat exprs) =
+    concatMap
+      ( \(e, sep) -> case e of
+          Left expr -> show expr ++ show sep
+          Right (UsingClause using) -> "USING " ++ maybe "" (\u -> "\"" ++ u ++ "\"") using ++ show sep
+      )
+      exprs
 
 data LCursorClause et where
   LCursorClause ::

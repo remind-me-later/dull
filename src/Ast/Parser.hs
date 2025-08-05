@@ -339,7 +339,7 @@ commaSeparated p = p `sepBy1` symbol ','
 
 -- Parse new line, possibly with carriage return
 newline :: Parser ()
-newline = many (symbol '\n') $> ()
+newline = many1 (symbol '\n') $> ()
 
 expressionFactor :: Parser RawExpr
 expressionFactor =
@@ -857,14 +857,13 @@ line = do
   lineNumber <- word16
   lineLabel <- optional (stringLiteral <* many (symbol ':'))
   lineStmts <- optional (stmt False) `sepBy` many1 (symbol ':')
-  _ <- newline
+  _ <- newline <|> eof
   return Line {lineNumber, lineLabel, lineStmts = catMaybes lineStmts}
 
 program :: Parser RawProgram
 program = do
   sc
   lines' <- many line
-  eof
   let lineMap = foldr (\l acc -> Data.Map.insert (lineNumber l) l acc) Data.Map.empty lines'
   return (Program lineMap)
 
