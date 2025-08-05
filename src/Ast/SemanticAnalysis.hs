@@ -421,101 +421,50 @@ analyzeStmt (IfThenStmt condition thenStmt) = do
   thenStmt' <- analyzeStmt thenStmt
   return (IfThenStmt conditionType thenStmt')
 analyzeStmt (PrintStmt printCommaFormat) = case printCommaFormat of
-  Nothing -> return (PrintStmt Nothing)
-  Just commaFormat -> do
+  commaFormat -> do
     case commaFormat of
-      PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-        expr1Type <- analyzeExpr printCommaFormatExpr1
-        expr2Type <- analyzeExpr printCommaFormatExpr2
-
-        -- FIXME: this form should be made up of a tring and a numeric expression, but check
-
-        return
-          ( PrintStmt
-              { printCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
-              }
-          )
-      PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
-        analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
-
-        return
-          ( PrintStmt
-              { printCommaFormat =
-                  Just
-                    PrintSemicolonFormat
-                      { printSemicolonFormatUsingClause,
-                        printSemicolonFormatExprs = analyzedExprs,
-                        printSemicolonFormatEnding = printSemicolonFormatEnding
-                      }
-              }
-          )
-analyzeStmt (PauseStmt pauseCommaFormat) = case pauseCommaFormat of
-  Nothing -> return (PauseStmt Nothing)
-  Just commaFormat -> do
-    case commaFormat of
-      PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-        expr1Type <- analyzeExpr printCommaFormatExpr1
-        expr2Type <- analyzeExpr printCommaFormatExpr2
-
-        return
-          ( PauseStmt
-              { pauseCommaFormat = Just PrintCommaFormat {printCommaFormatExpr1 = expr1Type, printCommaFormatExpr2 = expr2Type}
-              }
-          )
-      PrintSemicolonFormat {printSemicolonFormatUsingClause, printSemicolonFormatExprs, printSemicolonFormatEnding} -> do
-        analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
-
-        return
-          ( PauseStmt
-              { pauseCommaFormat =
-                  Just
-                    PrintSemicolonFormat
-                      { printSemicolonFormatUsingClause,
-                        printSemicolonFormatExprs = analyzedExprs,
-                        printSemicolonFormatEnding = printSemicolonFormatEnding
-                      }
-              }
-          )
-analyzeStmt (LPrintStmt maybeCommaFormat) = case maybeCommaFormat of
-  Just commaFormat -> do
-    case commaFormat of
-      PrintCommaFormat {printCommaFormatExpr1, printCommaFormatExpr2} -> do
-        expr1Type <- analyzeExpr printCommaFormatExpr1
-        expr2Type <- analyzeExpr printCommaFormatExpr2
-        return
-          ( LPrintStmt
-              { lprintCommaFormat =
-                  Just
-                    ( PrintCommaFormat
-                        { printCommaFormatExpr1 = expr1Type,
-                          printCommaFormatExpr2 = expr2Type
-                        }
-                    )
-              }
-          )
-      PrintSemicolonFormat
-        { printSemicolonFormatUsingClause,
-          printSemicolonFormatExprs,
-          printSemicolonFormatEnding
-        } -> do
-          analyzedExprs <- mapM analyzeExpr printSemicolonFormatExprs
-          return
-            ( LPrintStmt
-                { lprintCommaFormat =
-                    Just
-                      ( PrintSemicolonFormat
-                          { printSemicolonFormatUsingClause,
-                            printSemicolonFormatExprs = analyzedExprs,
-                            printSemicolonFormatEnding
-                          }
-                      )
-                }
+      PrintSemicolonFormat {printSemicolonFormatExprs} -> do
+        analyzedExprs <-
+          mapM
+            ( \(e, sep) -> case e of
+                Left rawExpr -> analyzeExpr rawExpr >>= \e' -> return (Left e', sep)
+                Right usingClause -> return (Right usingClause, sep)
             )
-  Nothing -> return (LPrintStmt {lprintCommaFormat = Nothing})
+            printSemicolonFormatExprs
+        return PrintStmt {printCommaFormat = PrintSemicolonFormat {printSemicolonFormatExprs = analyzedExprs}}
+analyzeStmt (PauseStmt pauseCommaFormat) = case pauseCommaFormat of
+  commaFormat -> do
+    case commaFormat of
+      PrintSemicolonFormat {printSemicolonFormatExprs} -> do
+        analyzedExprs <-
+          mapM
+            ( \(e, sep) -> case e of
+                Left rawExpr -> analyzeExpr rawExpr >>= \e' -> return (Left e', sep)
+                Right usingClause -> return (Right usingClause, sep)
+            )
+            printSemicolonFormatExprs
+        return PauseStmt {pauseCommaFormat = PrintSemicolonFormat {printSemicolonFormatExprs = analyzedExprs}}
+analyzeStmt (LPrintStmt maybeCommaFormat) = case maybeCommaFormat of
+  commaFormat -> do
+    case commaFormat of
+      LPrintSemicolonFormat {lPrintSemicolonFormatExprs} -> do
+        analyzedExprs <-
+          mapM
+            ( \(e, sep) -> case e of
+                Left rawExpr -> analyzeExpr rawExpr >>= \e' -> return (Left e', sep)
+                Right (LCursorClause expr) -> analyzeExpr expr >>= \e' -> return (Right (LCursorClause e'), sep)
+            )
+            lPrintSemicolonFormatExprs
+        return LPrintStmt {lprintCommaFormat = LPrintSemicolonFormat {lPrintSemicolonFormatExprs = analyzedExprs}}
 analyzeStmt (UsingStmt u) = return (UsingStmt u)
-analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
-  (analyzedLValue, _) <- analyzeLValue inputDestination
-  return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = analyzedLValue})
+analyzeStmt (InputStmt inputPrintExprs) = do
+  analyzedExprs <-
+    mapM
+      ( \(maybePrompt, lvalue) ->
+          analyzeLValue lvalue >>= \(typedLValue, _) -> return (maybePrompt, typedLValue)
+      )
+      inputPrintExprs
+  return InputStmt {inputExprs = analyzedExprs}
 analyzeStmt EndStmt = return EndStmt
 analyzeStmt Comment {commentText} = return Comment {commentText = commentText}
 analyzeStmt (ForStmt forAssignment forToExpr stepExpr) = do
@@ -656,6 +605,11 @@ analyzeStmt (LfStmt lfExpr) = do
     BasicNumericType -> return (LfStmt {lineFeedExpr = analyzedLfExpr})
     _ -> error "LF statement requires a numeric expression"
 analyzeStmt RadianStmt = return RadianStmt
+analyzeStmt (LCursorStmt (LCursorClause expr)) = do
+  analyzedExpr <- analyzeExpr expr
+  case Ast.Types.exprType analyzedExpr of
+    BasicNumericType -> return LCursorStmt {lCursorClause = LCursorClause {lCursorClauseExpr = analyzedExpr}}
+    _ -> error "LCursor statement requires a numeric expression"
 
 analyzeLine :: RawLine -> State SemanticAnalysisState TypedLine
 analyzeLine (Line lineNumber lineLabel lineStmts) = do

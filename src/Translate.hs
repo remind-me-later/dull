@@ -219,23 +219,31 @@ translateBeepOptionalParams (BeepOptionalParams {beepFrequency, beepDuration}) =
       Nothing -> []
 
 translatePrintCommaFormat :: PrintCommaFormat BasicType -> [Word8]
-translatePrintCommaFormat (PrintCommaFormat e1 e2) =
-  translateExpr e1 ++ [fromIntegral $ fromEnum ','] ++ translateExpr e2
-translatePrintCommaFormat (PrintSemicolonFormat maybeUsingClause exprs ending) =
-  case maybeUsingClause of
-    Just usingClause ->
-      translateUsingClause usingClause
-        ++ [fromIntegral $ fromEnum ';']
-        ++ intercalate [fromIntegral $ fromEnum ';'] (translateExpr <$> exprs)
-        ++ translatePrintEnding ending
-    Nothing ->
-      intercalate [fromIntegral $ fromEnum ';'] (translateExpr <$> exprs)
-        ++ translatePrintEnding ending
+translatePrintCommaFormat (PrintSemicolonFormat exprs) =
+  concatMap
+    ( \(e, sep) -> case e of
+        Left rawExpr -> translateExpr rawExpr ++ translatePrintSeparator sep
+        Right usingClause -> translateUsingClause usingClause ++ translatePrintSeparator sep
+    )
+    exprs
 
-translateGPrintSeparator :: GPrintSeparator -> [Word8]
-translateGPrintSeparator GPrintSeparatorComma = [fromIntegral $ fromEnum ',']
-translateGPrintSeparator GPrintSeparatorSemicolon = [fromIntegral $ fromEnum ';']
-translateGPrintSeparator GPrintSeparatorEmpty = []
+translateLPrintCommaFormat :: LPrintCommaFormat BasicType -> [Word8]
+translateLPrintCommaFormat (LPrintSemicolonFormat exprs) =
+  -- TAB code: 0xF0B8
+  concatMap
+    ( \(e, sep) -> case e of
+        Left rawExpr -> translateExpr rawExpr ++ translatePrintSeparator sep
+        Right (LCursorClause expr) ->
+          [0xF0, 0xB8]
+            ++ translateExpr expr
+            ++ translatePrintSeparator sep
+    )
+    exprs
+
+translatePrintSeparator :: PrintSeparator -> [Word8]
+translatePrintSeparator PrintSeparatorComma = [fromIntegral $ fromEnum ',']
+translatePrintSeparator PrintSeparatorSemicolon = [fromIntegral $ fromEnum ';']
+translatePrintSeparator PrintSeparatorEmpty = []
 
 translateLetStmt :: Bool -> [Assignment BasicType] -> [Word8]
 translateLetStmt isMandatoryLet assignments =
@@ -259,16 +267,22 @@ translateStmt (IfThenStmt cond s) =
       _ -> translateStmt s
 translateStmt (PrintStmt {printCommaFormat}) =
   -- Print code: 0xF097
-  [0xF0, 0x97] ++ maybe [] translatePrintCommaFormat printCommaFormat
+  [0xF0, 0x97] ++ translatePrintCommaFormat printCommaFormat
 translateStmt (PauseStmt {pauseCommaFormat}) =
   -- Pause code: 0xF1A2
-  [0xF1, 0xA2] ++ maybe [] translatePrintCommaFormat pauseCommaFormat
+  [0xF1, 0xA2] ++ translatePrintCommaFormat pauseCommaFormat
 translateStmt (UsingStmt usingClause) = translateUsingClause usingClause
-translateStmt (InputStmt maybePrintExpr me) =
+translateStmt (InputStmt exprs) =
   -- Input code: 0xF091
   [0xF0, 0x91]
-    ++ maybe [] (\e -> map (fromIntegral . fromEnum) e ++ [fromIntegral $ fromEnum ';']) maybePrintExpr
-    ++ translateLValue me
+    ++ intercalate
+      [fromIntegral $ fromEnum ',']
+      ( map
+          ( \(maybePrompt, lval) ->
+              maybe [] (\p -> translateStrLit p ++ [fromIntegral $ fromEnum ';']) maybePrompt ++ translateLValue lval
+          )
+          exprs
+      )
 translateStmt EndStmt =
   -- End code: 0xF18E
   [0xF1, 0x8E]
@@ -310,9 +324,9 @@ translateStmt RandomStmt =
 translateStmt (GprintStmt exprs) =
   -- GPrint code: 0xF09F
   [0xF0, 0x9F]
-    ++ concatMap (\(e, sep) -> translateExpr e ++ translateGPrintSeparator sep) (init exprs)
+    ++ concatMap (\(e, sep) -> translateExpr e ++ translatePrintSeparator sep) (init exprs)
     ++ ( \(e, sep) ->
-           translateExpr e ++ translateGPrintSeparator sep
+           translateExpr e ++ translatePrintSeparator sep
        )
       (last exprs)
 translateStmt (GCursorStmt e) =
@@ -377,7 +391,7 @@ translateStmt (CallStmt expr maybeCallVariable) =
   [0xF1, 0x8A] ++ translateExpr expr ++ maybe [] (\v -> fromIntegral (fromEnum ',') : translateLValue v) maybeCallVariable
 translateStmt (LPrintStmt maybeCommaFormat) =
   -- LPrint code: 0xF0B9
-  [0xF0, 0xB9] ++ maybe [] translatePrintCommaFormat maybeCommaFormat
+  [0xF0, 0xB9] ++ translateLPrintCommaFormat maybeCommaFormat
 translateStmt TextStmt =
   -- Text code: 0xE686
   [0xE6, 0x86]
@@ -396,6 +410,9 @@ translateStmt (LfStmt lineFeedExpr) =
 translateStmt RadianStmt =
   -- Radian code: 0xF1AA
   [0xF1, 0xAA]
+translateStmt (LCursorStmt (LCursorClause expr)) =
+  -- LCursor code: 0xF0B8
+  [0xF0, 0xB8] ++ translateExpr expr
 
 -- FIXME: translate line labels
 -- First we put the word16 line number in two adjacent bytes, then the length of the line in bytes,

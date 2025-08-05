@@ -26,7 +26,7 @@ module Ast.Types
     RawExprInner,
     BeepOptionalParams (..),
     PrintCommaFormat (..),
-    GPrintSeparator (..),
+    PrintSeparator (..),
     DecimalNumber (..),
     identName,
     newDecimalNumber,
@@ -34,6 +34,8 @@ module Ast.Types
     newBinaryNumber,
     precedence,
     isLeftAssociative,
+    LPrintCommaFormat (..),
+    LCursorClause (..),
   )
 where
 
@@ -547,53 +549,64 @@ instance Show (BeepOptionalParams et) where
       Nothing -> ""
 
 data PrintCommaFormat et where
-  PrintCommaFormat ::
-    { printCommaFormatExpr1 :: Expr et,
-      printCommaFormatExpr2 :: Expr et
-    } ->
-    PrintCommaFormat et
   PrintSemicolonFormat ::
-    { printSemicolonFormatUsingClause :: Maybe UsingClause,
-      printSemicolonFormatExprs :: [Expr et],
-      printSemicolonFormatEnding :: PrintEnding
+    { printSemicolonFormatExprs :: [(Either (Expr et) UsingClause, PrintSeparator)]
     } ->
     PrintCommaFormat et
   deriving (Eq)
 
 instance Show (PrintCommaFormat et) where
-  show (PrintCommaFormat e1 e2) =
-    show e1 ++ "," ++ show e2
-  show (PrintSemicolonFormat maybeUsingClause exprs ending) =
-    case maybeUsingClause of
-      Just usingClause ->
-        show usingClause ++ ";" ++ intercalate ";" (show <$> exprs) ++ show ending
-      Nothing ->
-        intercalate ";" (show <$> exprs) ++ show ending
+  show (PrintSemicolonFormat exprs) = concatMap (\(e, sep) -> show e ++ show sep) exprs
 
-data GPrintSeparator where
-  GPrintSeparatorComma :: GPrintSeparator
-  GPrintSeparatorSemicolon :: GPrintSeparator
-  GPrintSeparatorEmpty :: GPrintSeparator -- used for the last expression in a GPRINT statement
+data LCursorClause et where
+  LCursorClause ::
+    {lCursorClauseExpr :: Expr et} ->
+    LCursorClause et
   deriving (Eq)
 
-instance Show GPrintSeparator where
-  show GPrintSeparatorComma = ","
-  show GPrintSeparatorSemicolon = ";"
-  show GPrintSeparatorEmpty = ""
+instance Show (LCursorClause et) where
+  show (LCursorClause expr) = "LCURSOR " ++ show expr
+
+data LPrintCommaFormat et where
+  LPrintSemicolonFormat ::
+    { lPrintSemicolonFormatExprs :: [(Either (Expr et) (LCursorClause et), PrintSeparator)]
+    } ->
+    LPrintCommaFormat et
+  deriving (Eq)
+
+instance Show (LPrintCommaFormat et) where
+  show (LPrintSemicolonFormat exprs) =
+    concatMap
+      ( \(e, sep) -> case e of
+          Left expr -> show expr ++ show sep
+          Right (LCursorClause expr) -> "TAB " ++ show expr ++ show sep
+      )
+      exprs
+
+data PrintSeparator where
+  PrintSeparatorComma :: PrintSeparator
+  PrintSeparatorSemicolon :: PrintSeparator
+  PrintSeparatorEmpty :: PrintSeparator -- used for the last expression in a GPRINT statement
+  deriving (Eq)
+
+instance Show PrintSeparator where
+  show PrintSeparatorComma = ","
+  show PrintSeparatorSemicolon = ";"
+  show PrintSeparatorEmpty = ""
 
 data Stmt et where
   LetStmt :: {letAssignments :: [Assignment et]} -> Stmt et
   IfThenStmt :: {ifCondition :: Expr et, ifThenStmt :: Stmt et} -> Stmt et
   PrintStmt ::
-    { printCommaFormat :: Maybe (PrintCommaFormat et)
+    { printCommaFormat :: PrintCommaFormat et
     } ->
     Stmt et
   PauseStmt ::
-    { pauseCommaFormat :: Maybe (PrintCommaFormat et)
+    { pauseCommaFormat :: PrintCommaFormat et
     } ->
     Stmt et
   LPrintStmt ::
-    { lprintCommaFormat :: Maybe (PrintCommaFormat et)
+    { lprintCommaFormat :: LPrintCommaFormat et
     } ->
     Stmt et
   UsingStmt ::
@@ -601,8 +614,7 @@ data Stmt et where
     } ->
     Stmt et
   InputStmt ::
-    { inputPrintExpr :: Maybe String,
-      inputDestination :: LValue et
+    { inputExprs :: [(Maybe String, LValue et)]
     } ->
     Stmt et
   EndStmt :: Stmt et
@@ -641,7 +653,7 @@ data Stmt et where
   ClsStmt :: Stmt et
   RandomStmt :: Stmt et
   GprintStmt ::
-    { gprintExprs :: [(Expr et, GPrintSeparator)]
+    { gprintExprs :: [(Expr et, PrintSeparator)]
     } ->
     Stmt et
   GCursorStmt :: {gCursorExpr :: Expr et} -> Stmt et
@@ -695,6 +707,7 @@ data Stmt et where
     { lineFeedExpr :: Expr et
     } ->
     Stmt et
+  LCursorStmt :: {lCursorClause :: LCursorClause et} -> Stmt et
   deriving (Eq)
 
 showLetStmt :: Bool -> [Assignment et] -> String
@@ -712,13 +725,12 @@ instance Show (Stmt et) where
       ++ case s of
         LetStmt letStmt -> showLetStmt True letStmt
         _ -> show s
-  show (PrintStmt {printCommaFormat}) = "PRINT " ++ maybe "" show printCommaFormat
-  show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ maybe "" show pauseCommaFormat
+  show (PrintStmt {printCommaFormat}) = "PRINT " ++ show printCommaFormat
+  show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ show pauseCommaFormat
   show (UsingStmt usingClause) = show usingClause
-  show (InputStmt maybePrintExpr me) =
+  show (InputStmt inputExprs) =
     "INPUT "
-      ++ maybe "" (\e -> show e ++ ";") maybePrintExpr
-      ++ show me
+      ++ intercalate "," (map (\(prompt, lval) -> maybe "" (\p -> "\"" ++ p ++ "\" ") prompt ++ ";" ++ show lval) inputExprs)
   show EndStmt = "END"
   show (Comment text) = "REM " ++ text
   show (ForStmt assign to step) =
@@ -763,7 +775,7 @@ instance Show (Stmt et) where
   show (OnGoSubStmt expr targets) =
     "ON " ++ show expr ++ " GOSUB " ++ intercalate "," (show <$> targets)
   show (CallStmt expr maybeCallVariable) = "CALL " ++ show expr ++ maybe "" (\v -> ", " ++ show v) maybeCallVariable
-  show (LPrintStmt maybeCommaFormat) = "LPRINT " ++ maybe "" show maybeCommaFormat
+  show (LPrintStmt commaFormat) = "LPRINT " ++ show commaFormat
   show (OnErrorGotoStmt target) = "ON ERROR GOTO " ++ show target
   show TextStmt = "TEXT"
   show GraphStmt = "GRAPH"
@@ -771,6 +783,7 @@ instance Show (Stmt et) where
   show (CSizeStmt expr) = "CSIZE " ++ show expr
   show (LfStmt expr) = "LF " ++ show expr
   show RadianStmt = "RADIAN"
+  show (LCursorStmt lCursorClause) = show lCursorClause
 
 type LineNumber = Word16
 

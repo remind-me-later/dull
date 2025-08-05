@@ -9,7 +9,7 @@ import Data.Foldable (find)
 import Data.Functor (($>))
 import Data.List (isSuffixOf)
 import Data.Map qualified
-import Data.Maybe (catMaybes, isJust, listToMaybe)
+import Data.Maybe (catMaybes, isJust)
 import Data.Word (Word16)
 import Text.Parsec
   ( Parsec,
@@ -25,7 +25,6 @@ import Text.Parsec
     string,
     try,
   )
-import Text.Parsec.Combinator (count)
 
 type Parser = Parsec String ()
 
@@ -90,6 +89,7 @@ keyword kw = Ast.Parser.lex $ string kw
 symbol :: Char -> Parser Char
 symbol sym = Ast.Parser.lex $ char sym
 
+-- Add in inverse order of suffix length to ensure longest match first
 ambiguousKeywords :: [String]
 ambiguousKeywords =
   [ "AND",
@@ -99,35 +99,41 @@ ambiguousKeywords =
     "THEN",
     "ELSE",
     "FOR",
-    "TO",
     "STEP",
     "NEXT",
     "LF",
     "IF",
     "LN",
     "PI",
-    "TO"
+    "GOTO",
+    "GOSUB",
+    "TO",
+    "LET"
   ]
 
 ident :: Parser Ident
 ident = Ast.Parser.lex $ do
-  -- Look ahead to see the next 3 characters
+  firstChar <- satisfy (`elem` ['A' .. 'Z'])
+
+  -- Look ahead to see the next characters
+  -- This is necessary to determine if the identifier has an ambiguous suffix
   lookahead <- lookAhead (many (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9'])))
 
-  let (hasAmbiguousSuffix, identLength) =
+  let (hasAmbiguousSuffix, identLengthRest) =
         case find (`isSuffixOf` lookahead) ambiguousKeywords of
           Just kw -> (True, length lookahead - length kw)
-          Nothing -> (False, 2) -- default length for identifiers
-  firstChar <- satisfy (`elem` ['A' .. 'Z'])
+          Nothing -> (False, 0)
   rest <- case hasAmbiguousSuffix of
-    True -> count (identLength - 1) (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
-    False -> many (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
+    True -> case identLengthRest of
+      0 -> return Nothing -- no rest, just the first character
+      _ -> Just <$> satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9'])
+    False -> optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
 
   dollar <- optional (char '$')
   return
     Ident
       { identName1 = firstChar,
-        identName2 = listToMaybe rest,
+        identName2 = rest,
         identHasDollar = isJust dollar
       }
 
@@ -184,7 +190,7 @@ lvalue =
     ( try (LValuePseudoVar <$> pseudoVariable)
         <|> try lvalueFixedMemoryArea
         <|> try lvalue2DArrayAccess
-        <|> lvalueArrayAccess
+        <|> try lvalueArrayAccess
     )
 
 functionCall :: Parser RawFunction
@@ -490,63 +496,51 @@ usingClause = do
 printStmt :: Parser RawStmt
 printStmt = do
   k <- try (keyword "PRINT" $> Left ()) <|> (keyword "PAUSE" $> Right ())
-  maybeUsing <- optional (usingClause <* symbol ';')
-  firstExpr <- optional expression
-
-  case firstExpr of
-    Nothing -> do
-      return $ case k of
-        Left () -> PrintStmt {printCommaFormat = Nothing}
-        Right () -> PauseStmt {pauseCommaFormat = Nothing}
-    Just firstExpr' -> do
-      commaExpr <- optional (symbol ',' *> expression)
-      commaFormat <- case commaExpr of
-        Just expr -> do
-          return PrintCommaFormat {printCommaFormatExpr1 = firstExpr', printCommaFormatExpr2 = expr}
-        Nothing -> do
-          restExprs <- many (try (symbol ';' *> expression))
-          semi <- optional (symbol ';')
-          return
-            PrintSemicolonFormat
-              { printSemicolonFormatUsingClause = maybeUsing,
-                printSemicolonFormatExprs = firstExpr' : restExprs,
-                printSemicolonFormatEnding =
-                  case semi of
-                    Just _ -> PrintEndingNoNewLine
-                    Nothing -> PrintEndingNewLine
-              }
-
-      return $ case k of
-        Left () -> PrintStmt {printCommaFormat = Just commaFormat}
-        Right () -> PauseStmt {pauseCommaFormat = Just commaFormat}
+  exprs <-
+    many
+      ( try
+          ( do
+              expr <- expression
+              sep <- optional (try (symbol ',') <|> symbol ';')
+              case sep of
+                Just ',' -> return (Left expr, PrintSeparatorComma)
+                Just ';' -> return (Left expr, PrintSeparatorSemicolon)
+                _ -> return (Left expr, PrintSeparatorEmpty)
+          )
+          <|> try
+            ( do
+                using <- usingClause
+                _ <- symbol ';'
+                return (Right using, PrintSeparatorSemicolon)
+            )
+      )
+  case k of
+    Left () -> return PrintStmt {printCommaFormat = PrintSemicolonFormat {printSemicolonFormatExprs = exprs}}
+    Right () -> return PauseStmt {pauseCommaFormat = PrintSemicolonFormat {printSemicolonFormatExprs = exprs}}
 
 lprintStmt :: Parser RawStmt
 lprintStmt = do
   _ <- keyword "LPRINT"
-  maybeUsing <- optional (usingClause <* symbol ';')
-  firstExpr <- optional expression
-
-  case firstExpr of
-    Nothing -> do
-      return LPrintStmt {lprintCommaFormat = Nothing}
-    Just firstExpr' -> do
-      commaExpr <- optional (symbol ',' *> expression)
-      commaFormat <- case commaExpr of
-        Just expr -> do
-          return PrintCommaFormat {printCommaFormatExpr1 = firstExpr', printCommaFormatExpr2 = expr}
-        Nothing -> do
-          restExprs <- many (try (symbol ';' *> expression))
-          semi <- optional (symbol ';')
-          return
-            PrintSemicolonFormat
-              { printSemicolonFormatUsingClause = maybeUsing,
-                printSemicolonFormatExprs = firstExpr' : restExprs,
-                printSemicolonFormatEnding =
-                  case semi of
-                    Just _ -> PrintEndingNoNewLine
-                    Nothing -> PrintEndingNewLine
-              }
-      return LPrintStmt {lprintCommaFormat = Just commaFormat}
+  exprs <-
+    many
+      ( try
+          ( do
+              expr <- expression
+              sep <- optional (try (symbol ',') <|> symbol ';')
+              case sep of
+                Just ',' -> return (Left expr, PrintSeparatorComma)
+                Just ';' -> return (Left expr, PrintSeparatorSemicolon)
+                _ -> return (Left expr, PrintSeparatorEmpty)
+          )
+          <|> try
+            ( do
+                _ <- keyword "TAB"
+                expr <- expression
+                _ <- symbol ';'
+                return (Right (LCursorClause expr), PrintSeparatorSemicolon)
+            )
+      )
+  return LPrintStmt {lprintCommaFormat = LPrintSemicolonFormat {lPrintSemicolonFormatExprs = exprs}}
 
 gPrintStmt :: Parser RawStmt
 gPrintStmt = do
@@ -557,9 +551,9 @@ gPrintStmt = do
           expr <- expression
           sep <- optional (try (symbol ',') <|> symbol ';')
           case sep of
-            Just ',' -> return (expr, GPrintSeparatorComma)
-            Just ';' -> return (expr, GPrintSeparatorSemicolon)
-            _ -> return (expr, GPrintSeparatorEmpty)
+            Just ',' -> return (expr, PrintSeparatorComma)
+            Just ';' -> return (expr, PrintSeparatorSemicolon)
+            _ -> return (expr, PrintSeparatorEmpty)
       )
 
   return GprintStmt {gprintExprs = exprs}
@@ -577,9 +571,15 @@ cursorStmt = do
 inputStmt :: Parser RawStmt
 inputStmt = do
   _ <- keyword "INPUT"
-  maybePrintExpr <- optional (stringLiteral <* symbol ';')
-  dest <- lvalue
-  return InputStmt {inputPrintExpr = maybePrintExpr, inputDestination = dest}
+  exprs <-
+    try
+      ( do
+          maybePrintExpr <- optional (stringLiteral <* symbol ';')
+          dest <- lvalue
+          return (maybePrintExpr, dest)
+      )
+      `sepBy1` symbol ','
+  return InputStmt {inputExprs = exprs}
 
 endStmt :: Parser RawStmt
 endStmt = keyword "END" $> EndStmt
@@ -804,6 +804,12 @@ lfStmt = do
 radianStmt :: Parser RawStmt
 radianStmt = keyword "RADIAN" $> RadianStmt
 
+lcursorStmt :: Parser RawStmt
+lcursorStmt = do
+  _ <- keyword "LCURSOR"
+  expr <- expression
+  return LCursorStmt {lCursorClause = LCursorClause expr}
+
 stmt :: Bool -> Parser RawStmt
 stmt mandatoryLet =
   try endStmt
@@ -843,6 +849,7 @@ stmt mandatoryLet =
     <|> try csizeStmt
     <|> try lfStmt
     <|> try radianStmt
+    <|> try lcursorStmt
     <|> try (letStmt mandatoryLet)
 
 line :: Parser RawLine
