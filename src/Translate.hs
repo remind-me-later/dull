@@ -115,7 +115,7 @@ unaryOperatorByteSize UnaryNotOp = 2
 
 translateUnaryOperator :: UnaryOperator -> [Word8]
 translateUnaryOperator UnaryMinusOp = [fromIntegral $ fromEnum '-']
-translateUnaryOperator UnaryPlusOp = [] -- No byte for UnaryPlusOp
+translateUnaryOperator UnaryPlusOp = [fromIntegral $ fromEnum '+']
 translateUnaryOperator UnaryNotOp =
   -- 0xF16D
   [0xF1, 0x6D]
@@ -128,6 +128,10 @@ translateBinOperator AndOp =
   -- 0xF150
   [0xF1, 0x50]
 translateBinOperator op = map (fromIntegral . fromEnum) (show op)
+
+translateStrLit :: String -> [Word8]
+translateStrLit str =
+  [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) str ++ [fromIntegral $ fromEnum '"']
 
 -- Helper functions for precedence-aware printing
 showExprWithContext :: Int -> Bool -> Expr BasicType -> [Word8]
@@ -154,8 +158,7 @@ showExprInnerWithContext parentPrec isRightSide (BinExpr left op right) =
 showExprInnerWithContext _ _ (DecNumLitExpr n) = translateDecimalNumber n
 showExprInnerWithContext _ _ (HexNumLitExpr h) = translateBinaryNumber h
 showExprInnerWithContext _ _ (LValueExpr lval) = translateLValue lval
-showExprInnerWithContext _ _ (StrLitExpr s) =
-  [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) s ++ [fromIntegral $ fromEnum '"']
+showExprInnerWithContext _ _ (StrLitExpr s) = translateStrLit s
 showExprInnerWithContext _ _ (FunCallExpr f) = translateFunction f
 
 translateExprInner :: ExprInner BasicType -> [Word8]
@@ -166,8 +169,7 @@ translateExprInner (BinExpr left op right) =
 translateExprInner (DecNumLitExpr n) = translateDecimalNumber n
 translateExprInner (HexNumLitExpr h) = translateBinaryNumber h
 translateExprInner (LValueExpr lval) = translateLValue lval
-translateExprInner (StrLitExpr s) =
-  [fromIntegral $ fromEnum '"'] ++ map (fromIntegral . fromEnum) s ++ [fromIntegral $ fromEnum '"']
+translateExprInner (StrLitExpr s) = translateStrLit s
 translateExprInner (FunCallExpr f) = translateFunction f
 
 translateExpr :: Expr BasicType -> [Word8]
@@ -248,12 +250,13 @@ translateStmt :: Stmt BasicType -> [Word8]
 translateStmt (LetStmt assignments) = translateLetStmt False assignments
 translateStmt (IfThenStmt cond s) =
   -- If code: 0xF196H
+  -- Then code: 0xF1AE -- TODO: always unnecesary?
   [0xF1, 0x96]
     ++ translateExpr cond
     ++ case s of
-      LetStmt letStmt -> fromIntegral (fromEnum ' ') : translateLetStmt True letStmt
-      GoToStmt l -> fromIntegral (fromEnum ' ') : translateExpr l
-      _ -> fromIntegral (fromEnum ' ') : translateStmt s
+      LetStmt letStmt -> translateLetStmt True letStmt
+      GoToStmt l -> translateExpr l
+      _ -> translateStmt s
 translateStmt (PrintStmt {printCommaFormat}) =
   -- Print code: 0xF097
   [0xF0, 0x97] ++ maybe [] translatePrintCommaFormat printCommaFormat
@@ -269,14 +272,13 @@ translateStmt (InputStmt maybePrintExpr me) =
 translateStmt EndStmt =
   -- End code: 0xF18E
   [0xF1, 0x8E]
-translateStmt Comment =
+translateStmt (Comment {commentText = _}) =
   -- Comment code: 0xF1AB
-  [0xF1, 0xAB]
+  [0xF1, 0xAB] -- Remove comment text
 translateStmt (ForStmt assign to step) =
   -- For code: 0xF1A5
   -- To code: 0xF1B1
   -- Step code: 0xF1AD
-  -- Then code: 0xF1AE
   [0xF1, 0xA5]
     ++ translateAssignment assign
     ++ [0xF1, 0xB1] -- "TO"
@@ -399,12 +401,21 @@ translateStmt RadianStmt =
 -- First we put the word16 line number in two adjacent bytes, then the length of the line in bytes,
 -- then the translated statements, and we end with a carriage return byte (0x0D).
 translateLine :: Line BasicType -> [Word8]
-translateLine Line {lineNumber, lineLabel = _, lineStmts} =
+translateLine Line {lineNumber, lineLabel, lineStmts} =
   let lineNumBytes = [fromIntegral (lineNumber `div` 256), fromIntegral (lineNumber `mod` 256)]
-      stmtsBytes = concatMap translateStmt lineStmts
-      lengthBytes = [fromIntegral (length stmtsBytes)]
-      carriageReturnByte = [0x0D] -- Carriage return byte
-   in lineNumBytes ++ lengthBytes ++ stmtsBytes ++ carriageReturnByte
+      totalLine = labelBytes ++ stmtsBytes ++ carriageReturnByte
+        where
+          labelBytes =
+            maybe
+              []
+              ( \lbl ->
+                  [fromIntegral (fromEnum '"')] ++ map (fromIntegral . fromEnum) lbl ++ [fromIntegral (fromEnum '"')]
+              )
+              lineLabel
+          stmtsBytes = intercalate [fromIntegral (fromEnum ':')] (translateStmt <$> lineStmts)
+          carriageReturnByte = [0x0D] -- Carriage return byte
+      lengthBytes = [fromIntegral (length totalLine)]
+   in lineNumBytes ++ lengthBytes ++ totalLine
 
 -- At the end of the program we add a 0xFF byte to indicate the end of the program.
 translateProgram :: Program BasicType -> [Word8]

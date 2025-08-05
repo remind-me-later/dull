@@ -5,10 +5,11 @@ where
 
 import Ast.Types
 import Control.Applicative (Alternative (many, (<|>)), optional)
-import Control.Monad (when)
+import Data.Foldable (find)
 import Data.Functor (($>))
+import Data.List (isSuffixOf)
 import Data.Map qualified
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes, isJust, listToMaybe)
 import Data.Word (Word16)
 import Text.Parsec
   ( Parsec,
@@ -24,6 +25,7 @@ import Text.Parsec
     string,
     try,
   )
+import Text.Parsec.Combinator (count)
 
 type Parser = Parsec String ()
 
@@ -88,36 +90,46 @@ keyword kw = Ast.Parser.lex $ string kw
 symbol :: Char -> Parser Char
 symbol sym = Ast.Parser.lex $ char sym
 
+ambiguousKeywords :: [String]
+ambiguousKeywords =
+  [ "AND",
+    "OR",
+    "NOT",
+    "IF",
+    "THEN",
+    "ELSE",
+    "FOR",
+    "TO",
+    "STEP",
+    "NEXT",
+    "LF",
+    "IF",
+    "LN",
+    "PI",
+    "TO"
+  ]
+
 ident :: Parser Ident
 ident = Ast.Parser.lex $ do
   -- Look ahead to see the next 3 characters
-  lookahead <- try (lookAhead (many (satisfy (`elem` ['A' .. 'Z']))))
+  lookahead <- lookAhead (many (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9'])))
 
-  when
-    (lookahead == "OR")
-    (fail "Identifier cannot be 'OR'")
-
+  let (hasAmbiguousSuffix, identLength) =
+        case find (`isSuffixOf` lookahead) ambiguousKeywords of
+          Just kw -> (True, length lookahead - length kw)
+          Nothing -> (False, 2) -- default length for identifiers
   firstChar <- satisfy (`elem` ['A' .. 'Z'])
+  rest <- case hasAmbiguousSuffix of
+    True -> count (identLength - 1) (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
+    False -> many (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
 
-  -- If we have 3 or more uppercase letters, only parse the first
-  if length lookahead >= 3
-    then do
-      return
-        Ident
-          { identName1 = firstChar,
-            identName2 = Nothing,
-            identHasDollar = False
-          }
-    else do
-      -- Normal parsing for 1-2 characters
-      secondChar <- optional (satisfy (`elem` ['A' .. 'Z'] ++ ['0' .. '9']))
-      dollar <- optional (char '$')
-      return
-        Ident
-          { identName1 = firstChar,
-            identName2 = secondChar,
-            identHasDollar = isJust dollar
-          }
+  dollar <- optional (char '$')
+  return
+    Ident
+      { identName1 = firstChar,
+        identName2 = listToMaybe rest,
+        identHasDollar = isJust dollar
+      }
 
 pseudoVariable :: Parser PseudoVariable
 pseudoVariable =
@@ -630,9 +642,12 @@ usingStmt = do
 
 comment :: Parser RawStmt
 comment = do
-  _ <- keyword "REM"
-  _ <- many (satisfy (/= '\n'))
-  return Comment
+  -- Don't skip whitespace, so don't use the 'keyword' function
+  _ <- string "REM "
+  -- Parse until end of line, and remove line end
+  content <- many (satisfy (not . (`elem` ['\n', '\r'])))
+  _ <- sc -- Consume any trailing whitespace
+  return Comment {commentText = content}
 
 beepOptionalParamsP :: Parser (BeepOptionalParams ())
 beepOptionalParamsP = do

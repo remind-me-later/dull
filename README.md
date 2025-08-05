@@ -13,7 +13,7 @@
 | dames                  | [ ]    | Printer commands missing               |
 | decathlon              | [ ]    | Printer commands missing               |
 | donkey_kong            | [x]    |                                        |
-| dungeonquest           | [x]    |                                        |
+| DungeonQuest           | [x]    |                                        |
 | formula1               | [x]    |                                        |
 | ghosthouse             | [x]    |                                        |
 | invader                | [x]    |                                        |
@@ -41,5 +41,6 @@
 
 ## Thanks
 
+[Sharp PC-1500 (TRS-80 PC-2) resource page](http://www.pc1500.com/)
 [Sharp_PC-1500_ROM_Disassembly](https://github.com/Jeff-Birt/Sharp_PC-1500_ROM_Disassembly)
 [Sharp_CE-158](https://github.com/Jeff-Birt/Sharp_CE-158)

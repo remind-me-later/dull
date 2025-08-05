@@ -8,6 +8,7 @@ where
 import Ast.Parser (parseProgram)
 import Ast.SemanticAnalysis (analyzeProgram)
 import Ast.Types (Program)
+import ComHeader (prependComHeader)
 import Control.Exception (SomeException)
 import Data.Word (Word8)
 import SymbolTable (SymbolTable)
@@ -37,7 +38,9 @@ compileProgram fileName contents =
           -- Stage 2: Type check and semantic analysis
           let (prog', finalState) = analyzeProgram prog
           -- Stage 3: Translation to bytecode
-          let translatedBytes = translateProgram prog'
+          let fileStem =
+                takeWhile (/= '.') (reverse (takeWhile (/= '/') (reverse fileName)))
+          let translatedBytes = prependComHeader (translateProgram prog') fileStem
           return $
             Right $
               CompilationResult

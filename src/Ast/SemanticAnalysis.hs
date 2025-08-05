@@ -517,7 +517,7 @@ analyzeStmt (InputStmt inputPrintExpr inputDestination) = do
   (analyzedLValue, _) <- analyzeLValue inputDestination
   return (InputStmt {inputPrintExpr = inputPrintExpr, inputDestination = analyzedLValue})
 analyzeStmt EndStmt = return EndStmt
-analyzeStmt Comment = return Comment
+analyzeStmt Comment {commentText} = return Comment {commentText = commentText}
 analyzeStmt (ForStmt forAssignment forToExpr stepExpr) = do
   forType <- analyzeAssignment forAssignment
   toType <- analyzeExpr forToExpr

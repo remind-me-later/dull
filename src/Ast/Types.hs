@@ -606,7 +606,10 @@ data Stmt et where
     } ->
     Stmt et
   EndStmt :: Stmt et
-  Comment :: Stmt et
+  Comment ::
+    { commentText :: String -- The text of the comment
+    } ->
+    Stmt et
   ForStmt ::
     { forAssignment :: Assignment et,
       forToExpr :: Expr et,
@@ -705,10 +708,10 @@ instance Show (Stmt et) where
   show (IfThenStmt cond s) =
     "IF "
       ++ show cond
+      ++ " THEN "
       ++ case s of
-        LetStmt letStmt -> " " ++ showLetStmt True letStmt
-        GoToStmt l -> " " ++ show l
-        _ -> " " ++ show s
+        LetStmt letStmt -> showLetStmt True letStmt
+        _ -> show s
   show (PrintStmt {printCommaFormat}) = "PRINT " ++ maybe "" show printCommaFormat
   show (PauseStmt {pauseCommaFormat}) = "PAUSE " ++ maybe "" show pauseCommaFormat
   show (UsingStmt usingClause) = show usingClause
@@ -717,7 +720,7 @@ instance Show (Stmt et) where
       ++ maybe "" (\e -> show e ++ ";") maybePrintExpr
       ++ show me
   show EndStmt = "END"
-  show Comment = "REM"
+  show (Comment text) = "REM " ++ text
   show (ForStmt assign to step) =
     "FOR " ++ show assign ++ " TO " ++ show to ++ case step of
       Just s -> " STEP " ++ show s
