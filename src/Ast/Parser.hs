@@ -8,15 +8,15 @@ import Control.Applicative (Alternative (many, (<|>)), optional)
 import Control.Monad (when)
 import Data.Functor (($>))
 import Data.Map qualified
-import Data.Maybe (isJust)
+import Data.Maybe (catMaybes, isJust)
 import Data.Word (Word16)
 import Text.Parsec
-  ( ParsecT,
+  ( Parsec,
     char,
     eof,
     lookAhead,
     many1,
-    runParserT,
+    runParser,
     satisfy,
     sepBy,
     sepBy1,
@@ -25,7 +25,7 @@ import Text.Parsec
     try,
   )
 
-type Parser = ParsecT String () IO
+type Parser = Parsec String ()
 
 -- space consumer
 -- New lines have semantic meaning in BASIC, so we don't consume them
@@ -836,14 +836,7 @@ line = do
   lineLabel <- optional (stringLiteral <* many (symbol ':'))
   lineStmts <- optional (stmt False) `sepBy` many1 (symbol ':')
   _ <- newline
-  let lineStmts' =
-        map
-          ( \x -> case x of
-              Just stmt' -> stmt'
-              Nothing -> error "Unexpected empty statement in line"
-          )
-          (filter isJust lineStmts)
-  return Line {lineNumber, lineLabel, lineStmts = lineStmts'}
+  return Line {lineNumber, lineLabel, lineStmts = catMaybes lineStmts}
 
 program :: Parser RawProgram
 program = do
@@ -853,9 +846,8 @@ program = do
   let lineMap = foldr (\l acc -> Data.Map.insert (lineNumber l) l acc) Data.Map.empty lines'
   return (Program lineMap)
 
-parseProgram :: String -> String -> IO (Either String RawProgram)
-parseProgram fileName contents = do
-  result <- runParserT program () fileName contents
-  case result of
-    Left err -> return (Left (show err))
-    Right prog -> return (Right prog)
+parseProgram :: String -> String -> Either String RawProgram
+parseProgram fileName contents =
+  case runParser program () fileName contents of
+    Left err -> Left (show err)
+    Right prog -> Right prog

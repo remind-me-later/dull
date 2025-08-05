@@ -82,7 +82,7 @@ main = do
     putStrLn $
       "Compiling: " ++ optInputFile opts'
 
-  result <- compileProgram (optInputFile opts') contents
+  let result = compileProgram (optInputFile opts') contents
   case result of
     Left (ParseError err) -> do
       putStrLn $ "Parse error:\n" ++ err
