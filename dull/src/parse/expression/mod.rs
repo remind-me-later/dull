@@ -9,7 +9,7 @@ use crate::parse::expression::expr_inner::ExprInner;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Expr {
-    inner: ExprInner,
+    pub inner: ExprInner,
 }
 
 impl Expr {

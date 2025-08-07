@@ -11,8 +11,8 @@ pub enum BinaryOp {
     Neq,
     Lt,
     Gt,
-    Lte,
-    Gte,
+    Leq,
+    Geq,
     // Logical operations
     And,
     Or,
@@ -23,7 +23,7 @@ impl BinaryOp {
         match self {
             Self::Or => 1,
             Self::And => 2,
-            Self::Eq | Self::Neq | Self::Lt | Self::Gt | Self::Lte | Self::Gte => 3,
+            Self::Eq | Self::Neq | Self::Lt | Self::Gt | Self::Leq | Self::Geq => 3,
             Self::Add | Self::Sub => 4,
             Self::Mul | Self::Div => 5,
             Self::Exp => 6,
@@ -47,8 +47,8 @@ impl std::fmt::Display for BinaryOp {
             BinaryOp::Neq => write!(f, "<>"),
             BinaryOp::Lt => write!(f, "<"),
             BinaryOp::Gt => write!(f, ">"),
-            BinaryOp::Lte => write!(f, "<="),
-            BinaryOp::Gte => write!(f, ">="),
+            BinaryOp::Leq => write!(f, "<="),
+            BinaryOp::Geq => write!(f, ">="),
             BinaryOp::And => write!(f, "AND"),
             BinaryOp::Or => write!(f, "OR"),
         }

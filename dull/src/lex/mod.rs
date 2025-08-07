@@ -98,7 +98,7 @@ impl Iterator for Lexer<'_> {
             '<' => {
                 if self.input.peek() == Some(&'=') {
                     self.input.next();
-                    Some(Ok(Token::Symbol(Symbol::Lte)))
+                    Some(Ok(Token::Symbol(Symbol::Leq)))
                 } else if self.input.peek() == Some(&'>') {
                     self.input.next();
                     Some(Ok(Token::Symbol(Symbol::Neq)))
@@ -109,7 +109,7 @@ impl Iterator for Lexer<'_> {
             '>' => {
                 if self.input.peek() == Some(&'=') {
                     self.input.next();
-                    Some(Ok(Token::Symbol(Symbol::Gte)))
+                    Some(Ok(Token::Symbol(Symbol::Geq)))
                 } else {
                     Some(Ok(Token::Symbol(Symbol::Gt)))
                 }

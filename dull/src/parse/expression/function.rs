@@ -16,8 +16,8 @@ pub enum Function {
         string: Box<Expr>,
         length: Box<Expr>,
     },
-    Ascii {
-        argument: Box<Expr>,
+    Asc {
+        expr: Box<Expr>,
     },
     Point {
         position: Box<Expr>, // Returns the color of the pixel at the position
@@ -91,7 +91,7 @@ impl std::fmt::Display for Function {
             }
             Function::Left { string, length } => write!(f, "LEFT({string}, {length})"),
             Function::Right { string, length } => write!(f, "RIGHT({string}, {length})"),
-            Function::Ascii { argument } => write!(f, "ASC({argument})"),
+            Function::Asc { expr } => write!(f, "ASC({expr})"),
             Function::Point { position } => write!(f, "POINT {position}"),
             Function::Rnd { range_end } => write!(f, "RND {range_end}"),
             Function::Int { expr } => write!(f, "INT {expr}"),

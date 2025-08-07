@@ -154,11 +154,11 @@ impl std::fmt::Display for LPrintInner {
     }
 }
 
-pub struct LetStatement {
+pub struct LetInner {
     pub assignments: Vec<Assignment>,
 }
 
-impl LetStatement {
+impl LetInner {
     pub fn show_with_context(&self, is_mandatory_let: bool) -> String {
         if is_mandatory_let {
             format!(
@@ -179,19 +179,21 @@ impl LetStatement {
     }
 }
 pub enum Statement {
-    Let(LetStatement),
+    Let {
+        inner: LetInner,
+    },
     If {
         condition: Expr,
         then_stmt: Box<Statement>,
     },
     Print {
-        print_inner: PrintInner,
+        inner: PrintInner,
     },
     Pause {
-        pause_inner: PrintInner,
+        inner: PrintInner,
     },
     LPrint {
-        lprint_inner: LPrintInner,
+        inner: LPrintInner,
     },
     Using {
         using_clause: UsingClause,
@@ -290,17 +292,19 @@ pub enum Statement {
 impl std::fmt::Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Statement::Let(stmt) => write!(f, "{}", stmt.show_with_context(false)),
+            Statement::Let { inner } => write!(f, "{}", inner.show_with_context(false)),
             Statement::If {
                 condition,
                 then_stmt,
             } => match then_stmt.as_ref() {
-                Statement::Let(l) => write!(f, "IF {condition} THEN {}", l.show_with_context(true)),
+                Statement::Let { inner } => {
+                    write!(f, "IF {condition} THEN {}", inner.show_with_context(true))
+                }
                 _ => write!(f, "IF {condition} THEN {then_stmt}"),
             },
-            Statement::Print { print_inner } => write!(f, "PRINT {print_inner}"),
-            Statement::Pause { pause_inner } => write!(f, "PAUSE {pause_inner}"),
-            Statement::LPrint { lprint_inner } => write!(f, "LPRINT {lprint_inner}"),
+            Statement::Print { inner } => write!(f, "PRINT {inner}"),
+            Statement::Pause { inner } => write!(f, "PAUSE {inner}"),
+            Statement::LPrint { inner } => write!(f, "LPRINT {inner}"),
             Statement::Using { using_clause } => write!(f, "{using_clause}"),
             Statement::Input { input_exprs } => {
                 let inputs = input_exprs

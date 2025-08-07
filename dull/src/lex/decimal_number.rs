@@ -99,7 +99,7 @@ impl DecimalNumber {
     }
 
     // If the decimal number is a whole number, convert it to an integer
-    pub fn into_integer(self) -> Option<i64> {
+    pub fn into_integer(&self) -> Option<i64> {
         // Handle zero case
         if self.is_zero() {
             return Some(0);
