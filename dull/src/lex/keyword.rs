@@ -138,6 +138,7 @@ impl Keyword {
         "PI", "TO",
     ];
 
+    #[allow(dead_code)]
     pub const fn internal_code(&self) -> u16 {
         match self {
             Keyword::Abs => 0xF170,

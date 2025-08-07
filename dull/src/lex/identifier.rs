@@ -25,6 +25,49 @@ impl Identifier {
     }
 }
 
+impl std::str::FromStr for Identifier {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = s.as_bytes();
+
+        if bytes.is_empty() {
+            return Err("Invalid empty identifier");
+        }
+
+        // Check if first character is alphabetic
+        if !bytes[0].is_ascii_alphabetic() {
+            return Err("Invalid first character for identifier");
+        }
+
+        match bytes.len() {
+            1 => {
+                // Single character identifier
+                Identifier::new(bytes[0], None, false).ok_or("Invalid single character identifier")
+            }
+            2 => {
+                if bytes[1] == b'$' {
+                    Identifier::new(bytes[0], None, true).ok_or("Invalid identifier ending with $")
+                } else if bytes[1].is_ascii_alphanumeric() {
+                    Identifier::new(bytes[0], Some(bytes[1]), false)
+                        .ok_or("Invalid second character for identifier")
+                } else {
+                    Err("Invalid second character for identifier")
+                }
+            }
+            3 => {
+                if bytes[2] == b'$' && bytes[1].is_ascii_alphanumeric() {
+                    Identifier::new(bytes[0], Some(bytes[1]), true)
+                        .ok_or("Invalid identifier ending with $")
+                } else {
+                    Err("Invalid 3-character pattern")
+                }
+            }
+            _ => Err("Invalid identifier length"),
+        }
+    }
+}
+
 impl std::fmt::Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let printable_char1 = char::from_u32(u32::from(self.char1.get())).ok_or(std::fmt::Error)?;
@@ -37,5 +80,41 @@ impl std::fmt::Display for Identifier {
             write!(f, "$")?;
         }
         Ok(())
+    }
+}
+
+// data PseudoVariable where
+//   TimePseudoVar :: PseudoVariable
+//   InkeyPseudoVar :: PseudoVariable -- Read only
+//   deriving (Eq)
+
+// instance Show PseudoVariable where
+//   show TimePseudoVar = "TIME"
+//   show InkeyPseudoVar = "INKEY$"
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltInIdentifier {
+    Time,
+    Inkey,
+}
+
+impl std::fmt::Display for BuiltInIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuiltInIdentifier::Time => write!(f, "TIME"),
+            BuiltInIdentifier::Inkey => write!(f, "INKEY$"),
+        }
+    }
+}
+
+impl std::str::FromStr for BuiltInIdentifier {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "TIME" => Ok(BuiltInIdentifier::Time),
+            "INKEY$" => Ok(BuiltInIdentifier::Inkey),
+            _ => Err("Not a built-in identifier"),
+        }
     }
 }

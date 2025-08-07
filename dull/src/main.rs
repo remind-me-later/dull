@@ -1,4 +1,5 @@
 mod lex;
+mod parse;
 
 use crate::lex::{Lexer, Token};
 use clap::Parser;

@@ -1,9 +1,10 @@
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Symbol {
     Add,
     Sub,
     Mul,
     Div,
+    Caret,
     Eq,
     Neq,
     Lt,
@@ -25,6 +26,7 @@ impl std::fmt::Display for Symbol {
             Symbol::Sub => write!(f, "-"),
             Symbol::Mul => write!(f, "*"),
             Symbol::Div => write!(f, "/"),
+            Symbol::Caret => write!(f, "^"),
             Symbol::Eq => write!(f, "="),
             Symbol::Neq => write!(f, "<>"),
             Symbol::Lt => write!(f, "<"),

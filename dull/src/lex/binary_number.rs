@@ -2,13 +2,25 @@
 pub struct BinaryNumber {
     value: u16,
 }
+
 impl BinaryNumber {
     pub fn new(value: u16) -> Self {
         BinaryNumber { value }
     }
+}
 
-    pub fn value(&self) -> u16 {
-        self.value
+impl std::str::FromStr for BinaryNumber {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(hex_str) = s.strip_prefix("&") {
+            let value =
+                u16::from_str_radix(hex_str, 16).map_err(|_| "Invalid hex number format")?;
+
+            Ok(BinaryNumber::new(value))
+        } else {
+            Err("Binary number must start with '&'")
+        }
     }
 }
 

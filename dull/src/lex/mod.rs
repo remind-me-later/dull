@@ -1,10 +1,12 @@
-mod binary_number;
-mod decimal_number;
-mod identifier;
-mod keyword;
-mod symbol;
+pub mod binary_number;
+pub mod decimal_number;
+pub mod identifier;
+pub mod keyword;
+pub mod symbol;
 
 use std::iter::Peekable;
+
+use crate::lex::identifier::BuiltInIdentifier;
 
 use self::{
     binary_number::BinaryNumber, decimal_number::DecimalNumber, identifier::Identifier,
@@ -16,6 +18,7 @@ pub enum Token {
     Keyword(Keyword),
     Symbol(Symbol),
     Identifier(Identifier),
+    BuiltInIdentifier(BuiltInIdentifier),
     DecimalNumber(DecimalNumber),
     BinaryNumber(BinaryNumber),
     StringLiteral(String),
@@ -32,6 +35,7 @@ impl std::fmt::Display for Token {
             Token::BinaryNumber(binary_number) => write!(f, "{binary_number}"),
             Token::StringLiteral(string_literal) => write!(f, "\"{string_literal}\""),
             Token::Remark(remark) => write!(f, "REM {remark}"),
+            Token::BuiltInIdentifier(built_in) => write!(f, "{built_in}"),
         }
     }
 }
@@ -47,41 +51,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn parse_identifier(&self, word: &str) -> Option<Token> {
-        let bytes = word.as_bytes();
-
-        if bytes.is_empty() || bytes.len() > 3 {
-            return None; // Invalid identifier length
+    fn parse_identifier(&self, word: &str) -> Result<Token, &'static str> {
+        // try to parse a built-in identifier first
+        if let Ok(built_in) = word.parse::<BuiltInIdentifier>() {
+            return Ok(Token::BuiltInIdentifier(built_in));
         }
 
-        // Check if first character is alphabetic
-        if !bytes[0].is_ascii_alphabetic() {
-            return None;
-        }
-
-        match bytes.len() {
-            1 => {
-                // Single character identifier
-                Identifier::new(bytes[0], None, false).map(Token::Identifier)
-            }
-            2 => {
-                if bytes[1] == b'$' {
-                    Identifier::new(bytes[0], None, true).map(Token::Identifier)
-                } else if bytes[1].is_ascii_alphanumeric() {
-                    Identifier::new(bytes[0], Some(bytes[1]), false).map(Token::Identifier)
-                } else {
-                    None // Invalid second character
-                }
-            }
-            3 => {
-                if bytes[2] == b'$' && bytes[1].is_ascii_alphanumeric() {
-                    Identifier::new(bytes[0], Some(bytes[1]), true).map(Token::Identifier)
-                } else {
-                    None // Invalid 3-character pattern
-                }
-            }
-            _ => None,
-        }
+        // If not a built-in identifier, try to parse a regular identifier
+        word.parse::<Identifier>().map(Token::Identifier)
     }
 }
 
@@ -109,6 +86,7 @@ impl Iterator for Lexer<'_> {
             '-' => Some(Ok(Token::Symbol(Symbol::Sub))),
             '*' => Some(Ok(Token::Symbol(Symbol::Mul))),
             '/' => Some(Ok(Token::Symbol(Symbol::Div))),
+            '^' => Some(Ok(Token::Symbol(Symbol::Caret))),
             ',' => Some(Ok(Token::Symbol(Symbol::Comma))),
             ';' => Some(Ok(Token::Symbol(Symbol::Semicolon))),
             ':' => Some(Ok(Token::Symbol(Symbol::Colon))),
@@ -161,14 +139,11 @@ impl Iterator for Lexer<'_> {
                     }
                 }
 
-                if hex_digits.is_empty() {
-                    // Just a standalone '&', treat as invalid for now
-                    None
-                } else if let Ok(value) = u16::from_str_radix(&hex_digits, 16) {
-                    Some(Ok(Token::BinaryNumber(BinaryNumber::new(value))))
-                } else {
-                    None // Invalid hex number
-                }
+                hex_digits
+                    .parse::<BinaryNumber>()
+                    .map(Token::BinaryNumber)
+                    .ok()
+                    .map(Ok)
             }
 
             // Numbers (decimal)
@@ -204,17 +179,11 @@ impl Iterator for Lexer<'_> {
                     }
                 }
 
-                if let Ok(value) = number_str.parse::<f64>() {
-                    if let Ok(decimal_num) = DecimalNumber::new(value) {
-                        Some(Ok(Token::DecimalNumber(decimal_num)))
-                    } else {
-                        println!("Number out of range");
-                        None // Number out of range
-                    }
-                } else {
-                    println!("Invalid number format");
-                    None // Invalid number format
-                }
+                number_str
+                    .parse::<DecimalNumber>()
+                    .map(Token::DecimalNumber)
+                    .ok()
+                    .map(Ok)
             }
 
             // Identifiers and keywords
@@ -229,7 +198,7 @@ impl Iterator for Lexer<'_> {
                 {
                     let cloned_iter = self.input.clone();
                     for next_ch in cloned_iter {
-                        if next_ch.is_ascii_alphanumeric() || next_ch == '$' {
+                        if next_ch.is_ascii_alphanumeric() || next_ch == '$' || next_ch == '#' {
                             word.push(next_ch.to_ascii_uppercase());
                         } else {
                             break;
