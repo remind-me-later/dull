@@ -27,18 +27,6 @@ pub enum LValue {
     },
 }
 
-// instance Show (LValue et) where
-//   show (LValueIdent ident) = show ident
-//   show (LValueArrayAccess ident index) =
-//     show ident ++ "(" ++ show index ++ ")"
-//   show (LValue2DArrayAccess ident rowIndex colIndex) =
-//     show ident ++ "(" ++ show rowIndex ++ "," ++ show colIndex ++ ")"
-//   show (LValuePseudoVar pseudoVar) = show pseudoVar
-//   show (LValueFixedMemoryAreaVar idx hasDollar) =
-//     if hasDollar
-//       then "@$(" ++ show idx ++ ")"
-//       else "@(" ++ show idx ++ ")"
-
 impl std::fmt::Display for LValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -13,7 +13,7 @@ use self::{
     keyword::Keyword, symbol::Symbol,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Keyword(Keyword),
     Symbol(Symbol),
@@ -86,7 +86,7 @@ impl Iterator for Lexer<'_> {
             '-' => Some(Ok(Token::Symbol(Symbol::Sub))),
             '*' => Some(Ok(Token::Symbol(Symbol::Mul))),
             '/' => Some(Ok(Token::Symbol(Symbol::Div))),
-            '^' => Some(Ok(Token::Symbol(Symbol::Caret))),
+            '^' => Some(Ok(Token::Symbol(Symbol::Exp))),
             ',' => Some(Ok(Token::Symbol(Symbol::Comma))),
             ';' => Some(Ok(Token::Symbol(Symbol::Semicolon))),
             ':' => Some(Ok(Token::Symbol(Symbol::Colon))),
@@ -114,6 +114,8 @@ impl Iterator for Lexer<'_> {
                     Some(Ok(Token::Symbol(Symbol::Gt)))
                 }
             }
+            '@' => Some(Ok(Token::Symbol(Symbol::At))),
+            '$' => Some(Ok(Token::Symbol(Symbol::Dollar))),
 
             // String literals
             '"' => {

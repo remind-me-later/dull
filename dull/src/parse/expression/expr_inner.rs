@@ -7,22 +7,22 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprInner {
-    UnaryExpr(UnaryOp, Box<Expr>),
-    BinExpr(Box<Expr>, BinaryOp, Box<Expr>),
-    DecNumLitExpr(DecimalNumber),
-    HexNumLitExpr(BinaryNumber),
-    LValueExpr(LValue),
-    StrLitExpr(String),
-    FunCallExpr(Function),
+    Unary(UnaryOp, Box<Expr>),
+    Binary(Box<Expr>, BinaryOp, Box<Expr>),
+    DecimalNumber(DecimalNumber),
+    BinaryNumber(BinaryNumber),
+    LValue(LValue),
+    StringLiteral(String),
+    FunctionCall(Function),
 }
 
 impl ExprInner {
     pub fn show_with_context(&self, parent_prec: u8, is_right_side: bool) -> String {
         match self {
-            ExprInner::UnaryExpr(op, expr) => {
+            ExprInner::Unary(op, expr) => {
                 format!("{}{}", op, expr.show_with_context(7, false)) // Unary has highest precedence
             }
-            ExprInner::BinExpr(left, op, right) => {
+            ExprInner::Binary(left, op, right) => {
                 let my_prec = op.precedence();
                 // Everything is left associative except for OR and AND
                 // If the operator is not associative, we don't need parentheses
@@ -42,11 +42,11 @@ impl ExprInner {
                     result
                 }
             }
-            ExprInner::DecNumLitExpr(n) => n.to_string(),
-            ExprInner::HexNumLitExpr(h) => h.to_string(),
-            ExprInner::LValueExpr(lval) => lval.to_string(),
-            ExprInner::StrLitExpr(s) => format!("\"{s}\""),
-            ExprInner::FunCallExpr(f) => f.to_string(),
+            ExprInner::DecimalNumber(n) => n.to_string(),
+            ExprInner::BinaryNumber(h) => h.to_string(),
+            ExprInner::LValue(lval) => lval.to_string(),
+            ExprInner::StringLiteral(s) => format!("\"{s}\""),
+            ExprInner::FunctionCall(f) => f.to_string(),
         }
     }
 }
@@ -54,15 +54,15 @@ impl ExprInner {
 impl std::fmt::Display for ExprInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExprInner::UnaryExpr(op, expr) => write!(f, "{op}{}", expr.show_with_context(7, false)),
-            e @ ExprInner::BinExpr(..) => {
+            ExprInner::Unary(op, expr) => write!(f, "{op}{}", expr.show_with_context(7, false)),
+            e @ ExprInner::Binary(..) => {
                 write!(f, "{}", e.show_with_context(0, false))
             }
-            ExprInner::DecNumLitExpr(n) => write!(f, "{n}"),
-            ExprInner::HexNumLitExpr(h) => write!(f, "{h}"),
-            ExprInner::LValueExpr(lval) => write!(f, "{lval}"),
-            ExprInner::StrLitExpr(s) => write!(f, "\"{s}\""),
-            ExprInner::FunCallExpr(function) => write!(f, "{function}"),
+            ExprInner::DecimalNumber(n) => write!(f, "{n}"),
+            ExprInner::BinaryNumber(h) => write!(f, "{h}"),
+            ExprInner::LValue(lval) => write!(f, "{lval}"),
+            ExprInner::StringLiteral(s) => write!(f, "\"{s}\""),
+            ExprInner::FunctionCall(function) => write!(f, "{function}"),
         }
     }
 }

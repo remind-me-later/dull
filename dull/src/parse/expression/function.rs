@@ -74,7 +74,7 @@ pub enum Function {
     Sin {
         expr: Box<Expr>,
     },
-    Sqrt {
+    Sqr {
         expr: Box<Expr>, // The numeric expression to get the square root of
     },
 }
@@ -119,7 +119,7 @@ impl std::fmt::Display for Function {
             Function::Tan { expr } => write!(f, "TAN {expr}"),
             Function::Cos { expr } => write!(f, "COS {expr}"),
             Function::Sin { expr } => write!(f, "SIN {expr}"),
-            Function::Sqrt { expr } => write!(f, "√{expr}"),
+            Function::Sqr { expr } => write!(f, "√{expr}"),
         }
     }
 }

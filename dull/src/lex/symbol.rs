@@ -4,7 +4,7 @@ pub enum Symbol {
     Sub,
     Mul,
     Div,
-    Caret,
+    Exp,
     Eq,
     Neq,
     Lt,
@@ -14,6 +14,8 @@ pub enum Symbol {
     Comma,
     Semicolon,
     Colon,
+    At,
+    Dollar,
     LParen,
     RParen,
     Newline, // Newlines have meaning in BASIC
@@ -26,7 +28,7 @@ impl std::fmt::Display for Symbol {
             Symbol::Sub => write!(f, "-"),
             Symbol::Mul => write!(f, "*"),
             Symbol::Div => write!(f, "/"),
-            Symbol::Caret => write!(f, "^"),
+            Symbol::Exp => write!(f, "^"),
             Symbol::Eq => write!(f, "="),
             Symbol::Neq => write!(f, "<>"),
             Symbol::Lt => write!(f, "<"),
@@ -39,6 +41,8 @@ impl std::fmt::Display for Symbol {
             Symbol::LParen => write!(f, "("),
             Symbol::RParen => write!(f, ")"),
             Symbol::Newline => write!(f, "\\n"),
+            Symbol::At => write!(f, "@"),
+            Symbol::Dollar => write!(f, "$"),
         }
     }
 }

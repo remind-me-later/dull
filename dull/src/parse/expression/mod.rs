@@ -13,6 +13,10 @@ pub struct Expr {
 }
 
 impl Expr {
+    pub fn new(inner: ExprInner) -> Self {
+        Self { inner }
+    }
+
     pub fn show_with_context(&self, parent_prec: u8, is_right_side: bool) -> String {
         self.inner.show_with_context(parent_prec, is_right_side)
     }
