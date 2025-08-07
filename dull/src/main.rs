@@ -63,7 +63,7 @@ fn main() {
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens.into_iter());
         let program = parser.parse();
-        println!("{program}");
+        print!("{program}");
     } else {
         // Just output the tokens
         for (i, token) in tokens.iter().enumerate() {

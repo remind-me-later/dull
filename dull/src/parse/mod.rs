@@ -556,7 +556,6 @@ where
     }
 
     fn parse_print_inner(&mut self) -> Option<PrintInner> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Print))?;
         let mut exprs = Vec::new();
 
         loop {
@@ -652,6 +651,14 @@ where
                     }
                 }
 
+                // Parse line end or EOF
+                let newline = self.tokens.next_if_eq(&Token::Symbol(Symbol::Newline));
+                let eof = self.tokens.next_if_eq(&Token::Symbol(Symbol::Eof));
+
+                if newline.is_none() && eof.is_none() {
+                    panic!("Expected newline or EOF at the end of line {line_number}");
+                }
+
                 Some(Line {
                     label,
                     number: line_number,
@@ -680,18 +687,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lex::{Lexer, decimal_number::DecimalNumber};
+    use crate::lex::Lexer;
 
     fn parse_expression_from_str(input: &str) -> Option<Expr> {
         let lexer = Lexer::new(input);
         let tokens: Vec<Token> = lexer.filter_map(|result| result.ok()).collect();
         let mut parser = Parser::new(tokens.into_iter());
         parser.parse_expression()
-    }
-
-    // Helper to create a decimal number from an i64
-    fn decimal_from_int(value: i64) -> DecimalNumber {
-        DecimalNumber::new(0, value).expect("Valid decimal number")
     }
 
     #[test]

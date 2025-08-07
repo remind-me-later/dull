@@ -42,12 +42,14 @@ impl std::fmt::Display for Token {
 
 pub struct Lexer<'a> {
     input: Peekable<std::str::Chars<'a>>,
+    is_done: bool,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Lexer {
             input: input.chars().peekable(),
+            is_done: false,
         }
     }
 
@@ -75,7 +77,18 @@ impl Iterator for Lexer<'_> {
             }
         }
 
-        let ch = self.input.next()?;
+        let ch = self.input.next();
+
+        if ch.is_none() {
+            if self.is_done {
+                return None; // Already done
+            } else {
+                self.is_done = true;
+                return Some(Ok(Token::Symbol(Symbol::Eof))); // End of input
+            }
+        }
+
+        let ch = ch?;
 
         match ch {
             // Newlines are significant in BASIC

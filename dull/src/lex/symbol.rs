@@ -19,6 +19,7 @@ pub enum Symbol {
     LParen,
     RParen,
     Newline, // Newlines have meaning in BASIC
+    Eof,
 }
 
 impl std::fmt::Display for Symbol {
@@ -43,6 +44,7 @@ impl std::fmt::Display for Symbol {
             Symbol::Newline => write!(f, "\\n"),
             Symbol::At => write!(f, "@"),
             Symbol::Dollar => write!(f, "$"),
+            Symbol::Eof => write!(f, "EOF"),
         }
     }
 }
