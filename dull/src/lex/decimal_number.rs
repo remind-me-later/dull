@@ -2,7 +2,7 @@
 // In BCD, it has a 4-bit packed representation for each decimal digit,
 // an i8 exponent, and a sign byte.
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecimalNumber {
     exp: i8,
     sign: bool,        // true for positive, false for negative
