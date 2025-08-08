@@ -115,6 +115,7 @@ impl Iterator for Lexer<'_> {
             }
             '@' => Some(Ok(Token::Symbol(Symbol::At))),
             '$' => Some(Ok(Token::Symbol(Symbol::Dollar))),
+            '√' => Some(Ok(Token::Keyword(Keyword::Sqr))),
 
             // String literals
             '"' => {
@@ -130,7 +131,7 @@ impl Iterator for Lexer<'_> {
 
             // Binary numbers (hexadecimal with & prefix)
             '&' => {
-                let mut hex_digits = String::new();
+                let mut hex_digits = String::from("&");
                 while let Some(&ch) = self.input.peek() {
                     if ch.is_ascii_hexdigit() {
                         hex_digits.push(ch.to_ascii_uppercase());
@@ -140,11 +141,11 @@ impl Iterator for Lexer<'_> {
                     }
                 }
 
-                hex_digits
-                    .parse::<BinaryNumber>()
-                    .map(Token::BinaryNumber)
-                    .ok()
-                    .map(Ok)
+                Some(Ok(Token::BinaryNumber(
+                    hex_digits
+                        .parse::<BinaryNumber>()
+                        .unwrap_or_else(|_| panic!("Invalid binary number format: {hex_digits}")),
+                )))
             }
 
             // Numbers (decimal)
@@ -197,10 +198,17 @@ impl Iterator for Lexer<'_> {
                 // FOR I = BB TO 10
                 // So we need to read until we hit a non-alphanumeric character or a dollar sign
                 {
+                    // This logic is complex so we can handle identifiers next to keywords next to numbers,
+                    // for example IF B=AGOSUB3 => IF B=A GOSUB 3
                     let cloned_iter = self.input.clone();
-                    for next_ch in cloned_iter {
-                        if next_ch.is_ascii_alphanumeric() || next_ch == '$' || next_ch == '#' {
+                    for (i, next_ch) in cloned_iter.enumerate() {
+                        if (i < 1 && (next_ch.is_ascii_alphanumeric()))
+                            || next_ch.is_ascii_alphabetic()
+                        {
                             word.push(next_ch.to_ascii_uppercase());
+                        } else if next_ch == '$' || next_ch == '#' {
+                            word.push(next_ch.to_ascii_uppercase());
+                            break;
                         } else {
                             break;
                         }
@@ -264,7 +272,7 @@ impl Iterator for Lexer<'_> {
                     .unwrap()))
             }
 
-            _ => None, // Unknown character, skip or handle as error
+            _ => panic!("Unexpected character: {ch}"),
         }
     }
 }

@@ -134,7 +134,7 @@ impl Keyword {
         "SORGN", "TROFF", "USING", "ARUN", "BEEP", "CALL", "CHR$", "COM$", "CONT", "COPY", "DATA",
         "DEVS", "FEED", "GOTO", "GRAD", "LINE", "LIST", "LOCK", "MID$", "NEXT", "PEEK", "POKE",
         "READ", "STEP", "STOP", "STR$", "TEST", "TEXT", "THEN", "TIME", "TRON", "WAIT", "ZONE",
-        "ABS", "ACS", "AND", "ASC", "ASN", "ATN", "CLS", "COS", "DEC", "DIM", "DMS", "DTE", "END",
+        "ABS", "ACS", "AND", "ASC", "ASN", "ATN", "CLS", "COS", "DEG", "DIM", "DMS", "DTE", "END",
         "ERL", "ERR", "EXP", "FOR", "INT", "LEN", "LET", "LOG", "MEM", "NEW", "NOT", "OFF", "OPN",
         "REM", "RMT", "RND", "RUN", "SGN", "SIN", "SQR", "TAB", "TAN", "VAL", "LF", "IF", "LN",
         "ON", "OR", "PI", "TO",

@@ -20,14 +20,14 @@ mod line;
 mod program;
 mod statement;
 
-pub struct Parser<I>
+pub struct Parser<I: Clone>
 where
     I: Iterator<Item = Token>,
 {
     tokens: Peekable<I>,
 }
 
-impl<I> Parser<I>
+impl<I: Clone> Parser<I>
 where
     I: Iterator<Item = Token>,
 {
@@ -730,11 +730,11 @@ where
             return Some(stmt);
         }
 
-        if let Some(stmt) = self.parse_on_goto_gosub_stmt() {
+        if let Some(stmt) = self.parse_on_error_goto_stmt() {
             return Some(stmt);
         }
 
-        if let Some(stmt) = self.parse_on_error_goto_stmt() {
+        if let Some(stmt) = self.parse_on_goto_gosub_stmt() {
             return Some(stmt);
         }
 
@@ -850,16 +850,9 @@ where
         let condition = self.parse_expression()?;
         self.tokens.next_if_eq(&Token::Keyword(Keyword::Then)); // optional
         let then_stmt = self.parse_statement(true).or_else(|| {
-            // If no statement after THEN, check for a line number
-            if let Some(Token::DecimalNumber(line_number)) = self.tokens.peek() {
-                let line_number = *line_number;
-                self.tokens.next();
-                Some(Statement::Goto {
-                    target: Expr::new(ExprInner::DecimalNumber(line_number)),
-                })
-            } else {
-                None
-            }
+            // If no statement after THEN, check for an expression to jump to
+            self.parse_expression()
+                .map(|expr| Statement::Goto { target: expr })
         })?;
 
         Some(Statement::If {
@@ -998,9 +991,29 @@ where
     }
 
     fn parse_on_error_goto_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::On))?;
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Error))?;
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Goto))?;
+        {
+            let mut cloned_tokens = self.tokens.clone();
+
+            // Try to parse the whole ON ERROR GOTO or return without consuming anything
+            if cloned_tokens
+                .next_if_eq(&Token::Keyword(Keyword::On))
+                .is_none()
+                || cloned_tokens
+                    .next_if_eq(&Token::Keyword(Keyword::Error))
+                    .is_none()
+                || cloned_tokens
+                    .next_if_eq(&Token::Keyword(Keyword::Goto))
+                    .is_none()
+            {
+                return None;
+            }
+        }
+
+        // Consume the 3 tokens
+        self.tokens.next();
+        self.tokens.next();
+        self.tokens.next();
+
         let target = self.parse_expression()?;
         Some(Statement::OnErrorGoto { target })
     }
@@ -1688,6 +1701,196 @@ mod tests {
                 assert!(matches!(right.inner, ExprInner::LValue(_)));
             }
             _ => panic!("Expected AND at top level, got {expr:?}"),
+        }
+    }
+
+    #[test]
+    fn test_all_basic_files_parse_successfully() {
+        use std::fs;
+        use walkdir::WalkDir;
+
+        let test_dir = "test";
+        let mut files_tested = 0;
+        let mut files_failed = Vec::new();
+
+        // Walk through all .bas files in the test directory
+        for entry in WalkDir::new(test_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "bas"))
+        {
+            let file_path = entry.path();
+            let file_name = file_path.file_name().unwrap().to_string_lossy();
+
+            println!("Testing parsing of: {file_name}");
+
+            // Read the file content
+            let content = match fs::read_to_string(file_path) {
+                Ok(content) => content,
+                Err(e) => {
+                    files_failed.push(format!("{file_name}: Failed to read file - {e}"));
+                    files_tested += 1;
+                    continue;
+                }
+            };
+
+            // Create lexer and tokenize - also catch panics here
+            let tokenize_result = std::panic::catch_unwind(|| {
+                let lexer = crate::lex::Lexer::new(&content);
+                let mut tokens = Vec::new();
+
+                for token_result in lexer {
+                    match token_result {
+                        Ok(token) => tokens.push(token),
+                        Err(e) => return Err(format!("Tokenization failed - {e:?}")),
+                    }
+                }
+
+                Ok(tokens)
+            });
+
+            let tokens = match tokenize_result {
+                Ok(Ok(tokens)) => tokens,
+                Ok(Err(e)) => {
+                    files_failed.push(format!("{file_name}: {e}"));
+                    files_tested += 1;
+                    continue;
+                }
+                Err(panic_info) => {
+                    let panic_message = if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else {
+                        "Unknown panic during tokenization".to_string()
+                    };
+                    files_failed.push(format!("{file_name}: Tokenizer panicked - {panic_message}"));
+                    files_tested += 1;
+                    continue;
+                }
+            };
+
+            // Try to parse - catch panics to continue testing other files
+            let parse_result = std::panic::catch_unwind(|| {
+                let mut parser = Parser::new(tokens.into_iter());
+                parser.parse()
+            });
+
+            match parse_result {
+                Ok(program) => {
+                    // For now, we consider parsing successful if we get a Program back
+                    // and it has at least some lines (unless it's an empty file)
+                    if content.trim().is_empty() || !program.lines.is_empty() {
+                        println!(
+                            "  ✓ {} parsed successfully ({} lines)",
+                            file_name,
+                            program.lines.len()
+                        );
+                    } else {
+                        files_failed.push(format!(
+                            "{file_name}: Parsing produced empty program from non-empty file"
+                        ));
+                    }
+                }
+                Err(panic_info) => {
+                    let panic_message = if let Some(s) = panic_info.downcast_ref::<String>() {
+                        s.clone()
+                    } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else {
+                        "Unknown panic during parsing".to_string()
+                    };
+                    files_failed.push(format!("{file_name}: Parser panicked - {panic_message}"));
+                    println!("  ✗ {file_name} failed to parse");
+                }
+            }
+
+            files_tested += 1;
+        }
+
+        println!("\nSummary:");
+        println!("Files tested: {files_tested}");
+        println!("Files succeeded: {}", files_tested - files_failed.len());
+        println!("Files failed: {}", files_failed.len());
+
+        if !files_failed.is_empty() {
+            println!("\nFailed files:");
+            for failure in &files_failed {
+                println!("  ✗ {failure}");
+            }
+
+            // Print success rate
+            let success_rate =
+                ((files_tested - files_failed.len()) as f64 / files_tested as f64) * 100.0;
+            println!(
+                "\nSuccess rate: {:.1}% ({}/{} files)",
+                success_rate,
+                files_tested - files_failed.len(),
+                files_tested
+            );
+
+            panic!("Some BASIC files failed to parse. See details above.");
+        }
+
+        // Ensure we actually tested some files
+        assert!(files_tested > 0, "No BASIC files found in test directory");
+        println!("All {files_tested} BASIC files parsed successfully! 🎉");
+    }
+
+    /// Test individual files that are known to be problematic or interesting
+    #[test]
+    fn test_specific_basic_files() {
+        let test_cases = vec![
+            ("test/hello.bas", "Simple hello world program"),
+            ("test/fibonacci.bas", "Mathematical computation"),
+            // Add more specific test cases as needed
+        ];
+
+        for (file_path, description) in test_cases {
+            println!("Testing {file_path}: {description}");
+
+            if let Ok(content) = std::fs::read_to_string(file_path) {
+                let lexer = crate::lex::Lexer::new(&content);
+                let tokens: Vec<crate::lex::Token> =
+                    lexer.filter_map(|result| result.ok()).collect();
+                let mut parser = Parser::new(tokens.into_iter());
+                let program = parser.parse();
+
+                assert!(
+                    !program.lines.is_empty() || content.trim().is_empty(),
+                    "Failed to parse {file_path}: got empty program"
+                );
+
+                println!("  ✓ {file_path} parsed successfully");
+            } else {
+                panic!("Could not read test file: {file_path}");
+            }
+        }
+    }
+
+    /// Helper function to parse a complete BASIC program from string
+    fn parse_program_from_str(input: &str) -> program::Program {
+        let lexer = crate::lex::Lexer::new(input);
+        let tokens: Vec<crate::lex::Token> = lexer.filter_map(|result| result.ok()).collect();
+        let mut parser = Parser::new(tokens.into_iter());
+        parser.parse()
+    }
+
+    #[test]
+    fn test_simple_programs() {
+        // Test very basic programs to ensure our parser works for simple cases
+        let test_cases = vec![
+            ("10 END", "Single END statement"),
+            ("10 PRINT \"HELLO\"\n20 END", "Simple PRINT and END"),
+            ("10 REM This is a comment\n20 END", "Comment and END"),
+            ("10 LET X = 5\n20 END", "Assignment and END"),
+        ];
+
+        for (program_text, description) in test_cases {
+            println!("Testing: {description}");
+            let program = parse_program_from_str(program_text);
+            assert!(!program.lines.is_empty(), "Failed to parse: {description}");
+            println!("  ✓ {description} parsed successfully");
         }
     }
 }
