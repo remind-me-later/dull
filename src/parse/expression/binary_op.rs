@@ -1,3 +1,7 @@
+use smallvec::SmallVec;
+
+use crate::lex::keyword::Keyword;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
     // Arithmetic operations
@@ -28,6 +32,32 @@ impl BinaryOp {
             Self::Mul | Self::Div => 4,
             Self::Exp => 5,
         }
+    }
+
+    pub fn as_bytes(&self) -> SmallVec<[u8; 2]> {
+        let mut bytes = SmallVec::new();
+
+        match self {
+            BinaryOp::Add => bytes.push(b'+'),
+            BinaryOp::Sub => bytes.push(b'-'),
+            BinaryOp::Mul => bytes.push(b'*'),
+            BinaryOp::Div => bytes.push(b'/'),
+            BinaryOp::Exp => bytes.push(b'^'),
+            BinaryOp::Eq => bytes.push(b'='),
+            BinaryOp::Neq => bytes.extend_from_slice(b"<>"),
+            BinaryOp::Lt => bytes.extend_from_slice(b"<"),
+            BinaryOp::Gt => bytes.extend_from_slice(b">"),
+            BinaryOp::Leq => bytes.extend_from_slice(b"<="),
+            BinaryOp::Geq => bytes.extend_from_slice(b">="),
+            BinaryOp::And => {
+                bytes.extend_from_slice(Keyword::And.internal_code().to_le_bytes().as_slice())
+            }
+            BinaryOp::Or => {
+                bytes.extend_from_slice(Keyword::Or.internal_code().to_le_bytes().as_slice())
+            }
+        }
+
+        bytes
     }
 }
 

@@ -1,8 +1,10 @@
+mod error;
 mod header;
 mod lex;
 mod parse;
 mod semantic_analysis;
 
+use crate::error::{print_error, CompileError};
 use crate::lex::{Lexer, Token};
 use crate::parse::Parser;
 use crate::semantic_analysis::analyze_program;
@@ -35,11 +37,11 @@ fn main() {
     let args = Args::parse();
 
     // Get the input source
-    let input = match args.input {
+    let (input, filename) = match args.input {
         Some(file_path) => {
             // Read from file
             match fs::read_to_string(&file_path) {
-                Ok(content) => content,
+                Ok(content) => (content, file_path.display().to_string()),
                 Err(e) => {
                     eprintln!("Error reading file {}: {}", file_path.display(), e);
                     std::process::exit(1);
@@ -56,11 +58,12 @@ fn main() {
     let lexer = Lexer::new(&input);
     let mut tokens: Vec<Token> = vec![];
 
-    for token in lexer {
-        match token {
+    for token_result in lexer {
+        match token_result {
             Ok(token) => tokens.push(token),
-            Err(_) => {
-                eprintln!("Error tokenizing input");
+            Err(lex_error) => {
+                let compile_error = CompileError::from(lex_error);
+                print_error(&compile_error, &filename, &input);
                 std::process::exit(1);
             }
         }
@@ -76,8 +79,9 @@ fn main() {
                 println!("Semantic analysis completed successfully!");
                 println!("Symbol table: {symbol_table:#?}");
             }
-            Err(e) => {
-                eprintln!("Semantic analysis error: {e}");
+            Err(semantic_error) => {
+                let compile_error = CompileError::from(semantic_error);
+                print_error(&compile_error, &filename, &input);
                 std::process::exit(1);
             }
         }

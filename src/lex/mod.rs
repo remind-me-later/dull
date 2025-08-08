@@ -6,6 +6,7 @@ pub mod symbol;
 
 use std::iter::Peekable;
 
+use crate::error::{LexError, LexResult, Span};
 use self::{
     binary_number::BinaryNumber, decimal_number::DecimalNumber, identifier::Identifier,
     keyword::Keyword, symbol::Symbol,
@@ -38,6 +39,7 @@ impl std::fmt::Display for Token {
 
 pub struct Lexer<'a> {
     input: Peekable<std::str::Chars<'a>>,
+    position: usize,
     is_done: bool,
 }
 
@@ -45,25 +47,48 @@ impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Lexer {
             input: input.chars().peekable(),
+            position: 0,
             is_done: false,
         }
+    }
+    
+    fn advance(&mut self) -> Option<char> {
+        if let Some(ch) = self.input.next() {
+            self.position += 1;
+            Some(ch)
+        } else {
+            None
+        }
+    }
+    
+    fn peek(&mut self) -> Option<&char> {
+        self.input.peek()
+    }
+    
+    fn current_span(&self) -> Span {
+        Span::single(self.position)
+    }
+    
+    fn span_from(&self, start: usize) -> Span {
+        Span::new(start, self.position)
     }
 }
 
 impl Iterator for Lexer<'_> {
-    type Item = Result<Token, ()>;
+    type Item = LexResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Skip whitespace (except newlines which are significant in BASIC)
-        while let Some(&ch) = self.input.peek() {
+        while let Some(&ch) = self.peek() {
             if ch.is_whitespace() && ch != '\n' {
-                self.input.next();
+                self.advance();
             } else {
                 break;
             }
         }
 
-        let ch = self.input.next();
+        let start_pos = self.position;
+        let ch = self.advance();
 
         if ch.is_none() {
             if self.is_done {
@@ -95,19 +120,19 @@ impl Iterator for Lexer<'_> {
             // Comparison operators
             '=' => Some(Ok(Token::Symbol(Symbol::Eq))),
             '<' => {
-                if self.input.peek() == Some(&'=') {
-                    self.input.next();
+                if self.peek() == Some(&'=') {
+                    self.advance();
                     Some(Ok(Token::Symbol(Symbol::Leq)))
-                } else if self.input.peek() == Some(&'>') {
-                    self.input.next();
+                } else if self.peek() == Some(&'>') {
+                    self.advance();
                     Some(Ok(Token::Symbol(Symbol::Neq)))
                 } else {
                     Some(Ok(Token::Symbol(Symbol::Lt)))
                 }
             }
             '>' => {
-                if self.input.peek() == Some(&'=') {
-                    self.input.next();
+                if self.peek() == Some(&'=') {
+                    self.advance();
                     Some(Ok(Token::Symbol(Symbol::Geq)))
                 } else {
                     Some(Ok(Token::Symbol(Symbol::Gt)))
@@ -120,32 +145,44 @@ impl Iterator for Lexer<'_> {
             // String literals
             '"' => {
                 let mut string_content = String::new();
-                for ch in self.input.by_ref() {
+                let mut found_closing_quote = false;
+                
+                while let Some(ch) = self.advance() {
                     if ch == '"' {
+                        found_closing_quote = true;
                         break;
                     }
                     string_content.push(ch);
                 }
-                Some(Ok(Token::StringLiteral(string_content)))
+                
+                if !found_closing_quote {
+                    Some(Err(LexError::UnterminatedStringLiteral {
+                        span: self.span_from(start_pos)
+                    }))
+                } else {
+                    Some(Ok(Token::StringLiteral(string_content)))
+                }
             }
 
             // Binary numbers (hexadecimal with & prefix)
             '&' => {
                 let mut hex_digits = String::from("&");
-                while let Some(&ch) = self.input.peek() {
+                while let Some(&ch) = self.peek() {
                     if ch.is_ascii_hexdigit() {
                         hex_digits.push(ch.to_ascii_uppercase());
-                        self.input.next();
+                        self.advance();
                     } else {
                         break;
                     }
                 }
 
-                Some(Ok(Token::BinaryNumber(
-                    hex_digits
-                        .parse::<BinaryNumber>()
-                        .unwrap_or_else(|_| panic!("Invalid binary number format: {hex_digits}")),
-                )))
+                match hex_digits.parse::<BinaryNumber>() {
+                    Ok(binary_number) => Some(Ok(Token::BinaryNumber(binary_number))),
+                    Err(_) => Some(Err(LexError::InvalidBinaryNumber {
+                        text: hex_digits,
+                        span: self.span_from(start_pos)
+                    }))
+                }
             }
 
             // Numbers (decimal)
@@ -156,24 +193,24 @@ impl Iterator for Lexer<'_> {
                 let mut has_dot = ch == '.';
                 let mut has_e = false;
 
-                while let Some(&ch) = self.input.peek() {
+                while let Some(&ch) = self.peek() {
                     if ch.is_ascii_digit() {
                         number_str.push(ch);
-                        self.input.next();
+                        self.advance();
                     } else if ch == '.' && !has_dot && !has_e {
                         has_dot = true;
                         number_str.push(ch);
-                        self.input.next();
+                        self.advance();
                     } else if (ch == 'E') && !has_e {
                         has_e = true;
                         number_str.push(ch);
-                        self.input.next();
+                        self.advance();
 
                         // Handle optional + or - after E
-                        if let Some(&next_ch) = self.input.peek() {
+                        if let Some(&next_ch) = self.peek() {
                             if next_ch == '+' || next_ch == '-' {
                                 number_str.push(next_ch);
-                                self.input.next();
+                                self.advance();
                             }
                         }
                     } else {
@@ -181,11 +218,13 @@ impl Iterator for Lexer<'_> {
                     }
                 }
 
-                number_str
-                    .parse::<DecimalNumber>()
-                    .map(Token::DecimalNumber)
-                    .ok()
-                    .map(Ok)
+                match number_str.parse::<DecimalNumber>() {
+                    Ok(decimal_number) => Some(Ok(Token::DecimalNumber(decimal_number))),
+                    Err(_) => Some(Err(LexError::InvalidBinaryNumber {
+                        text: number_str,
+                        span: self.span_from(start_pos)
+                    }))
+                }
             }
 
             // Identifiers and keywords
@@ -223,25 +262,27 @@ impl Iterator for Lexer<'_> {
                         if ident_len == 0 {
                             // The whole word is a keyword
                             for _ in 1..keyword_len {
-                                self.input.next();
+                                self.advance();
                             }
 
                             let kw = Keyword::try_from(word.as_str()).unwrap();
 
-                            // We need to handle comments in a special way, cosume until end of line
+                            // We need to handle comments in a special way, consume until end of line
                             if kw == Keyword::Rem {
                                 // The space after REM is mandatory
-                                if self.input.next() != Some(' ') {
-                                    return Some(Err(())); // Invalid REM syntax
+                                if self.advance() != Some(' ') {
+                                    return Some(Err(LexError::InvalidRemark {
+                                        span: self.span_from(start_pos)
+                                    }));
                                 }
 
                                 let mut comment = String::new();
-                                while let Some(&next_ch) = self.input.peek() {
+                                while let Some(&next_ch) = self.peek() {
                                     if next_ch == '\n' {
                                         break; // End of comment
                                     }
                                     comment.push(next_ch);
-                                    self.input.next();
+                                    self.advance();
                                 }
                                 return Some(Ok(Token::Remark(comment)));
                             } else {
@@ -250,7 +291,7 @@ impl Iterator for Lexer<'_> {
                         } else {
                             // Remove the identifier from the original iterator
                             for _ in 1..ident_len {
-                                self.input.next();
+                                self.advance();
                             }
 
                             return Some(Ok(word[..ident_len]
@@ -263,7 +304,7 @@ impl Iterator for Lexer<'_> {
 
                 // If no keyword suffix found, treat as identifier
                 for _ in 1..word.len() {
-                    self.input.next(); // Consume the rest of the identifier
+                    self.advance(); // Consume the rest of the identifier
                 }
 
                 Some(Ok(word
@@ -272,7 +313,10 @@ impl Iterator for Lexer<'_> {
                     .unwrap()))
             }
 
-            _ => panic!("Unexpected character: {ch}"),
+            _ => Some(Err(LexError::UnexpectedCharacter {
+                ch,
+                span: self.span_from(start_pos)
+            })),
         }
     }
 }

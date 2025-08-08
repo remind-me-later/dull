@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "*", features = ["derive"] }
+codespan = "*"
+codespan-reporting = "*"
+smallvec = "*"
 
 [dev-dependencies]
 walkdir = "2"
