@@ -1,6 +1,7 @@
 mod lex;
 mod parse;
 mod semantic_analysis;
+mod header;
 
 use crate::lex::{Lexer, Token};
 use crate::parse::Parser;

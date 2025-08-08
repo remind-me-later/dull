@@ -45,7 +45,6 @@ impl SymbolTable {
     }
 }
 
-/// State for semantic analysis
 #[derive(Debug)]
 pub struct SemanticAnalysisState {
     symbol_table: SymbolTable,
