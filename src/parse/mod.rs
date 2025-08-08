@@ -1,7 +1,7 @@
 use std::{iter::Peekable, mem, vec};
 
 use crate::{
-    lex::{Token, keyword::Keyword, symbol::Symbol},
+    lex::{SpannedToken, Token, keyword::Keyword, symbol::Symbol},
     parse::{
         expression::{
             Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::Function, lvalue::LValue,
@@ -22,14 +22,14 @@ pub mod statement;
 
 pub struct Parser<I: Clone>
 where
-    I: Iterator<Item = Token>,
+    I: Iterator<Item = SpannedToken>,
 {
     tokens: Peekable<I>,
 }
 
 impl<I: Clone> Parser<I>
 where
-    I: Iterator<Item = Token>,
+    I: Iterator<Item = SpannedToken>,
 {
     pub fn new(tokens: I) -> Self {
         Self {
@@ -37,11 +37,43 @@ where
         }
     }
 
+    /// Helper method to peek at the token without the span
+    fn peek_token(&mut self) -> Option<&Token> {
+        self.tokens.peek().map(|spanned| spanned.token())
+    }
+
+    fn peek_mut_token(&mut self) -> Option<&mut Token> {
+        self.tokens.peek_mut().map(|spanned| spanned.token_mut())
+    }
+
+    /// Helper method to get the next token with span
+    fn next_spanned(&mut self) -> Option<SpannedToken> {
+        self.tokens.next()
+    }
+
+    /// Helper method to check if next token matches and consume it if so
+    fn next_if_token_eq(&mut self, expected: &Token) -> Option<SpannedToken> {
+        if self.peek_token() == Some(expected) {
+            self.next_spanned()
+        } else {
+            None
+        }
+    }
+
+    /// Helper method to conditionally consume token based on predicate  
+    fn next_if_token(&mut self, predicate: impl Fn(&Token) -> bool) -> Option<SpannedToken> {
+        if self.peek_token().map(&predicate).unwrap_or(false) {
+            self.next_spanned()
+        } else {
+            None
+        }
+    }
+
     fn parse_exponent_expr(&mut self) -> Option<Expr> {
         let mut left = self.parse_expression_factor()?;
 
-        while let Some(Token::Symbol(Symbol::Exp)) = self.tokens.peek() {
-            self.tokens.next();
+        while let Some(&Token::Symbol(Symbol::Exp)) = self.peek_token() {
+            self.next_spanned();
             let right = self.parse_expression_factor()?;
             left = Expr::new(ExprInner::Binary(
                 Box::new(left),
@@ -54,13 +86,13 @@ where
     }
 
     fn parse_unary_op_expr(&mut self) -> Option<Expr> {
-        let maybe_op = self.tokens.next_if(|token| {
+        let maybe_op = self.next_if_token(|token| {
             matches!(
                 token,
                 Token::Symbol(Symbol::Add) | Token::Symbol(Symbol::Sub)
             )
         });
-        match maybe_op {
+        match maybe_op.as_ref().map(|s| s.token()) {
             Some(Token::Symbol(Symbol::Add)) => {
                 let right = self.parse_exponent_expr()?;
                 Some(Expr::new(ExprInner::Unary(UnaryOp::Plus, Box::new(right))))
@@ -76,14 +108,14 @@ where
     fn parse_mul_div_expr(&mut self) -> Option<Expr> {
         let mut left = self.parse_unary_op_expr()?;
 
-        while let Some(op) = self.tokens.next_if(|token| {
+        while let Some(op) = self.next_if_token(|token| {
             matches!(
                 token,
                 Token::Symbol(Symbol::Mul) | Token::Symbol(Symbol::Div)
             )
         }) {
             let right = self.parse_unary_op_expr()?;
-            let binary_op = match op {
+            let binary_op = match op.token() {
                 Token::Symbol(Symbol::Mul) => BinaryOp::Mul,
                 Token::Symbol(Symbol::Div) => BinaryOp::Div,
                 _ => unreachable!(),
@@ -101,14 +133,14 @@ where
     fn parse_add_sub_expr(&mut self) -> Option<Expr> {
         let mut left = self.parse_mul_div_expr()?;
 
-        while let Some(op) = self.tokens.next_if(|token| {
+        while let Some(op) = self.next_if_token(|token| {
             matches!(
                 token,
                 Token::Symbol(Symbol::Add) | Token::Symbol(Symbol::Sub)
             )
         }) {
             let right = self.parse_mul_div_expr()?;
-            let binary_op = match op {
+            let binary_op = match op.token() {
                 Token::Symbol(Symbol::Add) => BinaryOp::Add,
                 Token::Symbol(Symbol::Sub) => BinaryOp::Sub,
                 _ => unreachable!(),
@@ -126,7 +158,7 @@ where
     fn parse_comparison_expr(&mut self) -> Option<Expr> {
         let mut left = self.parse_add_sub_expr()?;
 
-        while let Some(op) = self.tokens.next_if(|token| {
+        while let Some(op) = self.next_if_token(|token| {
             matches!(
                 token,
                 Token::Symbol(Symbol::Eq)
@@ -138,7 +170,7 @@ where
             )
         }) {
             let right = self.parse_add_sub_expr()?;
-            let binary_op = match op {
+            let binary_op = match op.token() {
                 Token::Symbol(Symbol::Eq) => BinaryOp::Eq,
                 Token::Symbol(Symbol::Neq) => BinaryOp::Neq,
                 Token::Symbol(Symbol::Lt) => BinaryOp::Lt,
@@ -158,7 +190,7 @@ where
     }
 
     fn parse_unary_logical_expr(&mut self) -> Option<Expr> {
-        let maybe_op = self.tokens.next_if_eq(&Token::Keyword(Keyword::Not));
+        let maybe_op = self.next_if_token_eq(&Token::Keyword(Keyword::Not));
         match maybe_op {
             Some(_) => {
                 let right = self.parse_unary_logical_expr()?;
@@ -171,7 +203,7 @@ where
     fn parse_and_or_expr(&mut self) -> Option<Expr> {
         let mut left = self.parse_unary_logical_expr()?;
 
-        while let Some(op) = self.tokens.next_if(|token| {
+        while let Some(op) = self.next_if_token(|token| {
             matches!(
                 token,
                 Token::Keyword(Keyword::Or) | Token::Keyword(Keyword::And)
@@ -180,7 +212,7 @@ where
             let right = self.parse_unary_logical_expr()?;
             left = Expr::new(ExprInner::Binary(
                 Box::new(left),
-                match op {
+                match op.token() {
                     Token::Keyword(Keyword::Or) => BinaryOp::Or,
                     Token::Keyword(Keyword::And) => BinaryOp::And,
                     _ => unreachable!(),
@@ -197,7 +229,7 @@ where
     }
 
     fn parse_expression_factor(&mut self) -> Option<Expr> {
-        match self.tokens.peek_mut()? {
+        match self.peek_mut_token()? {
             Token::BinaryNumber(h) => {
                 let hex_number = *h;
                 self.tokens.next()?;
@@ -216,8 +248,7 @@ where
             Token::Symbol(Symbol::LParen) => {
                 self.tokens.next(); // Consume '('
                 let expr = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                     .expect("Expected closing parenthesis");
                 return Some(expr);
             }
@@ -236,7 +267,7 @@ where
     }
 
     fn parse_function(&mut self) -> Option<Function> {
-        match self.tokens.peek()? {
+        match self.peek_token()? {
             Token::Keyword(Keyword::Int) => {
                 self.tokens.next();
                 let expr = self.parse_expression_factor()?;
@@ -366,20 +397,16 @@ where
             Token::Keyword(Keyword::MidDollar) => {
                 self.tokens.next();
                 // Parse '('
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
                     .unwrap_or_else(|| panic!("Expected '(' after MID$"));
                 let string = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
                     .unwrap_or_else(|| panic!("Expected ',' after MID$"));
                 let start = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
                     .unwrap_or_else(|| panic!("Expected ',' after MID$"));
                 let length = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                     .unwrap_or_else(|| panic!("Expected ')' after MID$"));
                 Some(Function::Mid {
                     string: Box::new(string),
@@ -390,17 +417,14 @@ where
             Token::Keyword(Keyword::LeftDollar) => {
                 self.tokens.next();
                 // Parse '('
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
                     .unwrap_or_else(|| panic!("Expected '(' after LEFT$"));
                 let string = self.parse_expression()?;
                 // Parse ','
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
                     .unwrap_or_else(|| panic!("Expected ',' after LEFT$"));
                 let length = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                     .unwrap_or_else(|| panic!("Expected ')' after LEFT$"));
                 Some(Function::Left {
                     string: Box::new(string),
@@ -410,16 +434,13 @@ where
             Token::Keyword(Keyword::RightDollar) => {
                 self.tokens.next();
                 // Parse '('
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
                     .unwrap_or_else(|| panic!("Expected '(' after RIGHT$"));
                 let string = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
                     .unwrap_or_else(|| panic!("Expected ',' after RIGHT$"));
                 let length = self.parse_expression()?;
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                     .unwrap_or_else(|| panic!("Expected ')' after RIGHT$"));
                 Some(Function::Right {
                     string: Box::new(string),
@@ -452,21 +473,20 @@ where
     }
 
     fn parse_lvalue(&mut self) -> Option<LValue> {
-        match self.tokens.peek()? {
+        match self.peek_token()? {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
                 self.tokens.next();
 
                 // Check for array access
-                if self.tokens.peek() == Some(&Token::Symbol(Symbol::LParen)) {
+                if self.peek_token() == Some(&Token::Symbol(Symbol::LParen)) {
                     self.tokens.next(); // Consume '('
                     let index = self.parse_expression()?;
 
-                    if self.tokens.peek() == Some(&Token::Symbol(Symbol::Comma)) {
+                    if self.peek_token() == Some(&Token::Symbol(Symbol::Comma)) {
                         self.tokens.next(); // Consume ','
                         let col_index = self.parse_expression()?;
-                        self.tokens
-                            .next_if_eq(&Token::Symbol(Symbol::RParen))
+                        self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                             .unwrap_or_else(|| {
                                 panic!("Expected closing parenthesis for 2D array access");
                             });
@@ -477,8 +497,7 @@ where
                         });
                     }
 
-                    self.tokens
-                        .next_if_eq(&Token::Symbol(Symbol::RParen))
+                    self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                         .unwrap_or_else(|| {
                             panic!("Expected closing parenthesis for 1D array access");
                         });
@@ -494,19 +513,16 @@ where
                 self.tokens.next();
 
                 let has_dollar = self
-                    .tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Dollar))
+                    .next_if_token_eq(&Token::Symbol(Symbol::Dollar))
                     .is_some();
 
                 // Parse '('
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
                     .unwrap_or_else(|| panic!("Expected '(' after fixed memory area access '@'"));
 
                 let index = self.parse_expression()?;
 
-                self.tokens
-                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
                     .unwrap_or_else(|| panic!("Expected ')' after fixed memory area access '@'"));
 
                 Some(LValue::FixedMemoryAreaAccess {
@@ -528,7 +544,7 @@ where
 
     fn parse_assignment(&mut self) -> Option<Assignment> {
         let lhs = self.parse_lvalue()?;
-        self.tokens.next_if_eq(&Token::Symbol(Symbol::Eq))?;
+        self.next_if_token_eq(&Token::Symbol(Symbol::Eq))?;
         let rhs = self.parse_expression()?;
         Some(Assignment {
             lvalue: lhs,
@@ -537,7 +553,7 @@ where
     }
 
     fn parse_let_inner(&mut self, is_let_mandatory: bool) -> Option<LetInner> {
-        let let_kw = self.tokens.next_if_eq(&Token::Keyword(Keyword::Let));
+        let let_kw = self.next_if_token_eq(&Token::Keyword(Keyword::Let));
 
         if is_let_mandatory && let_kw.is_none() {
             return None;
@@ -547,7 +563,7 @@ where
 
         while let Some(assignment) = self.parse_assignment() {
             assignments.push(assignment);
-            if self.tokens.peek() == Some(&Token::Symbol(Symbol::Comma)) {
+            if self.peek_token() == Some(&Token::Symbol(Symbol::Comma)) {
                 self.tokens.next(); // Consume ','
             } else {
                 break;
@@ -558,9 +574,9 @@ where
     }
 
     fn parse_using_clause(&mut self) -> Option<UsingClause> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Using))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Using))?;
 
-        match self.tokens.peek_mut()? {
+        match self.peek_mut_token()? {
             // USING "##.##"
             Token::StringLiteral(format) => {
                 let format = mem::take(format);
@@ -576,8 +592,7 @@ where
 
     fn parse_print_separator(&mut self) -> PrintSeparator {
         match self
-            .tokens
-            .peek()
+            .peek_token()
             .unwrap_or_else(|| panic!("Expected a token for print separator"))
         {
             Token::Symbol(Symbol::Comma) => {
@@ -611,7 +626,7 @@ where
     }
 
     fn parse_print_pause_stmt(&mut self) -> Option<Statement> {
-        match self.tokens.peek()? {
+        match self.peek_token()? {
             Token::Keyword(Keyword::Print) => {
                 self.tokens.next();
                 let print_inner = self.parse_print_inner()?;
@@ -627,25 +642,23 @@ where
     }
 
     fn parse_end_statement(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::End))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::End))?;
         Some(Statement::End)
     }
 
     fn parse_dim_inner(&mut self) -> Option<DimInner> {
-        match self.tokens.peek()? {
+        match self.peek_token()? {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
                 self.tokens.next();
-                self.tokens.next_if_eq(&Token::Symbol(Symbol::LParen))?;
+                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))?;
                 let rows = self.parse_expression()?;
                 let maybe_cols = self
-                    .tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                    .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                     .and_then(|_| self.parse_expression());
-                self.tokens.next_if_eq(&Token::Symbol(Symbol::RParen))?;
+                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))?;
                 let string_length = self
-                    .tokens
-                    .next_if_eq(&Token::Symbol(Symbol::Mul))
+                    .next_if_token_eq(&Token::Symbol(Symbol::Mul))
                     .and_then(|_| self.parse_expression());
 
                 match maybe_cols {
@@ -667,15 +680,14 @@ where
     }
 
     fn parse_dim_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Dim))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Dim))?;
         let mut decls = vec![];
 
         while let Some(decl) = self.parse_dim_inner() {
             decls.push(decl);
 
             if self
-                .tokens
-                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                 .is_none()
             {
                 break;
@@ -846,9 +858,9 @@ where
     }
 
     fn parse_if_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::If))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::If))?;
         let condition = self.parse_expression()?;
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Then)); // optional
+        self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
         let then_stmt = self.parse_statement(true).or_else(|| {
             // If no statement after THEN, check for an expression to jump to
             self.parse_expression()
@@ -862,18 +874,16 @@ where
     }
 
     fn parse_input_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Input))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Input))?;
         let mut input_exprs = vec![];
 
         loop {
             // Check for prompt string
-            let prompt = if let Some(Token::StringLiteral(_)) = self.tokens.peek() {
-                if let Some(Token::StringLiteral(s)) = self.tokens.next() {
-                    self.tokens.next_if_eq(&Token::Symbol(Symbol::Semicolon));
-                    Some(s)
-                } else {
-                    None
-                }
+            let prompt = if let Some(Token::StringLiteral(s)) = self.peek_mut_token() {
+                let s = mem::take(s);
+                self.tokens.next();
+                self.next_if_token_eq(&Token::Symbol(Symbol::Semicolon));
+                Some(s)
             } else {
                 None
             };
@@ -882,8 +892,7 @@ where
             input_exprs.push((prompt, lvalue));
 
             if self
-                .tokens
-                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                 .is_none()
             {
                 break;
@@ -894,7 +903,7 @@ where
     }
 
     fn parse_remark_stmt(&mut self) -> Option<Statement> {
-        match self.tokens.peek_mut() {
+        match self.peek_mut_token() {
             Some(Token::Remark(s)) => {
                 let s = mem::take(s);
                 self.tokens.next();
@@ -907,13 +916,12 @@ where
     }
 
     fn parse_for_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::For))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::For))?;
         let assignment = self.parse_assignment()?;
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::To))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::To))?;
         let to_expr = self.parse_expression()?;
         let step_expr = if self
-            .tokens
-            .next_if_eq(&Token::Keyword(Keyword::Step))
+            .next_if_token_eq(&Token::Keyword(Keyword::Step))
             .is_some()
         {
             Some(self.parse_expression()?)
@@ -928,58 +936,60 @@ where
     }
 
     fn parse_next_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Next))?;
-        let ident = match self.tokens.next()? {
+        self.next_if_token_eq(&Token::Keyword(Keyword::Next))?;
+        let spanned = self
+            .tokens
+            .next()
+            .unwrap_or_else(|| panic!("Expected identifier after NEXT keyword"));
+        let ident = match spanned.token() {
             Token::Identifier(id) => id,
-            _ => return None,
+            _ => {
+                panic!("Expected identifier after NEXT keyword");
+            }
         };
-        Some(Statement::Next { ident })
+        Some(Statement::Next { ident: *ident })
     }
 
     fn parse_clear_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Clear))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Clear))?;
         Some(Statement::Clear)
     }
 
     fn parse_goto_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Goto))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Goto))?;
         let target = self.parse_expression()?;
         Some(Statement::Goto { target })
     }
 
     fn parse_gosub_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Gosub))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Gosub))?;
         let target = self.parse_expression()?;
         Some(Statement::Gosub { target })
     }
 
     fn parse_on_goto_gosub_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::On))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::On))?;
         let expr = self.parse_expression()?;
 
         if self
-            .tokens
-            .next_if_eq(&Token::Keyword(Keyword::Goto))
+            .next_if_token_eq(&Token::Keyword(Keyword::Goto))
             .is_some()
         {
             let mut targets = vec![self.parse_expression()?];
             while self
-                .tokens
-                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                 .is_some()
             {
                 targets.push(self.parse_expression()?);
             }
             Some(Statement::OnGoto { expr, targets })
         } else if self
-            .tokens
-            .next_if_eq(&Token::Keyword(Keyword::Gosub))
+            .next_if_token_eq(&Token::Keyword(Keyword::Gosub))
             .is_some()
         {
             let mut targets = vec![self.parse_expression()?];
             while self
-                .tokens
-                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                 .is_some()
             {
                 targets.push(self.parse_expression()?);
@@ -994,17 +1004,18 @@ where
         {
             let mut cloned_tokens = self.tokens.clone();
 
-            // Try to parse the whole ON ERROR GOTO or return without consuming anything
-            if cloned_tokens
-                .next_if_eq(&Token::Keyword(Keyword::On))
-                .is_none()
-                || cloned_tokens
-                    .next_if_eq(&Token::Keyword(Keyword::Error))
-                    .is_none()
-                || cloned_tokens
-                    .next_if_eq(&Token::Keyword(Keyword::Goto))
-                    .is_none()
-            {
+            let on_token = cloned_tokens.next()?;
+            if on_token.token() != &Token::Keyword(Keyword::On) {
+                return None;
+            }
+
+            let error_token = cloned_tokens.next()?;
+            if error_token.token() != &Token::Keyword(Keyword::Error) {
+                return None;
+            }
+
+            let goto_token = cloned_tokens.next()?;
+            if goto_token.token() != &Token::Keyword(Keyword::Goto) {
                 return None;
             }
         }
@@ -1019,10 +1030,10 @@ where
     }
 
     fn parse_wait_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Wait))?;
-        let expr = if self.tokens.peek().is_some() {
+        self.next_if_token_eq(&Token::Keyword(Keyword::Wait))?;
+        let expr = if self.peek_token().is_some() {
             // Check if the next token can start an expression
-            match self.tokens.peek()? {
+            match self.peek_token()? {
                 Token::DecimalNumber(_)
                 | Token::BinaryNumber(_)
                 | Token::Identifier(_)
@@ -1036,17 +1047,17 @@ where
     }
 
     fn parse_cls_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Cls))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Cls))?;
         Some(Statement::Cls)
     }
 
     fn parse_random_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Random))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Random))?;
         Some(Statement::Random)
     }
 
     fn parse_gprint_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Gprint))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Gprint))?;
         let mut exprs = vec![];
 
         while let Some(expr) = self.parse_expression() {
@@ -1063,28 +1074,28 @@ where
     }
 
     fn parse_gcursor_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Gcursor))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Gcursor))?;
         let expr = self.parse_expression()?;
         Some(Statement::GCursor { expr })
     }
 
     fn parse_cursor_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Cursor))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Cursor))?;
         let expr = self.parse_expression()?;
         Some(Statement::Cursor { expr })
     }
 
     fn parse_beep_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Beep))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Beep))?;
 
         // Check for BEEP ON/OFF
-        if let Some(Token::Keyword(Keyword::On)) = self.tokens.peek() {
+        if let Some(Token::Keyword(Keyword::On)) = self.peek_token() {
             self.tokens.next();
             return Some(Statement::BeepOnOff {
                 switch_beep_on: true,
             });
         }
-        if let Some(Token::Keyword(Keyword::Off)) = self.tokens.peek() {
+        if let Some(Token::Keyword(Keyword::Off)) = self.peek_token() {
             self.tokens.next();
             return Some(Statement::BeepOnOff {
                 switch_beep_on: false,
@@ -1094,14 +1105,12 @@ where
         // Parse BEEP repetitions[,frequency[,duration]]
         let repetitions_expr = self.parse_expression()?;
         let optional_params = if self
-            .tokens
-            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
             .is_some()
         {
             let frequency = self.parse_expression()?;
             let duration = if self
-                .tokens
-                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                 .is_some()
             {
                 Some(self.parse_expression()?)
@@ -1123,12 +1132,12 @@ where
     }
 
     fn parse_return_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Return))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Return))?;
         Some(Statement::Return)
     }
 
     fn parse_poke_stmt(&mut self) -> Option<Statement> {
-        let memory_area = match self.tokens.peek()? {
+        let memory_area = match self.peek_token()? {
             Token::Keyword(Keyword::PokeMem0) => {
                 self.tokens.next();
                 MemoryArea::Me0
@@ -1142,8 +1151,7 @@ where
 
         let mut exprs = vec![self.parse_expression()?];
         while self
-            .tokens
-            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
             .is_some()
         {
             exprs.push(self.parse_expression()?);
@@ -1153,11 +1161,10 @@ where
     }
 
     fn parse_read_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Read))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Read))?;
         let mut destinations = vec![self.parse_lvalue()?];
         while self
-            .tokens
-            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
             .is_some()
         {
             destinations.push(self.parse_lvalue()?);
@@ -1166,11 +1173,10 @@ where
     }
 
     fn parse_data_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Data))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Data))?;
         let mut exprs = vec![self.parse_expression()?];
         while self
-            .tokens
-            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
             .is_some()
         {
             exprs.push(self.parse_expression()?);
@@ -1179,10 +1185,10 @@ where
     }
 
     fn parse_restore_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Restore))?;
-        let expr = if self.tokens.peek().is_some() {
+        self.next_if_token_eq(&Token::Keyword(Keyword::Restore))?;
+        let expr = if self.peek_token().is_some() {
             // Check if the next token can start an expression
-            match self.tokens.peek()? {
+            match self.peek_token()? {
                 Token::DecimalNumber(_)
                 | Token::BinaryNumber(_)
                 | Token::Identifier(_)
@@ -1196,26 +1202,25 @@ where
     }
 
     fn parse_arun_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Arun))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Arun))?;
         Some(Statement::Arun)
     }
 
     fn parse_lock_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lock))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Lock))?;
         Some(Statement::Lock)
     }
 
     fn parse_unlock_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Unlock))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Unlock))?;
         Some(Statement::Unlock)
     }
 
     fn parse_call_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Call))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Call))?;
         let expr = self.parse_expression()?;
         let variable = if self
-            .tokens
-            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
             .is_some()
         {
             Some(self.parse_lvalue()?)
@@ -1226,46 +1231,46 @@ where
     }
 
     fn parse_text_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Text))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Text))?;
         Some(Statement::Text)
     }
 
     fn parse_graph_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Graph))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Graph))?;
         Some(Statement::Graph)
     }
 
     fn parse_color_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Color))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Color))?;
         let color = self.parse_expression()?;
         Some(Statement::Color { expr: color })
     }
 
     fn parse_csize_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Csize))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Csize))?;
         let expr = self.parse_expression()?;
         Some(Statement::CSize { expr })
     }
 
     fn parse_lf_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lf))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Lf))?;
         let expr = self.parse_expression()?;
         Some(Statement::Lf { expr })
     }
 
     fn parse_radian_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Radian))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Radian))?;
         Some(Statement::Radian)
     }
 
     fn parse_lcursor_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lcursor))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Lcursor))?;
         let expr = self.parse_expression()?;
         Some(Statement::LCursor(LCursorClause { expr }))
     }
 
     fn parse_lprint_stmt(&mut self) -> Option<Statement> {
-        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lprint))?;
+        self.next_if_token_eq(&Token::Keyword(Keyword::Lprint))?;
         let inner = self.parse_lprint_inner()?;
         Some(Statement::LPrint { inner })
     }
@@ -1274,7 +1279,7 @@ where
         let mut exprs = vec![];
 
         loop {
-            let printable = if self.tokens.peek() == Some(&Token::Keyword(Keyword::Lcursor)) {
+            let printable = if self.peek_token() == Some(&Token::Keyword(Keyword::Lcursor)) {
                 self.tokens.next();
                 let expr = self.parse_expression()?;
                 LPrintable::LCursorClause(LCursorClause { expr })
@@ -1297,7 +1302,7 @@ where
     }
 
     fn parse_line(&mut self) -> Option<Line> {
-        match self.tokens.peek()? {
+        match self.peek_token()? {
             Token::DecimalNumber(line_number) => {
                 let line_number = line_number
                     .as_integer()
@@ -1308,12 +1313,12 @@ where
                 self.tokens.next(); // Consume line number
 
                 // Try to parse a line label: a string literal optionally followed by ':'
-                let label = if let Some(token) = self.tokens.peek_mut()
+                let label = if let Some(token) = self.peek_mut_token()
                     && let Token::StringLiteral(label) = token
                 {
                     let label = mem::take(label);
                     self.tokens.next(); // Consume label
-                    self.tokens.next_if_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
+                    self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
                     Some(label)
                 } else {
                     None
@@ -1325,8 +1330,7 @@ where
                     statements.push(statement);
                     // Statements are separated by ':'
                     if self
-                        .tokens
-                        .next_if_eq(&Token::Symbol(Symbol::Colon))
+                        .next_if_token_eq(&Token::Symbol(Symbol::Colon))
                         .is_none()
                     {
                         break;
@@ -1334,8 +1338,8 @@ where
                 }
 
                 // Parse line end or EOF
-                let newline = self.tokens.next_if_eq(&Token::Symbol(Symbol::Newline));
-                let eof = self.tokens.next_if_eq(&Token::Symbol(Symbol::Eof));
+                let newline = self.next_if_token_eq(&Token::Symbol(Symbol::Newline));
+                let eof = self.next_if_token_eq(&Token::Symbol(Symbol::Eof));
 
                 if newline.is_none() && eof.is_none() {
                     panic!("Expected newline or EOF at the end of line {line_number}");
@@ -1373,7 +1377,7 @@ mod tests {
 
     fn parse_expression_from_str(input: &str) -> Option<Expr> {
         let lexer = Lexer::new(input);
-        let tokens: Vec<Token> = lexer.filter_map(|result| result.ok()).collect();
+        let tokens: Vec<SpannedToken> = lexer.filter_map(|result| result.ok()).collect();
         let mut parser = Parser::new(tokens.into_iter());
         parser.parse_expression()
     }
@@ -1851,8 +1855,7 @@ mod tests {
 
             if let Ok(content) = std::fs::read_to_string(file_path) {
                 let lexer = crate::lex::Lexer::new(&content);
-                let tokens: Vec<crate::lex::Token> =
-                    lexer.filter_map(|result| result.ok()).collect();
+                let tokens: Vec<SpannedToken> = lexer.filter_map(|result| result.ok()).collect();
                 let mut parser = Parser::new(tokens.into_iter());
                 let program = parser.parse();
 
@@ -1871,7 +1874,7 @@ mod tests {
     /// Helper function to parse a complete BASIC program from string
     fn parse_program_from_str(input: &str) -> program::Program {
         let lexer = crate::lex::Lexer::new(input);
-        let tokens: Vec<crate::lex::Token> = lexer.filter_map(|result| result.ok()).collect();
+        let tokens: Vec<SpannedToken> = lexer.filter_map(|result| result.ok()).collect();
         let mut parser = Parser::new(tokens.into_iter());
         parser.parse()
     }

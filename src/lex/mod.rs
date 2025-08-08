@@ -6,11 +6,11 @@ pub mod symbol;
 
 use std::iter::Peekable;
 
-use crate::error::{LexError, LexResult, Span};
 use self::{
     binary_number::BinaryNumber, decimal_number::DecimalNumber, identifier::Identifier,
     keyword::Keyword, symbol::Symbol,
 };
+use crate::error::{LexError, LexResult, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -21,6 +21,31 @@ pub enum Token {
     BinaryNumber(BinaryNumber),
     StringLiteral(String),
     Remark(String), // For BASIC comments
+}
+
+/// A token with its source span for better error reporting
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpannedToken {
+    token: Token,
+    span: Span,
+}
+
+impl SpannedToken {
+    pub fn new(token: Token, span: Span) -> Self {
+        Self { token, span }
+    }
+
+    pub fn token(&self) -> &Token {
+        &self.token
+    }
+
+    pub fn token_mut(&mut self) -> &mut Token {
+        &mut self.token
+    }
+
+    pub fn span(&self) -> &Span {
+        &self.span
+    }
 }
 
 impl std::fmt::Display for Token {
@@ -51,7 +76,7 @@ impl<'a> Lexer<'a> {
             is_done: false,
         }
     }
-    
+
     fn advance(&mut self) -> Option<char> {
         if let Some(ch) = self.input.next() {
             self.position += 1;
@@ -60,22 +85,22 @@ impl<'a> Lexer<'a> {
             None
         }
     }
-    
+
     fn peek(&mut self) -> Option<&char> {
         self.input.peek()
     }
-    
+
     fn current_span(&self) -> Span {
         Span::single(self.position)
     }
-    
+
     fn span_from(&self, start: usize) -> Span {
         Span::new(start, self.position)
     }
 }
 
 impl Iterator for Lexer<'_> {
-    type Item = LexResult<Token>;
+    type Item = LexResult<SpannedToken>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Skip whitespace (except newlines which are significant in BASIC)
@@ -95,7 +120,10 @@ impl Iterator for Lexer<'_> {
                 return None; // Already done
             } else {
                 self.is_done = true;
-                return Some(Ok(Token::Symbol(Symbol::Eof))); // End of input
+                return Some(Ok(SpannedToken::new(
+                    Token::Symbol(Symbol::Eof),
+                    self.span_from(start_pos),
+                ))); // End of input
             }
         }
 
@@ -103,50 +131,110 @@ impl Iterator for Lexer<'_> {
 
         match ch {
             // Newlines are significant in BASIC
-            '\n' => Some(Ok(Token::Symbol(Symbol::Newline))),
+            '\n' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Newline),
+                self.span_from(start_pos),
+            ))),
 
             // Single character symbols
-            '+' => Some(Ok(Token::Symbol(Symbol::Add))),
-            '-' => Some(Ok(Token::Symbol(Symbol::Sub))),
-            '*' => Some(Ok(Token::Symbol(Symbol::Mul))),
-            '/' => Some(Ok(Token::Symbol(Symbol::Div))),
-            '^' => Some(Ok(Token::Symbol(Symbol::Exp))),
-            ',' => Some(Ok(Token::Symbol(Symbol::Comma))),
-            ';' => Some(Ok(Token::Symbol(Symbol::Semicolon))),
-            ':' => Some(Ok(Token::Symbol(Symbol::Colon))),
-            '(' => Some(Ok(Token::Symbol(Symbol::LParen))),
-            ')' => Some(Ok(Token::Symbol(Symbol::RParen))),
+            '+' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Add),
+                self.span_from(start_pos),
+            ))),
+            '-' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Sub),
+                self.span_from(start_pos),
+            ))),
+            '*' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Mul),
+                self.span_from(start_pos),
+            ))),
+            '/' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Div),
+                self.span_from(start_pos),
+            ))),
+            '^' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Exp),
+                self.span_from(start_pos),
+            ))),
+            ',' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Comma),
+                self.span_from(start_pos),
+            ))),
+            ';' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Semicolon),
+                self.span_from(start_pos),
+            ))),
+            ':' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Colon),
+                self.span_from(start_pos),
+            ))),
+            '(' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::LParen),
+                self.span_from(start_pos),
+            ))),
+            ')' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::RParen),
+                self.span_from(start_pos),
+            ))),
 
             // Comparison operators
-            '=' => Some(Ok(Token::Symbol(Symbol::Eq))),
+            '=' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Eq),
+                self.span_from(start_pos),
+            ))),
             '<' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
-                    Some(Ok(Token::Symbol(Symbol::Leq)))
+                    Some(Ok(SpannedToken::new(
+                        Token::Symbol(Symbol::Leq),
+                        self.span_from(start_pos),
+                    )))
                 } else if self.peek() == Some(&'>') {
                     self.advance();
-                    Some(Ok(Token::Symbol(Symbol::Neq)))
+                    Some(Ok(SpannedToken::new(
+                        Token::Symbol(Symbol::Neq),
+                        self.span_from(start_pos),
+                    )))
                 } else {
-                    Some(Ok(Token::Symbol(Symbol::Lt)))
+                    Some(Ok(SpannedToken::new(
+                        Token::Symbol(Symbol::Lt),
+                        self.span_from(start_pos),
+                    )))
                 }
             }
             '>' => {
                 if self.peek() == Some(&'=') {
                     self.advance();
-                    Some(Ok(Token::Symbol(Symbol::Geq)))
+                    Some(Ok(SpannedToken::new(
+                        Token::Symbol(Symbol::Geq),
+                        self.span_from(start_pos),
+                    )))
                 } else {
-                    Some(Ok(Token::Symbol(Symbol::Gt)))
+                    Some(Ok(SpannedToken::new(
+                        Token::Symbol(Symbol::Gt),
+                        self.span_from(start_pos),
+                    )))
                 }
             }
-            '@' => Some(Ok(Token::Symbol(Symbol::At))),
-            '$' => Some(Ok(Token::Symbol(Symbol::Dollar))),
-            '√' => Some(Ok(Token::Keyword(Keyword::Sqr))),
+            '@' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::At),
+                self.span_from(start_pos),
+            ))),
+            '$' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Dollar),
+                self.span_from(start_pos),
+            ))),
+            '√' => Some(Ok(SpannedToken::new(
+                Token::Keyword(Keyword::Sqr),
+                self.span_from(start_pos),
+            ))),
 
             // String literals
             '"' => {
                 let mut string_content = String::new();
                 let mut found_closing_quote = false;
-                
+
                 while let Some(ch) = self.advance() {
                     if ch == '"' {
                         found_closing_quote = true;
@@ -154,13 +242,16 @@ impl Iterator for Lexer<'_> {
                     }
                     string_content.push(ch);
                 }
-                
+
                 if !found_closing_quote {
                     Some(Err(LexError::UnterminatedStringLiteral {
-                        span: self.span_from(start_pos)
+                        span: self.span_from(start_pos),
                     }))
                 } else {
-                    Some(Ok(Token::StringLiteral(string_content)))
+                    Some(Ok(SpannedToken::new(
+                        Token::StringLiteral(string_content),
+                        self.span_from(start_pos),
+                    )))
                 }
             }
 
@@ -177,11 +268,14 @@ impl Iterator for Lexer<'_> {
                 }
 
                 match hex_digits.parse::<BinaryNumber>() {
-                    Ok(binary_number) => Some(Ok(Token::BinaryNumber(binary_number))),
+                    Ok(binary_number) => Some(Ok(SpannedToken::new(
+                        Token::BinaryNumber(binary_number),
+                        self.span_from(start_pos),
+                    ))),
                     Err(_) => Some(Err(LexError::InvalidBinaryNumber {
                         text: hex_digits,
-                        span: self.span_from(start_pos)
-                    }))
+                        span: self.span_from(start_pos),
+                    })),
                 }
             }
 
@@ -219,11 +313,14 @@ impl Iterator for Lexer<'_> {
                 }
 
                 match number_str.parse::<DecimalNumber>() {
-                    Ok(decimal_number) => Some(Ok(Token::DecimalNumber(decimal_number))),
+                    Ok(decimal_number) => Some(Ok(SpannedToken::new(
+                        Token::DecimalNumber(decimal_number),
+                        self.span_from(start_pos),
+                    ))),
                     Err(_) => Some(Err(LexError::InvalidBinaryNumber {
                         text: number_str,
-                        span: self.span_from(start_pos)
-                    }))
+                        span: self.span_from(start_pos),
+                    })),
                 }
             }
 
@@ -272,7 +369,7 @@ impl Iterator for Lexer<'_> {
                                 // The space after REM is mandatory
                                 if self.advance() != Some(' ') {
                                     return Some(Err(LexError::InvalidRemark {
-                                        span: self.span_from(start_pos)
+                                        span: self.span_from(start_pos),
                                     }));
                                 }
 
@@ -284,9 +381,15 @@ impl Iterator for Lexer<'_> {
                                     comment.push(next_ch);
                                     self.advance();
                                 }
-                                return Some(Ok(Token::Remark(comment)));
+                                return Some(Ok(SpannedToken::new(
+                                    Token::Remark(comment),
+                                    self.span_from(start_pos),
+                                )));
                             } else {
-                                return Some(Ok(Token::Keyword(kw)));
+                                return Some(Ok(SpannedToken::new(
+                                    Token::Keyword(kw),
+                                    self.span_from(start_pos),
+                                )));
                             }
                         } else {
                             // Remove the identifier from the original iterator
@@ -294,10 +397,13 @@ impl Iterator for Lexer<'_> {
                                 self.advance();
                             }
 
-                            return Some(Ok(word[..ident_len]
-                                .parse::<Identifier>()
-                                .map(Token::Identifier)
-                                .unwrap()));
+                            return Some(Ok(SpannedToken::new(
+                                word[..ident_len]
+                                    .parse::<Identifier>()
+                                    .map(Token::Identifier)
+                                    .unwrap(),
+                                self.span_from(start_pos),
+                            )));
                         }
                     }
                 }
@@ -307,15 +413,15 @@ impl Iterator for Lexer<'_> {
                     self.advance(); // Consume the rest of the identifier
                 }
 
-                Some(Ok(word
-                    .parse::<Identifier>()
-                    .map(Token::Identifier)
-                    .unwrap()))
+                Some(Ok(SpannedToken::new(
+                    word.parse::<Identifier>().map(Token::Identifier).unwrap(),
+                    self.span_from(start_pos),
+                )))
             }
 
             _ => Some(Err(LexError::UnexpectedCharacter {
                 ch,
-                span: self.span_from(start_pos)
+                span: self.span_from(start_pos),
             })),
         }
     }

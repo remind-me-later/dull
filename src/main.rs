@@ -1,15 +1,15 @@
-mod error;
+pub mod error;
 mod header;
 mod lex;
 mod parse;
 mod semantic_analysis;
 
-use crate::error::{print_error, CompileError};
-use crate::lex::{Lexer, Token};
+use crate::error::{CompileError, print_error};
+use crate::lex::{Lexer, SpannedToken};
 use crate::parse::Parser;
 use crate::semantic_analysis::analyze_program;
 use clap::Parser as ClapParser;
-use std::{fs, path::PathBuf, vec};
+use std::{fs, path::PathBuf};
 
 /// A BASIC lexer and parser
 #[derive(ClapParser, Debug)]
@@ -56,11 +56,11 @@ fn main() {
 
     // Create lexer and tokenize
     let lexer = Lexer::new(&input);
-    let mut tokens: Vec<Token> = vec![];
+    let mut tokens: Vec<SpannedToken> = Vec::new();
 
     for token_result in lexer {
         match token_result {
-            Ok(token) => tokens.push(token),
+            Ok(spanned_token) => tokens.push(spanned_token),
             Err(lex_error) => {
                 let compile_error = CompileError::from(lex_error);
                 print_error(&compile_error, &filename, &input);
