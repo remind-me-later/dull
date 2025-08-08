@@ -24,11 +24,9 @@ impl ExprInner {
             }
             ExprInner::Binary(left, op, right) => {
                 let my_prec = op.precedence();
-                // Everything is left associative except for OR and AND
-                // If the operator is not associative, we don't need parentheses
-                let is_associative = op.is_associative();
-                let needs_parens = is_associative
-                    && (my_prec < parent_prec || (my_prec == parent_prec && is_right_side));
+                // Everything is left associative
+                let needs_parens =
+                    my_prec < parent_prec || (my_prec == parent_prec && is_right_side);
                 let left_str = left.show_with_context(my_prec, false);
                 let right_str = right.show_with_context(my_prec, true);
                 let result = match op {

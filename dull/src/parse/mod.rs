@@ -168,37 +168,23 @@ where
         }
     }
 
-    fn parse_and_expr(&mut self) -> Option<Expr> {
+    fn parse_and_or_expr(&mut self) -> Option<Expr> {
         let mut left = self.parse_unary_logical_expr()?;
 
-        while self
-            .tokens
-            .next_if_eq(&Token::Keyword(Keyword::And))
-            .is_some()
-        {
-            let right = self.parse_unary_logical_expr()?; // Right-associative recursion
+        while let Some(op) = self.tokens.next_if(|token| {
+            matches!(
+                token,
+                Token::Keyword(Keyword::Or) | Token::Keyword(Keyword::And)
+            )
+        }) {
+            let right = self.parse_unary_logical_expr()?;
             left = Expr::new(ExprInner::Binary(
                 Box::new(left),
-                BinaryOp::And,
-                Box::new(right),
-            ));
-        }
-
-        Some(left)
-    }
-
-    fn parse_or_expr(&mut self) -> Option<Expr> {
-        let mut left = self.parse_and_expr()?;
-
-        while self
-            .tokens
-            .next_if_eq(&Token::Keyword(Keyword::Or))
-            .is_some()
-        {
-            let right = self.parse_and_expr()?; // Right-associative recursion
-            left = Expr::new(ExprInner::Binary(
-                Box::new(left),
-                BinaryOp::Or,
+                match op {
+                    Token::Keyword(Keyword::Or) => BinaryOp::Or,
+                    Token::Keyword(Keyword::And) => BinaryOp::And,
+                    _ => unreachable!(),
+                },
                 Box::new(right),
             ));
         }
@@ -207,7 +193,7 @@ where
     }
 
     fn parse_expression(&mut self) -> Option<expression::Expr> {
-        self.parse_or_expr()
+        self.parse_and_or_expr()
     }
 
     fn parse_expression_factor(&mut self) -> Option<Expr> {
@@ -215,21 +201,17 @@ where
             Token::BinaryNumber(h) => {
                 let hex_number = *h;
                 self.tokens.next()?;
-                Some(Expr::new(ExprInner::BinaryNumber(hex_number)))
+                return Some(Expr::new(ExprInner::BinaryNumber(hex_number)));
             }
             Token::DecimalNumber(n) => {
                 let number = *n;
                 self.tokens.next()?;
-                Some(Expr::new(ExprInner::DecimalNumber(number)))
+                return Some(Expr::new(ExprInner::DecimalNumber(number)));
             }
             Token::StringLiteral(s) => {
                 let string = mem::take(s);
                 self.tokens.next()?;
-                Some(Expr::new(ExprInner::StringLiteral(string)))
-            }
-            Token::Identifier(_) => {
-                let identifier = self.parse_lvalue()?;
-                Some(Expr::new(ExprInner::LValue(identifier)))
+                return Some(Expr::new(ExprInner::StringLiteral(string)));
             }
             Token::Symbol(Symbol::LParen) => {
                 self.tokens.next(); // Consume '('
@@ -237,25 +219,20 @@ where
                 self.tokens
                     .next_if_eq(&Token::Symbol(Symbol::RParen))
                     .expect("Expected closing parenthesis");
-                Some(expr)
+                return Some(expr);
             }
-            Token::Keyword(Keyword::Time) => {
-                self.tokens.next();
-                Some(Expr::new(ExprInner::LValue(LValue::BuiltInIdentifier(
-                    Keyword::Time,
-                ))))
-            }
-            Token::Keyword(Keyword::InkeyDollar) => {
-                self.tokens.next();
-                Some(Expr::new(ExprInner::LValue(LValue::BuiltInIdentifier(
-                    Keyword::InkeyDollar,
-                ))))
-            }
-            _ => self
-                .parse_function()
-                .map(ExprInner::FunctionCall)
-                .map(Expr::new),
+            _ => (),
         }
+
+        if let Some(lvalue) = self.parse_lvalue() {
+            return Some(Expr::new(ExprInner::LValue(lvalue)));
+        }
+
+        if let Some(function) = self.parse_function() {
+            return Some(Expr::new(ExprInner::FunctionCall(function)));
+        }
+
+        None
     }
 
     fn parse_function(&mut self) -> Option<Function> {
@@ -388,9 +365,22 @@ where
             }
             Token::Keyword(Keyword::MidDollar) => {
                 self.tokens.next();
+                // Parse '('
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                    .unwrap_or_else(|| panic!("Expected '(' after MID$"));
                 let string = self.parse_expression()?;
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                    .unwrap_or_else(|| panic!("Expected ',' after MID$"));
                 let start = self.parse_expression()?;
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                    .unwrap_or_else(|| panic!("Expected ',' after MID$"));
                 let length = self.parse_expression()?;
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                    .unwrap_or_else(|| panic!("Expected ')' after MID$"));
                 Some(Function::Mid {
                     string: Box::new(string),
                     start: Box::new(start),
@@ -399,8 +389,19 @@ where
             }
             Token::Keyword(Keyword::LeftDollar) => {
                 self.tokens.next();
+                // Parse '('
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                    .unwrap_or_else(|| panic!("Expected '(' after LEFT$"));
                 let string = self.parse_expression()?;
+                // Parse ','
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                    .unwrap_or_else(|| panic!("Expected ',' after LEFT$"));
                 let length = self.parse_expression()?;
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                    .unwrap_or_else(|| panic!("Expected ')' after LEFT$"));
                 Some(Function::Left {
                     string: Box::new(string),
                     length: Box::new(length),
@@ -408,8 +409,18 @@ where
             }
             Token::Keyword(Keyword::RightDollar) => {
                 self.tokens.next();
+                // Parse '('
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                    .unwrap_or_else(|| panic!("Expected '(' after RIGHT$"));
                 let string = self.parse_expression()?;
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                    .unwrap_or_else(|| panic!("Expected ',' after RIGHT$"));
                 let length = self.parse_expression()?;
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                    .unwrap_or_else(|| panic!("Expected ')' after RIGHT$"));
                 Some(Function::Right {
                     string: Box::new(string),
                     length: Box::new(length),
@@ -481,11 +492,22 @@ where
             }
             Token::Symbol(Symbol::At) => {
                 self.tokens.next();
-                let index = self.parse_expression()?;
+
                 let has_dollar = self
                     .tokens
                     .next_if_eq(&Token::Symbol(Symbol::Dollar))
                     .is_some();
+
+                // Parse '('
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::LParen))
+                    .unwrap_or_else(|| panic!("Expected '(' after fixed memory area access '@'"));
+
+                let index = self.parse_expression()?;
+
+                self.tokens
+                    .next_if_eq(&Token::Symbol(Symbol::RParen))
+                    .unwrap_or_else(|| panic!("Expected ')' after fixed memory area access '@'"));
 
                 Some(LValue::FixedMemoryAreaAccess {
                     index: Box::new(index),

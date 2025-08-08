@@ -19,19 +19,15 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
+    // Manual page 151
     pub fn precedence(&self) -> u8 {
         match self {
-            Self::Or => 1,
-            Self::And => 2,
-            Self::Eq | Self::Neq | Self::Lt | Self::Gt | Self::Leq | Self::Geq => 3,
-            Self::Add | Self::Sub => 4,
-            Self::Mul | Self::Div => 5,
-            Self::Exp => 6,
+            Self::Or | Self::And => 1,
+            Self::Eq | Self::Neq | Self::Lt | Self::Gt | Self::Leq | Self::Geq => 2,
+            Self::Add | Self::Sub => 3,
+            Self::Mul | Self::Div => 4,
+            Self::Exp => 5,
         }
-    }
-
-    pub fn is_associative(&self) -> bool {
-        !matches!(self, Self::And | Self::Or)
     }
 }
 
