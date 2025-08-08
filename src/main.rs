@@ -1,7 +1,7 @@
+mod header;
 mod lex;
 mod parse;
 mod semantic_analysis;
-mod header;
 
 use crate::lex::{Lexer, Token};
 use crate::parse::Parser;
@@ -70,7 +70,7 @@ fn main() {
         // Parse the tokens into an AST and run semantic analysis
         let mut parser = Parser::new(tokens.into_iter());
         let program = parser.parse();
-        
+
         match analyze_program(&program) {
             Ok(symbol_table) => {
                 println!("Semantic analysis completed successfully!");
