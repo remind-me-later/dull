@@ -1,4 +1,4 @@
-use std::{iter::Peekable, vec};
+use std::{iter::Peekable, mem, vec};
 
 use crate::{
     lex::{Token, keyword::Keyword, symbol::Symbol},
@@ -9,7 +9,8 @@ use crate::{
         },
         line::Line,
         statement::{
-            Assignment, LetInner, PrintInner, PrintSeparator, Printable, Statement, UsingClause,
+            Assignment, DimInner, LetInner, PrintInner, PrintSeparator, Printable, Statement,
+            UsingClause,
         },
     },
 };
@@ -210,20 +211,19 @@ where
     }
 
     fn parse_expression_factor(&mut self) -> Option<Expr> {
-        match self.tokens.peek()? {
+        match self.tokens.peek_mut()? {
             Token::BinaryNumber(h) => {
                 let hex_number = *h;
                 self.tokens.next()?;
                 Some(Expr::new(ExprInner::BinaryNumber(hex_number)))
             }
             Token::DecimalNumber(n) => {
-                // FIXME: The clone should be optimized away with a move, check
-                let number = n.clone();
+                let number = *n;
                 self.tokens.next()?;
                 Some(Expr::new(ExprInner::DecimalNumber(number)))
             }
             Token::StringLiteral(s) => {
-                let string = s.clone();
+                let string = mem::take(s);
                 self.tokens.next()?;
                 Some(Expr::new(ExprInner::StringLiteral(string)))
             }
@@ -523,10 +523,10 @@ where
     fn parse_using_clause(&mut self) -> Option<UsingClause> {
         self.tokens.next_if_eq(&Token::Keyword(Keyword::Using))?;
 
-        match self.tokens.peek()? {
+        match self.tokens.peek_mut()? {
             // USING "##.##"
             Token::StringLiteral(format) => {
-                let format = format.clone();
+                let format = mem::take(format);
                 self.tokens.next();
                 Some(UsingClause {
                     format: Some(format),
@@ -594,6 +594,60 @@ where
         Some(Statement::End)
     }
 
+    fn parse_dim_inner(&mut self) -> Option<DimInner> {
+        match self.tokens.peek()? {
+            Token::Identifier(identifier) => {
+                let identifier = *identifier;
+                self.tokens.next();
+                self.tokens.next_if_eq(&Token::Symbol(Symbol::LParen))?;
+                let rows = self.parse_expression()?;
+                let maybe_cols = self
+                    .tokens
+                    .next_if_eq(&Token::Symbol(Symbol::Comma))
+                    .and_then(|_| self.parse_expression());
+                self.tokens.next_if_eq(&Token::Symbol(Symbol::RParen))?;
+                let string_length = self
+                    .tokens
+                    .next_if_eq(&Token::Symbol(Symbol::Mul))
+                    .and_then(|_| self.parse_expression());
+
+                match maybe_cols {
+                    Some(cols) => Some(DimInner::DimInner2D {
+                        identifier,
+                        rows,
+                        cols,
+                        string_length,
+                    }),
+                    None => Some(DimInner::DimInner1D {
+                        identifier,
+                        size: rows,
+                        string_length,
+                    }),
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_dim_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Dim))?;
+        let mut decls = vec![];
+
+        while let Some(decl) = self.parse_dim_inner() {
+            decls.push(decl);
+
+            if self
+                .tokens
+                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .is_none()
+            {
+                break;
+            }
+        }
+
+        Some(Statement::Dim { decls })
+    }
+
     fn parse_statement(&mut self) -> Option<Statement> {
         if let Some(stmt) = self.parse_print_pause_stmt() {
             return Some(stmt);
@@ -604,6 +658,10 @@ where
         }
 
         if let Some(stmt) = self.parse_end_statement() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_dim_stmt() {
             return Some(stmt);
         }
 
@@ -618,7 +676,7 @@ where
         match self.tokens.peek()? {
             Token::DecimalNumber(line_number) => {
                 let line_number = line_number
-                    .into_integer()
+                    .as_integer()
                     .and_then(|line_number| u16::try_from(line_number).ok())
                     .unwrap_or_else(|| {
                         panic!("Expected a valid line number, got: {line_number:?}")
@@ -626,10 +684,10 @@ where
                 self.tokens.next(); // Consume line number
 
                 // Try to parse a line label: a string literal optionally followed by ':'
-                let label = if let Some(token) = self.tokens.peek()
+                let label = if let Some(token) = self.tokens.peek_mut()
                     && let Token::StringLiteral(label) = token
                 {
-                    let label = label.clone();
+                    let label = mem::take(label);
                     self.tokens.next(); // Consume label
                     self.tokens.next_if_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
                     Some(label)

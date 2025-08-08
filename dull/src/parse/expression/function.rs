@@ -1,6 +1,6 @@
 use crate::parse::expression::{Expr, memory_area::MemoryArea};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 
 pub enum Function {
     Mid {

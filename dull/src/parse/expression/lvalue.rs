@@ -3,7 +3,7 @@ use crate::{
     parse::expression::Expr,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LValue {
     // A, BB$, etc.
     Identifier(Identifier),

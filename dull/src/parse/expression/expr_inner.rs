@@ -5,7 +5,7 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExprInner {
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),

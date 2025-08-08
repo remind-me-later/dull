@@ -13,7 +13,7 @@ use self::{
     keyword::Keyword, symbol::Symbol,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Keyword(Keyword),
     Symbol(Symbol),
