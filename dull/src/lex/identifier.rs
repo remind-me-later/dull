@@ -23,6 +23,10 @@ impl Identifier {
             has_dollar,
         })
     }
+
+    pub fn has_dollar(&self) -> bool {
+        self.has_dollar
+    }
 }
 
 impl std::str::FromStr for Identifier {

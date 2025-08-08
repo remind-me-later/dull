@@ -1,8 +1,10 @@
 mod lex;
 mod parse;
+mod semantic_analysis;
 
 use crate::lex::{Lexer, Token};
 use crate::parse::Parser;
+use crate::semantic_analysis::analyze_program;
 use clap::Parser as ClapParser;
 use std::{fs, path::PathBuf, vec};
 
@@ -17,6 +19,10 @@ struct Args {
     /// Parse the input into an AST instead of just lexing
     #[arg(long)]
     parse: bool,
+
+    /// Run semantic analysis on the parsed AST (implies --parse)
+    #[arg(long)]
+    analyze: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -59,7 +65,22 @@ fn main() {
         }
     }
 
-    if args.parse {
+    if args.analyze {
+        // Parse the tokens into an AST and run semantic analysis
+        let mut parser = Parser::new(tokens.into_iter());
+        let program = parser.parse();
+        
+        match analyze_program(&program) {
+            Ok(symbol_table) => {
+                println!("Semantic analysis completed successfully!");
+                println!("Symbol table: {symbol_table:#?}");
+            }
+            Err(e) => {
+                eprintln!("Semantic analysis error: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else if args.parse {
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens.into_iter());
         let program = parser.parse();

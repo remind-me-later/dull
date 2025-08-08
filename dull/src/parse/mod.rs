@@ -15,10 +15,10 @@ use crate::{
     },
 };
 
-mod expression;
-mod line;
-mod program;
-mod statement;
+pub mod expression;
+pub mod line;
+pub mod program;
+pub mod statement;
 
 pub struct Parser<I: Clone>
 where
@@ -239,61 +239,61 @@ where
         match self.tokens.peek()? {
             Token::Keyword(Keyword::Int) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Int {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Sgn) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Sgn {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Status) => {
                 self.tokens.next();
-                let arg = self.parse_expression()?;
+                let arg = self.parse_expression_factor()?;
                 Some(Function::Status { arg: Box::new(arg) })
             }
             Token::Keyword(Keyword::Val) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Val {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::StrDollar) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Str {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::ChrDollar) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Chr {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Abs) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Abs {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Len) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Len {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::PeekMem0) => {
                 self.tokens.next();
-                let address = self.parse_expression()?;
+                let address = self.parse_expression_factor()?;
                 Some(Function::Peek {
                     memory_area: MemoryArea::Me0,
                     address: Box::new(address),
@@ -301,7 +301,7 @@ where
             }
             Token::Keyword(Keyword::PeekMem1) => {
                 self.tokens.next();
-                let address = self.parse_expression()?;
+                let address = self.parse_expression_factor()?;
                 Some(Function::Peek {
                     memory_area: MemoryArea::Me1,
                     address: Box::new(address),
@@ -309,56 +309,56 @@ where
             }
             Token::Keyword(Keyword::Ln) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Ln {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Log) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Log {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Dms) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Dms {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Deg) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Deg {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Tan) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Tan {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Cos) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Cos {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Sin) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Sin {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Sqr) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Sqr {
                     expr: Box::new(expr),
                 })
@@ -428,21 +428,21 @@ where
             }
             Token::Keyword(Keyword::Asc) => {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.parse_expression_factor()?;
                 Some(Function::Asc {
                     expr: Box::new(expr),
                 })
             }
             Token::Keyword(Keyword::Point) => {
                 self.tokens.next();
-                let position = self.parse_expression()?;
+                let position = self.parse_expression_factor()?;
                 Some(Function::Point {
                     position: Box::new(position),
                 })
             }
             Token::Keyword(Keyword::Rnd) => {
                 self.tokens.next();
-                let range_end = self.parse_expression()?;
+                let range_end = self.parse_expression_factor()?;
                 Some(Function::Rnd {
                     range_end: Box::new(range_end),
                 })
