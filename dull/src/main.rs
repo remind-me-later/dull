@@ -67,7 +67,7 @@ fn main() {
     } else {
         // Just output the tokens
         for (i, token) in tokens.iter().enumerate() {
-            print!("{token}");
+            print!("{token:?}");
             if i < tokens.len() - 1 {
                 print!(" ");
             }

@@ -4,13 +4,13 @@ use crate::{
     lex::{Token, keyword::Keyword, symbol::Symbol},
     parse::{
         expression::{
-            Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::Function,
+            Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::Function, lvalue::LValue,
             memory_area::MemoryArea, unary_op::UnaryOp,
         },
         line::Line,
         statement::{
-            Assignment, DimInner, LetInner, PrintInner, PrintSeparator, Printable, Statement,
-            UsingClause,
+            Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
+            LetInner, PrintInner, PrintSeparator, Printable, Statement, UsingClause,
         },
     },
 };
@@ -239,6 +239,18 @@ where
                     .expect("Expected closing parenthesis");
                 Some(expr)
             }
+            Token::Keyword(Keyword::Time) => {
+                self.tokens.next();
+                Some(Expr::new(ExprInner::LValue(LValue::BuiltInIdentifier(
+                    Keyword::Time,
+                ))))
+            }
+            Token::Keyword(Keyword::InkeyDollar) => {
+                self.tokens.next();
+                Some(Expr::new(ExprInner::LValue(LValue::BuiltInIdentifier(
+                    Keyword::InkeyDollar,
+                ))))
+            }
             _ => self
                 .parse_function()
                 .map(ExprInner::FunctionCall)
@@ -428,7 +440,7 @@ where
         }
     }
 
-    fn parse_lvalue(&mut self) -> Option<expression::lvalue::LValue> {
+    fn parse_lvalue(&mut self) -> Option<LValue> {
         match self.tokens.peek()? {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
@@ -447,7 +459,7 @@ where
                             .unwrap_or_else(|| {
                                 panic!("Expected closing parenthesis for 2D array access");
                             });
-                        return Some(expression::lvalue::LValue::Array2DAccess {
+                        return Some(LValue::Array2DAccess {
                             identifier,
                             row_index: Box::new(index),
                             col_index: Box::new(col_index),
@@ -459,18 +471,13 @@ where
                         .unwrap_or_else(|| {
                             panic!("Expected closing parenthesis for 1D array access");
                         });
-                    return Some(expression::lvalue::LValue::Array1DAccess {
+                    return Some(LValue::Array1DAccess {
                         identifier,
                         index: Box::new(index),
                     });
                 }
 
-                Some(expression::lvalue::LValue::Identifier(identifier))
-            }
-            Token::BuiltInIdentifier(built_in) => {
-                let built_in = *built_in;
-                self.tokens.next();
-                Some(expression::lvalue::LValue::BuiltInIdentifier(built_in))
+                Some(LValue::Identifier(identifier))
             }
             Token::Symbol(Symbol::At) => {
                 self.tokens.next();
@@ -480,10 +487,18 @@ where
                     .next_if_eq(&Token::Symbol(Symbol::Dollar))
                     .is_some();
 
-                Some(expression::lvalue::LValue::FixedMemoryAreaAccess {
+                Some(LValue::FixedMemoryAreaAccess {
                     index: Box::new(index),
                     has_dollar,
                 })
+            }
+            Token::Keyword(Keyword::Time) => {
+                self.tokens.next();
+                Some(LValue::BuiltInIdentifier(Keyword::Time))
+            }
+            Token::Keyword(Keyword::InkeyDollar) => {
+                self.tokens.next();
+                Some(LValue::BuiltInIdentifier(Keyword::InkeyDollar))
             }
             _ => None,
         }
@@ -648,7 +663,7 @@ where
         Some(Statement::Dim { decls })
     }
 
-    fn parse_statement(&mut self) -> Option<Statement> {
+    fn parse_statement(&mut self, is_let_mandatory: bool) -> Option<Statement> {
         if let Some(stmt) = self.parse_print_pause_stmt() {
             return Some(stmt);
         }
@@ -661,15 +676,589 @@ where
             return Some(stmt);
         }
 
+        if let Some(stmt) = self.parse_if_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_input_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_remark_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_for_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_next_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_clear_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_goto_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_gosub_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_on_goto_gosub_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_on_error_goto_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_wait_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_cls_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_random_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_gprint_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_gcursor_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_cursor_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_beep_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_return_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_poke_stmt() {
+            return Some(stmt);
+        }
+
         if let Some(stmt) = self.parse_dim_stmt() {
             return Some(stmt);
         }
 
-        if let Some(stmt) = self.parse_let_inner(false) {
+        if let Some(stmt) = self.parse_read_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_data_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_restore_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_arun_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_lock_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_unlock_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_call_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_text_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_graph_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_color_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_csize_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_lf_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_radian_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_lcursor_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_lprint_stmt() {
+            return Some(stmt);
+        }
+
+        if let Some(stmt) = self.parse_let_inner(is_let_mandatory) {
             return Some(Statement::Let { inner: stmt });
         }
 
         None
+    }
+
+    fn parse_if_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::If))?;
+        let condition = self.parse_expression()?;
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Then)); // optional
+        let then_stmt = self.parse_statement(true).or_else(|| {
+            // If no statement after THEN, check for a line number
+            if let Some(Token::DecimalNumber(line_number)) = self.tokens.peek() {
+                let line_number = *line_number;
+                self.tokens.next();
+                Some(Statement::Goto {
+                    target: Expr::new(ExprInner::DecimalNumber(line_number)),
+                })
+            } else {
+                None
+            }
+        })?;
+
+        Some(Statement::If {
+            condition,
+            then_stmt: Box::new(then_stmt),
+        })
+    }
+
+    fn parse_input_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Input))?;
+        let mut input_exprs = vec![];
+
+        loop {
+            // Check for prompt string
+            let prompt = if let Some(Token::StringLiteral(_)) = self.tokens.peek() {
+                if let Some(Token::StringLiteral(s)) = self.tokens.next() {
+                    self.tokens.next_if_eq(&Token::Symbol(Symbol::Semicolon));
+                    Some(s)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let lvalue = self.parse_lvalue()?;
+            input_exprs.push((prompt, lvalue));
+
+            if self
+                .tokens
+                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .is_none()
+            {
+                break;
+            }
+        }
+
+        Some(Statement::Input { input_exprs })
+    }
+
+    fn parse_remark_stmt(&mut self) -> Option<Statement> {
+        match self.tokens.peek_mut() {
+            Some(Token::Remark(s)) => {
+                let s = mem::take(s);
+                self.tokens.next();
+                Some(Statement::Remark {
+                    text: s.to_string(),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_for_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::For))?;
+        let assignment = self.parse_assignment()?;
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::To))?;
+        let to_expr = self.parse_expression()?;
+        let step_expr = if self
+            .tokens
+            .next_if_eq(&Token::Keyword(Keyword::Step))
+            .is_some()
+        {
+            Some(self.parse_expression()?)
+        } else {
+            None
+        };
+        Some(Statement::For {
+            assignment,
+            to_expr,
+            step_expr,
+        })
+    }
+
+    fn parse_next_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Next))?;
+        let ident = match self.tokens.next()? {
+            Token::Identifier(id) => id,
+            _ => return None,
+        };
+        Some(Statement::Next { ident })
+    }
+
+    fn parse_clear_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Clear))?;
+        Some(Statement::Clear)
+    }
+
+    fn parse_goto_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Goto))?;
+        let target = self.parse_expression()?;
+        Some(Statement::Goto { target })
+    }
+
+    fn parse_gosub_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Gosub))?;
+        let target = self.parse_expression()?;
+        Some(Statement::Gosub { target })
+    }
+
+    fn parse_on_goto_gosub_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::On))?;
+        let expr = self.parse_expression()?;
+
+        if self
+            .tokens
+            .next_if_eq(&Token::Keyword(Keyword::Goto))
+            .is_some()
+        {
+            let mut targets = vec![self.parse_expression()?];
+            while self
+                .tokens
+                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .is_some()
+            {
+                targets.push(self.parse_expression()?);
+            }
+            Some(Statement::OnGoto { expr, targets })
+        } else if self
+            .tokens
+            .next_if_eq(&Token::Keyword(Keyword::Gosub))
+            .is_some()
+        {
+            let mut targets = vec![self.parse_expression()?];
+            while self
+                .tokens
+                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .is_some()
+            {
+                targets.push(self.parse_expression()?);
+            }
+            Some(Statement::OnGosub { expr, targets })
+        } else {
+            None
+        }
+    }
+
+    fn parse_on_error_goto_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::On))?;
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Error))?;
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Goto))?;
+        let target = self.parse_expression()?;
+        Some(Statement::OnErrorGoto { target })
+    }
+
+    fn parse_wait_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Wait))?;
+        let expr = if self.tokens.peek().is_some() {
+            // Check if the next token can start an expression
+            match self.tokens.peek()? {
+                Token::DecimalNumber(_)
+                | Token::BinaryNumber(_)
+                | Token::Identifier(_)
+                | Token::Symbol(Symbol::LParen) => Some(self.parse_expression()?),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        Some(Statement::Wait { expr })
+    }
+
+    fn parse_cls_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Cls))?;
+        Some(Statement::Cls)
+    }
+
+    fn parse_random_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Random))?;
+        Some(Statement::Random)
+    }
+
+    fn parse_gprint_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Gprint))?;
+        let mut exprs = vec![];
+
+        while let Some(expr) = self.parse_expression() {
+            let separator = self.parse_print_separator();
+            let is_empty = matches!(separator, PrintSeparator::Empty);
+            exprs.push((expr, separator));
+
+            if is_empty {
+                break;
+            }
+        }
+
+        Some(Statement::Gprint { exprs })
+    }
+
+    fn parse_gcursor_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Gcursor))?;
+        let expr = self.parse_expression()?;
+        Some(Statement::GCursor { expr })
+    }
+
+    fn parse_cursor_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Cursor))?;
+        let expr = self.parse_expression()?;
+        Some(Statement::Cursor { expr })
+    }
+
+    fn parse_beep_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Beep))?;
+
+        // Check for BEEP ON/OFF
+        if let Some(Token::Keyword(Keyword::On)) = self.tokens.peek() {
+            self.tokens.next();
+            return Some(Statement::BeepOnOff {
+                switch_beep_on: true,
+            });
+        }
+        if let Some(Token::Keyword(Keyword::Off)) = self.tokens.peek() {
+            self.tokens.next();
+            return Some(Statement::BeepOnOff {
+                switch_beep_on: false,
+            });
+        }
+
+        // Parse BEEP repetitions[,frequency[,duration]]
+        let repetitions_expr = self.parse_expression()?;
+        let optional_params = if self
+            .tokens
+            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .is_some()
+        {
+            let frequency = self.parse_expression()?;
+            let duration = if self
+                .tokens
+                .next_if_eq(&Token::Symbol(Symbol::Comma))
+                .is_some()
+            {
+                Some(self.parse_expression()?)
+            } else {
+                None
+            };
+            Some(BeepOptionalParams {
+                frequency,
+                duration,
+            })
+        } else {
+            None
+        };
+
+        Some(Statement::Beep {
+            repetitions_expr,
+            optional_params,
+        })
+    }
+
+    fn parse_return_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Return))?;
+        Some(Statement::Return)
+    }
+
+    fn parse_poke_stmt(&mut self) -> Option<Statement> {
+        let memory_area = match self.tokens.peek()? {
+            Token::Keyword(Keyword::PokeMem0) => {
+                self.tokens.next();
+                MemoryArea::Me0
+            }
+            Token::Keyword(Keyword::PokeMem1) => {
+                self.tokens.next();
+                MemoryArea::Me1
+            }
+            _ => return None,
+        };
+
+        let mut exprs = vec![self.parse_expression()?];
+        while self
+            .tokens
+            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .is_some()
+        {
+            exprs.push(self.parse_expression()?);
+        }
+
+        Some(Statement::Poke { memory_area, exprs })
+    }
+
+    fn parse_read_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Read))?;
+        let mut destinations = vec![self.parse_lvalue()?];
+        while self
+            .tokens
+            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .is_some()
+        {
+            destinations.push(self.parse_lvalue()?);
+        }
+        Some(Statement::Read { destinations })
+    }
+
+    fn parse_data_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Data))?;
+        let mut exprs = vec![self.parse_expression()?];
+        while self
+            .tokens
+            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .is_some()
+        {
+            exprs.push(self.parse_expression()?);
+        }
+        Some(Statement::Data(exprs))
+    }
+
+    fn parse_restore_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Restore))?;
+        let expr = if self.tokens.peek().is_some() {
+            // Check if the next token can start an expression
+            match self.tokens.peek()? {
+                Token::DecimalNumber(_)
+                | Token::BinaryNumber(_)
+                | Token::Identifier(_)
+                | Token::Symbol(Symbol::LParen) => Some(self.parse_expression()?),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        Some(Statement::Restore { expr })
+    }
+
+    fn parse_arun_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Arun))?;
+        Some(Statement::Arun)
+    }
+
+    fn parse_lock_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lock))?;
+        Some(Statement::Lock)
+    }
+
+    fn parse_unlock_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Unlock))?;
+        Some(Statement::Unlock)
+    }
+
+    fn parse_call_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Call))?;
+        let expr = self.parse_expression()?;
+        let variable = if self
+            .tokens
+            .next_if_eq(&Token::Symbol(Symbol::Comma))
+            .is_some()
+        {
+            Some(self.parse_lvalue()?)
+        } else {
+            None
+        };
+        Some(Statement::Call { expr, variable })
+    }
+
+    fn parse_text_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Text))?;
+        Some(Statement::Text)
+    }
+
+    fn parse_graph_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Graph))?;
+        Some(Statement::Graph)
+    }
+
+    fn parse_color_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Color))?;
+        let color = self.parse_expression()?;
+        Some(Statement::Color { expr: color })
+    }
+
+    fn parse_csize_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Csize))?;
+        let expr = self.parse_expression()?;
+        Some(Statement::CSize { expr })
+    }
+
+    fn parse_lf_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lf))?;
+        let expr = self.parse_expression()?;
+        Some(Statement::Lf { expr })
+    }
+
+    fn parse_radian_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Radian))?;
+        Some(Statement::Radian)
+    }
+
+    fn parse_lcursor_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lcursor))?;
+        let expr = self.parse_expression()?;
+        Some(Statement::LCursor(LCursorClause { expr }))
+    }
+
+    fn parse_lprint_stmt(&mut self) -> Option<Statement> {
+        self.tokens.next_if_eq(&Token::Keyword(Keyword::Lprint))?;
+        let inner = self.parse_lprint_inner()?;
+        Some(Statement::LPrint { inner })
+    }
+
+    fn parse_lprint_inner(&mut self) -> Option<LPrintInner> {
+        let mut exprs = vec![];
+
+        loop {
+            let printable = if self.tokens.peek() == Some(&Token::Keyword(Keyword::Lcursor)) {
+                self.tokens.next();
+                let expr = self.parse_expression()?;
+                LPrintable::LCursorClause(LCursorClause { expr })
+            } else if let Some(expr) = self.parse_expression() {
+                LPrintable::Expr(expr)
+            } else {
+                break;
+            };
+
+            let print_separator = self.parse_print_separator();
+            let is_empty = matches!(print_separator, PrintSeparator::Empty);
+            exprs.push((printable, print_separator));
+
+            if is_empty {
+                break;
+            }
+        }
+
+        Some(LPrintInner { exprs })
     }
 
     fn parse_line(&mut self) -> Option<Line> {
@@ -697,7 +1286,7 @@ where
 
                 let mut statements = vec![];
 
-                while let Some(statement) = self.parse_statement() {
+                while let Some(statement) = self.parse_statement(false) {
                     statements.push(statement);
                     // Statements are separated by ':'
                     if self

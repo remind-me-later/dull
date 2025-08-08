@@ -1,5 +1,5 @@
 use crate::{
-    lex::identifier::{BuiltInIdentifier, Identifier},
+    lex::{identifier::Identifier, keyword::Keyword},
     parse::expression::Expr,
 };
 
@@ -8,7 +8,7 @@ pub enum LValue {
     // A, BB$, etc.
     Identifier(Identifier),
     // TIME, INKEY$, etc.
-    BuiltInIdentifier(BuiltInIdentifier),
+    BuiltInIdentifier(Keyword),
     // A(2), B$(E), etc.
     Array1DAccess {
         identifier: Identifier,

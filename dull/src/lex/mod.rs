@@ -6,8 +6,6 @@ pub mod symbol;
 
 use std::iter::Peekable;
 
-use crate::lex::identifier::BuiltInIdentifier;
-
 use self::{
     binary_number::BinaryNumber, decimal_number::DecimalNumber, identifier::Identifier,
     keyword::Keyword, symbol::Symbol,
@@ -18,7 +16,6 @@ pub enum Token {
     Keyword(Keyword),
     Symbol(Symbol),
     Identifier(Identifier),
-    BuiltInIdentifier(BuiltInIdentifier),
     DecimalNumber(DecimalNumber),
     BinaryNumber(BinaryNumber),
     StringLiteral(String),
@@ -35,7 +32,6 @@ impl std::fmt::Display for Token {
             Token::BinaryNumber(binary_number) => write!(f, "{binary_number}"),
             Token::StringLiteral(string_literal) => write!(f, "\"{string_literal}\""),
             Token::Remark(remark) => write!(f, "REM {remark}"),
-            Token::BuiltInIdentifier(built_in) => write!(f, "{built_in}"),
         }
     }
 }
@@ -51,16 +47,6 @@ impl<'a> Lexer<'a> {
             input: input.chars().peekable(),
             is_done: false,
         }
-    }
-
-    fn parse_identifier(&self, word: &str) -> Result<Token, &'static str> {
-        // try to parse a built-in identifier first
-        if let Ok(built_in) = word.parse::<BuiltInIdentifier>() {
-            return Ok(Token::BuiltInIdentifier(built_in));
-        }
-
-        // If not a built-in identifier, try to parse a regular identifier
-        word.parse::<Identifier>().map(Token::Identifier)
     }
 }
 
@@ -259,7 +245,10 @@ impl Iterator for Lexer<'_> {
                                 self.input.next();
                             }
 
-                            return Some(Ok(self.parse_identifier(&word[..ident_len]).unwrap()));
+                            return Some(Ok(word[..ident_len]
+                                .parse::<Identifier>()
+                                .map(Token::Identifier)
+                                .unwrap()));
                         }
                     }
                 }
@@ -269,7 +258,10 @@ impl Iterator for Lexer<'_> {
                     self.input.next(); // Consume the rest of the identifier
                 }
 
-                Some(Ok(self.parse_identifier(&word).unwrap()))
+                Some(Ok(word
+                    .parse::<Identifier>()
+                    .map(Token::Identifier)
+                    .unwrap()))
             }
 
             _ => None, // Unknown character, skip or handle as error

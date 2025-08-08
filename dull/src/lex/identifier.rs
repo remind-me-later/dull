@@ -82,39 +82,3 @@ impl std::fmt::Display for Identifier {
         Ok(())
     }
 }
-
-// data PseudoVariable where
-//   TimePseudoVar :: PseudoVariable
-//   InkeyPseudoVar :: PseudoVariable -- Read only
-//   deriving (Eq)
-
-// instance Show PseudoVariable where
-//   show TimePseudoVar = "TIME"
-//   show InkeyPseudoVar = "INKEY$"
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuiltInIdentifier {
-    Time,
-    Inkey,
-}
-
-impl std::fmt::Display for BuiltInIdentifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BuiltInIdentifier::Time => write!(f, "TIME"),
-            BuiltInIdentifier::Inkey => write!(f, "INKEY$"),
-        }
-    }
-}
-
-impl std::str::FromStr for BuiltInIdentifier {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "TIME" => Ok(BuiltInIdentifier::Time),
-            "INKEY$" => Ok(BuiltInIdentifier::Inkey),
-            _ => Err("Not a built-in identifier"),
-        }
-    }
-}
