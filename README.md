@@ -14,7 +14,7 @@ A BASIC to binary compiler for the Sharp PC-1500 series of computers.
 | bombardments           | [x]    |                                     |
 | bowling                | [x]    |                                     |
 | course                 | [x]    |                                     |
-| dames                  | [ ]    | Printer commands missing            |
+| dames                  | [x]    |            |
 | decathlon              | [ ]    | Printer commands missing            |
 | donkey_kong            | [x]    |                                     |
 | DungeonQuest           | [x]    |                                     |
@@ -31,13 +31,13 @@ A BASIC to binary compiler for the Sharp PC-1500 series of computers.
 | minenboot              | [x]    |                                     |
 | mole                   | [x]    |                                     |
 | monstres&merveilles    | [x]    |                                     |
-| morpion                | [ ]    | Printer commands missing            |
-| othello                | [ ]    | Printer commands missing            |
+| morpion                | [x]    |             |
+| othello                | [x]    |            |
 | pacman                 | [x]    |                                     |
 | piles_jr               | [x]    |                                     |
 | rase_mottes            | [x]    |                                     |
-| scrabble               | [ ]    | Printer commands missing            |
-| simulateur-de-vol      | [ ]    | Printer commands missing            |
+| scrabble               | [x]    |            |
+| simulateur-de-vol      | [ ]    | Strange '['             |
 | slalom                 | [x]    |                                     |
 | tank                   | [x]    |                                     |
 | tempter                | [ ]    | IF without THEN clause in line 40   |

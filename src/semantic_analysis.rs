@@ -103,6 +103,11 @@ impl SemanticAnalyzer {
 
     /// Analyze a single line
     fn analyze_line(&mut self, line: &Line) -> SemanticResult<()> {
+        // println!("Analyzing line {} with statements:", line.number);
+        // for (i, statement) in line.statements.iter().enumerate() {
+        //     println!("  Statement {}: {}", i + 1, statement);
+        // }
+
         for statement in &line.statements {
             self.analyze_statement(statement)?;
         }
@@ -338,14 +343,10 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::Line {
-                inner,
-            } => {
+            Statement::Line { inner } => {
                 self.analyze_line_inner(inner)?;
             }
-            Statement::RLine {
-                inner,
-            } => {
+            Statement::RLine { inner } => {
                 self.analyze_line_inner(inner)?;
             }
             Statement::Sorgn => {}

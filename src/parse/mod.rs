@@ -13,8 +13,8 @@ use crate::{
         },
         line::Line,
         statement::{
-            Assignment, BeepOptionalParams, DimInner, LCursorClause, LineInner, LPrintInner, LPrintable,
-            LetInner, PrintInner, PrintSeparator, Printable, Statement, UsingClause,
+            Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
+            LetInner, LineInner, PrintInner, PrintSeparator, Printable, Statement, UsingClause,
         },
     },
 };
@@ -596,21 +596,21 @@ where
             }
             Token::Keyword(Keyword::Asc) => {
                 self.tokens.next();
-                let expr = self.expect_expression()?;
+                let expr = self.expect_expression_factor()?;
                 Ok(Some(Function::Asc {
                     expr: Box::new(expr),
                 }))
             }
             Token::Keyword(Keyword::Point) => {
                 self.tokens.next();
-                let position = self.expect_expression()?;
+                let position = self.expect_expression_factor()?;
                 Ok(Some(Function::Point {
                     position: Box::new(position),
                 }))
             }
             Token::Keyword(Keyword::Rnd) => {
                 self.tokens.next();
-                let range_end = self.expect_expression()?;
+                let range_end = self.expect_expression_factor()?;
                 Ok(Some(Function::Rnd {
                     range_end: Box::new(range_end),
                 }))
