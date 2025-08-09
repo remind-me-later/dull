@@ -87,6 +87,7 @@ impl std::fmt::Display for BeepOptionalParams {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrintSeparator {
     Comma,
     Semicolon,
@@ -211,7 +212,7 @@ pub enum Statement {
         step_expr: Option<Expr>,
     },
     Next {
-        ident: Identifier,
+        lvalue: LValue,
     },
     Clear,
     Goto {
@@ -336,7 +337,7 @@ impl std::fmt::Display for Statement {
                 };
                 write!(f, "FOR {assignment} TO {to_expr}{step_str}")
             }
-            Statement::Next { ident } => write!(f, "NEXT {ident}"),
+            Statement::Next { lvalue: ident } => write!(f, "NEXT {ident}"),
             Statement::Clear => write!(f, "CLEAR"),
             Statement::Goto { target } => write!(f, "GOTO {target}"),
             Statement::Gosub { target } => write!(f, "GOSUB {target}"),

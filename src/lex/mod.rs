@@ -362,7 +362,15 @@ impl Iterator for Lexer<'_> {
                                 self.advance();
                             }
 
-                            let kw = Keyword::try_from(word.as_str()).unwrap();
+                            let kw = match Keyword::try_from(word.as_str()) {
+                                Ok(kw) => kw,
+                                Err(_) => {
+                                    return Some(Err(LexError::UnexpectedCharacter {
+                                        ch: word.chars().next().unwrap_or('?'),
+                                        span: self.span_from(start_pos),
+                                    }));
+                                }
+                            };
 
                             // We need to handle comments in a special way, consume until end of line
                             if kw == Keyword::Rem {
@@ -397,13 +405,16 @@ impl Iterator for Lexer<'_> {
                                 self.advance();
                             }
 
-                            return Some(Ok(SpannedToken::new(
-                                word[..ident_len]
-                                    .parse::<Identifier>()
-                                    .map(Token::Identifier)
-                                    .unwrap(),
-                                self.span_from(start_pos),
-                            )));
+                            return Some(match word[..ident_len].parse::<Identifier>() {
+                                Ok(identifier) => Ok(SpannedToken::new(
+                                    Token::Identifier(identifier),
+                                    self.span_from(start_pos),
+                                )),
+                                Err(_) => Err(LexError::UnexpectedCharacter {
+                                    ch: word.chars().next().unwrap_or('?'),
+                                    span: self.span_from(start_pos),
+                                }),
+                            });
                         }
                     }
                 }
@@ -413,10 +424,16 @@ impl Iterator for Lexer<'_> {
                     self.advance(); // Consume the rest of the identifier
                 }
 
-                Some(Ok(SpannedToken::new(
-                    word.parse::<Identifier>().map(Token::Identifier).unwrap(),
-                    self.span_from(start_pos),
-                )))
+                match word.parse::<Identifier>() {
+                    Ok(identifier) => Some(Ok(SpannedToken::new(
+                        Token::Identifier(identifier),
+                        self.span_from(start_pos),
+                    ))),
+                    Err(_) => Some(Err(LexError::UnexpectedCharacter {
+                        ch: word.chars().next().unwrap_or('?'),
+                        span: self.span_from(start_pos),
+                    })),
+                }
             }
 
             _ => Some(Err(LexError::UnexpectedCharacter {

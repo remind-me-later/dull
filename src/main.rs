@@ -72,15 +72,23 @@ fn main() {
     if args.analyze {
         // Parse the tokens into an AST and run semantic analysis
         let mut parser = Parser::new(tokens.into_iter());
-        let program = parser.parse();
-
-        match analyze_program(&program) {
-            Ok(symbol_table) => {
-                println!("Semantic analysis completed successfully!");
-                println!("Symbol table: {symbol_table:#?}");
+        
+        match parser.parse_with_error_recovery() {
+            Ok(program) => {
+                match analyze_program(&program) {
+                    Ok(symbol_table) => {
+                        println!("Semantic analysis completed successfully!");
+                        println!("Symbol table: {symbol_table:#?}");
+                    }
+                    Err(semantic_error) => {
+                        let compile_error = CompileError::from(semantic_error);
+                        print_error(&compile_error, &filename, &input);
+                        std::process::exit(1);
+                    }
+                }
             }
-            Err(semantic_error) => {
-                let compile_error = CompileError::from(semantic_error);
+            Err(parse_error) => {
+                let compile_error = CompileError::from(parse_error);
                 print_error(&compile_error, &filename, &input);
                 std::process::exit(1);
             }
@@ -88,8 +96,17 @@ fn main() {
     } else if args.parse {
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens.into_iter());
-        let program = parser.parse();
-        print!("{program}");
+        
+        match parser.parse_with_error_recovery() {
+            Ok(program) => {
+                print!("{program}");
+            }
+            Err(parse_error) => {
+                let compile_error = CompileError::from(parse_error);
+                print_error(&compile_error, &filename, &input);
+                std::process::exit(1);
+            }
+        }
     } else {
         // Just output the tokens
         for (i, token) in tokens.iter().enumerate() {

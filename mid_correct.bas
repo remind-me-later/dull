@@ -1,0 +1,1 @@
+10 PRINT MID$("HELLO", 2, 3)

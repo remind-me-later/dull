@@ -156,7 +156,7 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            Statement::Next { ident } => {
+            Statement::Next { lvalue: ident } => {
                 // Ensure the identifier is numeric (FOR loop variable)
                 self.state.insert_variable(ident, BasicType::Numeric);
             }

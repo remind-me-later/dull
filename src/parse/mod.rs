@@ -1,7 +1,11 @@
 use std::{iter::Peekable, mem, vec};
 
 use crate::{
-    lex::{SpannedToken, Token, keyword::Keyword, symbol::Symbol},
+    error::{ParseError, ParseResult, Span},
+    lex::{
+        SpannedToken, Token, binary_number::BinaryNumber, decimal_number::DecimalNumber,
+        keyword::Keyword, symbol::Symbol,
+    },
     parse::{
         expression::{
             Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::Function, lvalue::LValue,
@@ -38,12 +42,18 @@ where
     }
 
     /// Helper method to peek at the token without the span
-    fn peek_token(&mut self) -> Option<&Token> {
-        self.tokens.peek().map(|spanned| spanned.token())
+    fn peek_token(&mut self) -> &Token {
+        self.tokens
+            .peek()
+            .map(|spanned| spanned.token())
+            .unwrap_or_else(|| panic!("Expected token but found none"))
     }
 
-    fn peek_mut_token(&mut self) -> Option<&mut Token> {
-        self.tokens.peek_mut().map(|spanned| spanned.token_mut())
+    fn peek_mut_token(&mut self) -> &mut Token {
+        self.tokens
+            .peek_mut()
+            .map(|spanned| spanned.token_mut())
+            .unwrap_or_else(|| panic!("Expected token but found none"))
     }
 
     /// Helper method to get the next token with span
@@ -53,7 +63,7 @@ where
 
     /// Helper method to check if next token matches and consume it if so
     fn next_if_token_eq(&mut self, expected: &Token) -> Option<SpannedToken> {
-        if self.peek_token() == Some(expected) {
+        if self.peek_token() == expected {
             self.next_spanned()
         } else {
             None
@@ -62,30 +72,104 @@ where
 
     /// Helper method to conditionally consume token based on predicate  
     fn next_if_token(&mut self, predicate: impl Fn(&Token) -> bool) -> Option<SpannedToken> {
-        if self.peek_token().map(&predicate).unwrap_or(false) {
+        if predicate(self.peek_token()) {
             self.next_spanned()
         } else {
             None
         }
     }
 
-    fn parse_exponent_expr(&mut self) -> Option<Expr> {
-        let mut left = self.parse_expression_factor()?;
-
-        while let Some(&Token::Symbol(Symbol::Exp)) = self.peek_token() {
-            self.next_spanned();
-            let right = self.parse_expression_factor()?;
-            left = Expr::new(ExprInner::Binary(
-                Box::new(left),
-                BinaryOp::Exp,
-                Box::new(right),
-            ));
-        }
-
-        Some(left)
+    /// Helper method to get the current span for error reporting
+    fn current_span(&mut self) -> Span {
+        self.tokens
+            .peek()
+            .map(|token| *token.span())
+            .unwrap_or_else(|| Span::single(0)) // Default span if no tokens left
     }
 
-    fn parse_unary_op_expr(&mut self) -> Option<Expr> {
+    /// Helper method to expect a specific token and return an error if not found
+    fn expect_token(&mut self, expected: &Token, context: &str) -> ParseResult<SpannedToken> {
+        match self.next_spanned() {
+            Some(token) if token.token() == expected => Ok(token),
+            Some(token) => Err(ParseError::UnexpectedToken {
+                expected: format!("{expected}"),
+                found: format!("{}", token.token()),
+                span: *token.span(),
+            }),
+            None => Err(ParseError::UnexpectedEndOfInput {
+                expected: format!("{expected} ({context})"),
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    /// Helper method to expect a token matching a predicate
+    fn expect_token_where(
+        &mut self,
+        predicate: impl Fn(&Token) -> bool,
+        expected_desc: &str,
+        context: &str,
+    ) -> ParseResult<SpannedToken> {
+        match self.next_spanned() {
+            Some(token) if predicate(token.token()) => Ok(token),
+            Some(token) => Err(ParseError::UnexpectedToken {
+                expected: expected_desc.to_string(),
+                found: format!("{}", token.token()),
+                span: *token.span(),
+            }),
+            None => Err(ParseError::UnexpectedEndOfInput {
+                expected: format!("{expected_desc} ({context})"),
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn expect_expression(&mut self) -> ParseResult<Expr> {
+        match self.parse_expression()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn expect_expression_factor(&mut self) -> ParseResult<Expr> {
+        match self.parse_expression_factor()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn parse_exponent_expr(&mut self) -> ParseResult<Option<Expr>> {
+        if let Some(mut left) = self.parse_expression_factor()? {
+            while self.peek_token() == &Token::Symbol(Symbol::Exp) {
+                self.next_spanned();
+                let right = self.expect_expression_factor()?;
+                left = Expr::new(ExprInner::Binary(
+                    Box::new(left),
+                    BinaryOp::Exp,
+                    Box::new(right),
+                ));
+            }
+
+            Ok(Some(left))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn expect_exponent_expr(&mut self) -> ParseResult<Expr> {
+        match self.parse_exponent_expr()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn parse_unary_op_expr(&mut self) -> ParseResult<Option<Expr>> {
         let maybe_op = self.next_if_token(|token| {
             matches!(
                 token,
@@ -94,420 +178,525 @@ where
         });
         match maybe_op.as_ref().map(|s| s.token()) {
             Some(Token::Symbol(Symbol::Add)) => {
-                let right = self.parse_exponent_expr()?;
-                Some(Expr::new(ExprInner::Unary(UnaryOp::Plus, Box::new(right))))
+                let right = self.expect_unary_op_expr()?;
+                Ok(Some(Expr::new(ExprInner::Unary(
+                    UnaryOp::Plus,
+                    Box::new(right),
+                ))))
             }
             Some(Token::Symbol(Symbol::Sub)) => {
-                let right = self.parse_exponent_expr()?;
-                Some(Expr::new(ExprInner::Unary(UnaryOp::Minus, Box::new(right))))
+                let right = self.expect_unary_op_expr()?;
+                Ok(Some(Expr::new(ExprInner::Unary(
+                    UnaryOp::Minus,
+                    Box::new(right),
+                ))))
             }
-            _ => self.parse_exponent_expr(),
+            _ => Ok(self.parse_exponent_expr()?),
         }
     }
 
-    fn parse_mul_div_expr(&mut self) -> Option<Expr> {
-        let mut left = self.parse_unary_op_expr()?;
-
-        while let Some(op) = self.next_if_token(|token| {
-            matches!(
-                token,
-                Token::Symbol(Symbol::Mul) | Token::Symbol(Symbol::Div)
-            )
-        }) {
-            let right = self.parse_unary_op_expr()?;
-            let binary_op = match op.token() {
-                Token::Symbol(Symbol::Mul) => BinaryOp::Mul,
-                Token::Symbol(Symbol::Div) => BinaryOp::Div,
-                _ => unreachable!(),
-            };
-            left = Expr::new(ExprInner::Binary(
-                Box::new(left),
-                binary_op,
-                Box::new(right),
-            ));
+    fn expect_unary_op_expr(&mut self) -> ParseResult<Expr> {
+        match self.parse_unary_op_expr()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
         }
-
-        Some(left)
     }
 
-    fn parse_add_sub_expr(&mut self) -> Option<Expr> {
-        let mut left = self.parse_mul_div_expr()?;
+    fn parse_mul_div_expr(&mut self) -> ParseResult<Option<Expr>> {
+        if let Some(mut left) = self.parse_unary_op_expr()? {
+            while let Some(op) = self.next_if_token(|token| {
+                matches!(
+                    token,
+                    Token::Symbol(Symbol::Mul) | Token::Symbol(Symbol::Div)
+                )
+            }) {
+                let right = self.expect_unary_op_expr()?;
+                let binary_op = match op.token() {
+                    Token::Symbol(Symbol::Mul) => BinaryOp::Mul,
+                    Token::Symbol(Symbol::Div) => BinaryOp::Div,
+                    _ => unreachable!(),
+                };
+                left = Expr::new(ExprInner::Binary(
+                    Box::new(left),
+                    binary_op,
+                    Box::new(right),
+                ));
+            }
 
-        while let Some(op) = self.next_if_token(|token| {
-            matches!(
-                token,
-                Token::Symbol(Symbol::Add) | Token::Symbol(Symbol::Sub)
-            )
-        }) {
-            let right = self.parse_mul_div_expr()?;
-            let binary_op = match op.token() {
-                Token::Symbol(Symbol::Add) => BinaryOp::Add,
-                Token::Symbol(Symbol::Sub) => BinaryOp::Sub,
-                _ => unreachable!(),
-            };
-            left = Expr::new(ExprInner::Binary(
-                Box::new(left),
-                binary_op,
-                Box::new(right),
-            ));
+            Ok(Some(left))
+        } else {
+            Ok(None)
         }
-
-        Some(left)
     }
 
-    fn parse_comparison_expr(&mut self) -> Option<Expr> {
-        let mut left = self.parse_add_sub_expr()?;
-
-        while let Some(op) = self.next_if_token(|token| {
-            matches!(
-                token,
-                Token::Symbol(Symbol::Eq)
-                    | Token::Symbol(Symbol::Neq)
-                    | Token::Symbol(Symbol::Lt)
-                    | Token::Symbol(Symbol::Leq)
-                    | Token::Symbol(Symbol::Gt)
-                    | Token::Symbol(Symbol::Geq)
-            )
-        }) {
-            let right = self.parse_add_sub_expr()?;
-            let binary_op = match op.token() {
-                Token::Symbol(Symbol::Eq) => BinaryOp::Eq,
-                Token::Symbol(Symbol::Neq) => BinaryOp::Neq,
-                Token::Symbol(Symbol::Lt) => BinaryOp::Lt,
-                Token::Symbol(Symbol::Leq) => BinaryOp::Leq,
-                Token::Symbol(Symbol::Gt) => BinaryOp::Gt,
-                Token::Symbol(Symbol::Geq) => BinaryOp::Geq,
-                _ => unreachable!(),
-            };
-            left = Expr::new(ExprInner::Binary(
-                Box::new(left),
-                binary_op,
-                Box::new(right),
-            ));
+    fn expect_mul_div_expr(&mut self) -> ParseResult<Expr> {
+        match self.parse_mul_div_expr()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
         }
-
-        Some(left)
     }
 
-    fn parse_unary_logical_expr(&mut self) -> Option<Expr> {
+    fn parse_add_sub_expr(&mut self) -> ParseResult<Option<Expr>> {
+        if let Some(mut left) = self.parse_mul_div_expr()? {
+            while let Some(op) = self.next_if_token(|token| {
+                matches!(
+                    token,
+                    Token::Symbol(Symbol::Add) | Token::Symbol(Symbol::Sub)
+                )
+            }) {
+                let right = self.expect_mul_div_expr()?;
+                let binary_op = match op.token() {
+                    Token::Symbol(Symbol::Add) => BinaryOp::Add,
+                    Token::Symbol(Symbol::Sub) => BinaryOp::Sub,
+                    _ => unreachable!(),
+                };
+                left = Expr::new(ExprInner::Binary(
+                    Box::new(left),
+                    binary_op,
+                    Box::new(right),
+                ));
+            }
+
+            Ok(Some(left))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn expect_add_sub_expr(&mut self) -> ParseResult<Expr> {
+        match self.parse_add_sub_expr()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn parse_comparison_expr(&mut self) -> ParseResult<Option<Expr>> {
+        if let Some(mut left) = self.parse_add_sub_expr()? {
+            while let Some(op) = self.next_if_token(|token| {
+                matches!(
+                    token,
+                    Token::Symbol(Symbol::Eq)
+                        | Token::Symbol(Symbol::Neq)
+                        | Token::Symbol(Symbol::Lt)
+                        | Token::Symbol(Symbol::Leq)
+                        | Token::Symbol(Symbol::Gt)
+                        | Token::Symbol(Symbol::Geq)
+                )
+            }) {
+                let right = self.expect_add_sub_expr()?;
+                let binary_op = match op.token() {
+                    Token::Symbol(Symbol::Eq) => BinaryOp::Eq,
+                    Token::Symbol(Symbol::Neq) => BinaryOp::Neq,
+                    Token::Symbol(Symbol::Lt) => BinaryOp::Lt,
+                    Token::Symbol(Symbol::Leq) => BinaryOp::Leq,
+                    Token::Symbol(Symbol::Gt) => BinaryOp::Gt,
+                    Token::Symbol(Symbol::Geq) => BinaryOp::Geq,
+                    _ => unreachable!(),
+                };
+                left = Expr::new(ExprInner::Binary(
+                    Box::new(left),
+                    binary_op,
+                    Box::new(right),
+                ));
+            }
+
+            Ok(Some(left))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn expect_comparison_expr(&mut self) -> ParseResult<Expr> {
+        match self.parse_comparison_expr()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn parse_unary_logical_expr(&mut self) -> ParseResult<Option<Expr>> {
         let maybe_op = self.next_if_token_eq(&Token::Keyword(Keyword::Not));
         match maybe_op {
             Some(_) => {
-                let right = self.parse_unary_logical_expr()?;
-                Some(Expr::new(ExprInner::Unary(UnaryOp::Not, Box::new(right))))
+                let right = self.expect_unary_logical_expr()?;
+                Ok(Some(Expr::new(ExprInner::Unary(
+                    UnaryOp::Not,
+                    Box::new(right),
+                ))))
             }
             None => self.parse_comparison_expr(),
         }
     }
 
-    fn parse_and_or_expr(&mut self) -> Option<Expr> {
-        let mut left = self.parse_unary_logical_expr()?;
-
-        while let Some(op) = self.next_if_token(|token| {
-            matches!(
-                token,
-                Token::Keyword(Keyword::Or) | Token::Keyword(Keyword::And)
-            )
-        }) {
-            let right = self.parse_unary_logical_expr()?;
-            left = Expr::new(ExprInner::Binary(
-                Box::new(left),
-                match op.token() {
-                    Token::Keyword(Keyword::Or) => BinaryOp::Or,
-                    Token::Keyword(Keyword::And) => BinaryOp::And,
-                    _ => unreachable!(),
-                },
-                Box::new(right),
-            ));
+    fn expect_unary_logical_expr(&mut self) -> ParseResult<Expr> {
+        match self.parse_unary_logical_expr()? {
+            Some(expr) => Ok(expr),
+            None => Err(ParseError::ExpectedExpression {
+                span: self.current_span(),
+            }),
         }
-
-        Some(left)
     }
 
-    fn parse_expression(&mut self) -> Option<expression::Expr> {
+    fn parse_and_or_expr(&mut self) -> ParseResult<Option<Expr>> {
+        if let Some(mut left) = self.parse_unary_logical_expr()? {
+            while let Some(op) = self.next_if_token(|token| {
+                matches!(
+                    token,
+                    Token::Keyword(Keyword::Or) | Token::Keyword(Keyword::And)
+                )
+            }) {
+                let right = self.expect_unary_logical_expr()?;
+                left = Expr::new(ExprInner::Binary(
+                    Box::new(left),
+                    match op.token() {
+                        Token::Keyword(Keyword::Or) => BinaryOp::Or,
+                        Token::Keyword(Keyword::And) => BinaryOp::And,
+                        _ => unreachable!(),
+                    },
+                    Box::new(right),
+                ));
+            }
+
+            Ok(Some(left))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_expression(&mut self) -> ParseResult<Option<expression::Expr>> {
         self.parse_and_or_expr()
     }
 
-    fn parse_expression_factor(&mut self) -> Option<Expr> {
-        match self.peek_mut_token()? {
+    fn parse_binary_number(&mut self) -> Option<BinaryNumber> {
+        match self.peek_mut_token() {
             Token::BinaryNumber(h) => {
-                let hex_number = *h;
+                let h = *h;
                 self.tokens.next()?;
-                return Some(Expr::new(ExprInner::BinaryNumber(hex_number)));
-            }
-            Token::DecimalNumber(n) => {
-                let number = *n;
-                self.tokens.next()?;
-                return Some(Expr::new(ExprInner::DecimalNumber(number)));
-            }
-            Token::StringLiteral(s) => {
-                let string = mem::take(s);
-                self.tokens.next()?;
-                return Some(Expr::new(ExprInner::StringLiteral(string)));
-            }
-            Token::Symbol(Symbol::LParen) => {
-                self.tokens.next(); // Consume '('
-                let expr = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                    .expect("Expected closing parenthesis");
-                return Some(expr);
-            }
-            _ => (),
-        }
-
-        if let Some(lvalue) = self.parse_lvalue() {
-            return Some(Expr::new(ExprInner::LValue(lvalue)));
-        }
-
-        if let Some(function) = self.parse_function() {
-            return Some(Expr::new(ExprInner::FunctionCall(function)));
-        }
-
-        None
-    }
-
-    fn parse_function(&mut self) -> Option<Function> {
-        match self.peek_token()? {
-            Token::Keyword(Keyword::Int) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Int {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Sgn) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Sgn {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Status) => {
-                self.tokens.next();
-                let arg = self.parse_expression_factor()?;
-                Some(Function::Status { arg: Box::new(arg) })
-            }
-            Token::Keyword(Keyword::Val) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Val {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::StrDollar) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Str {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::ChrDollar) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Chr {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Abs) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Abs {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Len) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Len {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::PeekMem0) => {
-                self.tokens.next();
-                let address = self.parse_expression_factor()?;
-                Some(Function::Peek {
-                    memory_area: MemoryArea::Me0,
-                    address: Box::new(address),
-                })
-            }
-            Token::Keyword(Keyword::PeekMem1) => {
-                self.tokens.next();
-                let address = self.parse_expression_factor()?;
-                Some(Function::Peek {
-                    memory_area: MemoryArea::Me1,
-                    address: Box::new(address),
-                })
-            }
-            Token::Keyword(Keyword::Ln) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Ln {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Log) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Log {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Dms) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Dms {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Deg) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Deg {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Tan) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Tan {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Cos) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Cos {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Sin) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Sin {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Sqr) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Sqr {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::MidDollar) => {
-                self.tokens.next();
-                // Parse '('
-                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
-                    .unwrap_or_else(|| panic!("Expected '(' after MID$"));
-                let string = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                    .unwrap_or_else(|| panic!("Expected ',' after MID$"));
-                let start = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                    .unwrap_or_else(|| panic!("Expected ',' after MID$"));
-                let length = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                    .unwrap_or_else(|| panic!("Expected ')' after MID$"));
-                Some(Function::Mid {
-                    string: Box::new(string),
-                    start: Box::new(start),
-                    length: Box::new(length),
-                })
-            }
-            Token::Keyword(Keyword::LeftDollar) => {
-                self.tokens.next();
-                // Parse '('
-                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
-                    .unwrap_or_else(|| panic!("Expected '(' after LEFT$"));
-                let string = self.parse_expression()?;
-                // Parse ','
-                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                    .unwrap_or_else(|| panic!("Expected ',' after LEFT$"));
-                let length = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                    .unwrap_or_else(|| panic!("Expected ')' after LEFT$"));
-                Some(Function::Left {
-                    string: Box::new(string),
-                    length: Box::new(length),
-                })
-            }
-            Token::Keyword(Keyword::RightDollar) => {
-                self.tokens.next();
-                // Parse '('
-                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
-                    .unwrap_or_else(|| panic!("Expected '(' after RIGHT$"));
-                let string = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                    .unwrap_or_else(|| panic!("Expected ',' after RIGHT$"));
-                let length = self.parse_expression()?;
-                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                    .unwrap_or_else(|| panic!("Expected ')' after RIGHT$"));
-                Some(Function::Right {
-                    string: Box::new(string),
-                    length: Box::new(length),
-                })
-            }
-            Token::Keyword(Keyword::Asc) => {
-                self.tokens.next();
-                let expr = self.parse_expression_factor()?;
-                Some(Function::Asc {
-                    expr: Box::new(expr),
-                })
-            }
-            Token::Keyword(Keyword::Point) => {
-                self.tokens.next();
-                let position = self.parse_expression_factor()?;
-                Some(Function::Point {
-                    position: Box::new(position),
-                })
-            }
-            Token::Keyword(Keyword::Rnd) => {
-                self.tokens.next();
-                let range_end = self.parse_expression_factor()?;
-                Some(Function::Rnd {
-                    range_end: Box::new(range_end),
-                })
+                Some(h)
             }
             _ => None,
         }
     }
 
-    fn parse_lvalue(&mut self) -> Option<LValue> {
-        match self.peek_token()? {
+    fn parse_decimal_number(&mut self) -> Option<DecimalNumber> {
+        match self.peek_mut_token() {
+            Token::DecimalNumber(n) => {
+                let n = *n;
+                self.tokens.next()?;
+                Some(n)
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_string_literal(&mut self) -> Option<String> {
+        match self.peek_mut_token() {
+            Token::StringLiteral(s) => {
+                let string = mem::take(s);
+                self.tokens.next()?;
+                Some(string)
+            }
+            _ => None,
+        }
+    }
+
+    fn parse_expression_factor(&mut self) -> ParseResult<Option<Expr>> {
+        if let Token::Symbol(Symbol::LParen) = self.peek_mut_token() {
+            self.tokens.next(); // Consume '('
+            let expr = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "Expected closing parenthesis",
+            )?;
+            return Ok(Some(expr));
+        }
+
+        if let Some(binary_number) = self.parse_binary_number() {
+            return Ok(Some(Expr::new(ExprInner::BinaryNumber(binary_number))));
+        }
+
+        if let Some(decimal_number) = self.parse_decimal_number() {
+            return Ok(Some(Expr::new(ExprInner::DecimalNumber(decimal_number))));
+        }
+
+        if let Some(string_literal) = self.parse_string_literal() {
+            return Ok(Some(Expr::new(ExprInner::StringLiteral(string_literal))));
+        }
+
+        if let Some(lvalue) = self.parse_lvalue()? {
+            return Ok(Some(Expr::new(ExprInner::LValue(lvalue))));
+        }
+
+        if let Some(function) = self.parse_function()? {
+            return Ok(Some(Expr::new(ExprInner::FunctionCall(function))));
+        }
+
+        Ok(None)
+    }
+
+    fn parse_function(&mut self) -> ParseResult<Option<Function>> {
+        match self.peek_token() {
+            Token::Keyword(Keyword::Int) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Int {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Sgn) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Sgn {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Status) => {
+                self.tokens.next();
+                let arg = self.expect_expression_factor()?;
+                Ok(Some(Function::Status { arg: Box::new(arg) }))
+            }
+            Token::Keyword(Keyword::Val) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Val {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::StrDollar) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Str {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::ChrDollar) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Chr {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Abs) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Abs {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Len) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Len {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::PeekMem0) => {
+                self.tokens.next();
+                let address = self.expect_expression_factor()?;
+                Ok(Some(Function::Peek {
+                    memory_area: MemoryArea::Me0,
+                    address: Box::new(address),
+                }))
+            }
+            Token::Keyword(Keyword::PeekMem1) => {
+                self.tokens.next();
+                let address = self.expect_expression_factor()?;
+                Ok(Some(Function::Peek {
+                    memory_area: MemoryArea::Me1,
+                    address: Box::new(address),
+                }))
+            }
+            Token::Keyword(Keyword::Ln) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Ln {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Log) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Log {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Dms) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Dms {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Deg) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Deg {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Tan) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Tan {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Cos) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Cos {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Sin) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Sin {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Sqr) => {
+                self.tokens.next();
+                let expr = self.expect_expression_factor()?;
+                Ok(Some(Function::Sqr {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::MidDollar) => {
+                self.tokens.next();
+                // Parse '('
+                self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after MID$")?;
+                let string = self.expect_expression()?;
+
+                self.expect_token(
+                    &Token::Symbol(Symbol::Comma),
+                    "Expected ',' after MID$ string",
+                )?;
+                let start = self.expect_expression()?;
+
+                self.expect_token(
+                    &Token::Symbol(Symbol::Comma),
+                    "Expected ',' after MID$ start",
+                )?;
+                let length = self.expect_expression()?;
+
+                self.expect_token(
+                    &Token::Symbol(Symbol::RParen),
+                    "Expected ')' after MID$ length",
+                )?;
+                Ok(Some(Function::Mid {
+                    string: Box::new(string),
+                    start: Box::new(start),
+                    length: Box::new(length),
+                }))
+            }
+            Token::Keyword(Keyword::LeftDollar) => {
+                self.tokens.next();
+                // Parse '('
+                self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after LEFT$")?;
+                let string = self.expect_expression()?;
+                // Parse ','
+                self.expect_token(
+                    &Token::Symbol(Symbol::Comma),
+                    "Expected ',' after LEFT$ string",
+                )?;
+                let length = self.expect_expression()?;
+                self.expect_token(
+                    &Token::Symbol(Symbol::RParen),
+                    "Expected ')' after LEFT$ length",
+                )?;
+                Ok(Some(Function::Left {
+                    string: Box::new(string),
+                    length: Box::new(length),
+                }))
+            }
+            Token::Keyword(Keyword::RightDollar) => {
+                self.tokens.next();
+                // Parse '('
+                self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after RIGHT$")?;
+                let string = self.expect_expression()?;
+                self.expect_token(
+                    &Token::Symbol(Symbol::Comma),
+                    "Expected ',' after RIGHT$ string",
+                )?;
+                let length = self.expect_expression()?;
+                self.expect_token(
+                    &Token::Symbol(Symbol::RParen),
+                    "Expected ')' after RIGHT$ length",
+                )?;
+                Ok(Some(Function::Right {
+                    string: Box::new(string),
+                    length: Box::new(length),
+                }))
+            }
+            Token::Keyword(Keyword::Asc) => {
+                self.tokens.next();
+                let expr = self.expect_expression()?;
+                Ok(Some(Function::Asc {
+                    expr: Box::new(expr),
+                }))
+            }
+            Token::Keyword(Keyword::Point) => {
+                self.tokens.next();
+                let position = self.expect_expression()?;
+                Ok(Some(Function::Point {
+                    position: Box::new(position),
+                }))
+            }
+            Token::Keyword(Keyword::Rnd) => {
+                self.tokens.next();
+                let range_end = self.expect_expression()?;
+                Ok(Some(Function::Rnd {
+                    range_end: Box::new(range_end),
+                }))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn parse_lvalue(&mut self) -> ParseResult<Option<LValue>> {
+        match self.peek_token() {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
                 self.tokens.next();
 
                 // Check for array access
-                if self.peek_token() == Some(&Token::Symbol(Symbol::LParen)) {
+                if self.peek_token() == &Token::Symbol(Symbol::LParen) {
                     self.tokens.next(); // Consume '('
-                    let index = self.parse_expression()?;
+                    let index = self.expect_expression()?;
 
-                    if self.peek_token() == Some(&Token::Symbol(Symbol::Comma)) {
+                    if self.peek_token() == &Token::Symbol(Symbol::Comma) {
                         self.tokens.next(); // Consume ','
-                        let col_index = self.parse_expression()?;
-                        self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                            .unwrap_or_else(|| {
-                                panic!("Expected closing parenthesis for 2D array access");
-                            });
-                        return Some(LValue::Array2DAccess {
+                        let col_index = self.expect_expression()?;
+                        self.expect_token(
+                            &Token::Symbol(Symbol::RParen),
+                            "Expected ')' after 2D array indices",
+                        )?;
+                        return Ok(Some(LValue::Array2DAccess {
                             identifier,
                             row_index: Box::new(index),
                             col_index: Box::new(col_index),
-                        });
+                        }));
                     }
 
-                    self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                        .unwrap_or_else(|| {
-                            panic!("Expected closing parenthesis for 1D array access");
-                        });
-                    return Some(LValue::Array1DAccess {
+                    self.expect_token(
+                        &Token::Symbol(Symbol::RParen),
+                        "Expected ')' after 1D array index",
+                    )?;
+                    return Ok(Some(LValue::Array1DAccess {
                         identifier,
                         index: Box::new(index),
-                    });
+                    }));
                 }
 
-                Some(LValue::Identifier(identifier))
+                Ok(Some(LValue::Identifier(identifier)))
             }
             Token::Symbol(Symbol::At) => {
                 self.tokens.next();
@@ -516,85 +705,116 @@ where
                     .next_if_token_eq(&Token::Symbol(Symbol::Dollar))
                     .is_some();
 
-                // Parse '('
-                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))
-                    .unwrap_or_else(|| panic!("Expected '(' after fixed memory area access '@'"));
+                self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after @")?;
+                let index = self.expect_expression()?;
+                self.expect_token(
+                    &Token::Symbol(Symbol::RParen),
+                    "Expected ')' after memory area index",
+                )?;
 
-                let index = self.parse_expression()?;
-
-                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))
-                    .unwrap_or_else(|| panic!("Expected ')' after fixed memory area access '@'"));
-
-                Some(LValue::FixedMemoryAreaAccess {
+                Ok(Some(LValue::FixedMemoryAreaAccess {
                     index: Box::new(index),
                     has_dollar,
-                })
+                }))
             }
             Token::Keyword(Keyword::Time) => {
                 self.tokens.next();
-                Some(LValue::BuiltInIdentifier(Keyword::Time))
+                Ok(Some(LValue::BuiltInIdentifier(Keyword::Time)))
             }
             Token::Keyword(Keyword::InkeyDollar) => {
                 self.tokens.next();
-                Some(LValue::BuiltInIdentifier(Keyword::InkeyDollar))
+                Ok(Some(LValue::BuiltInIdentifier(Keyword::InkeyDollar)))
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 
-    fn parse_assignment(&mut self) -> Option<Assignment> {
-        let lhs = self.parse_lvalue()?;
-        self.next_if_token_eq(&Token::Symbol(Symbol::Eq))?;
-        let rhs = self.parse_expression()?;
-        Some(Assignment {
-            lvalue: lhs,
-            expr: Box::new(rhs),
-        })
+    fn expect_lvalue(&mut self) -> ParseResult<LValue> {
+        match self.parse_lvalue()? {
+            Some(lvalue) => Ok(lvalue),
+            None => Err(ParseError::ExpectedLValue {
+                span: self.current_span(),
+            }),
+        }
     }
 
-    fn parse_let_inner(&mut self, is_let_mandatory: bool) -> Option<LetInner> {
+    fn parse_assignment(&mut self) -> ParseResult<Option<Assignment>> {
+        if let Some(lhs) = self.parse_lvalue()? {
+            self.expect_token(&Token::Symbol(Symbol::Eq), "Expected '=' in assignment")?;
+            let rhs = self.expect_expression()?;
+            Ok(Some(Assignment {
+                lvalue: lhs,
+                expr: Box::new(rhs),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn expect_assignment(&mut self) -> ParseResult<Assignment> {
+        match self.parse_assignment()? {
+            Some(assignment) => Ok(assignment),
+            None => Err(ParseError::ExpectedAssignment {
+                span: self.current_span(),
+            }),
+        }
+    }
+
+    fn parse_let_inner(&mut self, is_let_mandatory: bool) -> ParseResult<Option<LetInner>> {
         let let_kw = self.next_if_token_eq(&Token::Keyword(Keyword::Let));
 
-        if is_let_mandatory && let_kw.is_none() {
-            return None;
-        }
+        if is_let_mandatory {
+            if let_kw.is_none() {
+                return Err(ParseError::ExpectedExplicitLet {
+                    span: self.current_span(),
+                });
+            }
 
-        let mut assignments = vec![];
+            let mut assignments = vec![];
 
-        while let Some(assignment) = self.parse_assignment() {
-            assignments.push(assignment);
-            if self.peek_token() == Some(&Token::Symbol(Symbol::Comma)) {
-                self.tokens.next(); // Consume ','
+            loop {
+                let assignment = self.expect_assignment()?;
+                assignments.push(assignment);
+                if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                    self.tokens.next(); // Consume ','
+                } else {
+                    break;
+                }
+            }
+
+            Ok(Some(LetInner { assignments }))
+        } else {
+            if let Some(first_assignment) = self.parse_assignment()? {
+                let mut assignments = vec![first_assignment];
+
+                if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                    self.tokens.next(); // Consume ',' {
+                    loop {
+                        let assignment = self.expect_assignment()?;
+                        assignments.push(assignment);
+                        if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                            self.tokens.next(); // Consume ','
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                Ok(Some(LetInner { assignments }))
             } else {
-                break;
+                Ok(None)
             }
         }
-
-        Some(LetInner { assignments })
     }
 
     fn parse_using_clause(&mut self) -> Option<UsingClause> {
         self.next_if_token_eq(&Token::Keyword(Keyword::Using))?;
-
-        match self.peek_mut_token()? {
-            // USING "##.##"
-            Token::StringLiteral(format) => {
-                let format = mem::take(format);
-                self.tokens.next();
-                Some(UsingClause {
-                    format: Some(format),
-                })
-            }
-            // USING
-            _ => Some(UsingClause { format: None }),
-        }
+        let format = self.parse_string_literal();
+        Some(UsingClause { format })
     }
 
     fn parse_print_separator(&mut self) -> PrintSeparator {
-        match self
-            .peek_token()
-            .unwrap_or_else(|| panic!("Expected a token for print separator"))
-        {
+        match self.peek_token() {
             Token::Symbol(Symbol::Comma) => {
                 self.tokens.next();
                 PrintSeparator::Comma
@@ -607,11 +827,11 @@ where
         }
     }
 
-    fn parse_print_inner(&mut self) -> Option<PrintInner> {
+    fn parse_print_inner(&mut self) -> ParseResult<PrintInner> {
         let mut exprs = Vec::new();
 
         loop {
-            if let Some(expr) = self.parse_expression() {
+            if let Some(expr) = self.parse_expression()? {
                 let print_separator = self.parse_print_separator();
                 exprs.push((Printable::Expr(expr), print_separator));
             } else if let Some(using_clause) = self.parse_using_clause() {
@@ -622,22 +842,22 @@ where
             }
         }
 
-        Some(PrintInner { exprs })
+        Ok(PrintInner { exprs })
     }
 
-    fn parse_print_pause_stmt(&mut self) -> Option<Statement> {
-        match self.peek_token()? {
+    fn parse_print_pause_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        match self.peek_token() {
             Token::Keyword(Keyword::Print) => {
                 self.tokens.next();
                 let print_inner = self.parse_print_inner()?;
-                Some(Statement::Print { inner: print_inner })
+                Ok(Some(Statement::Print { inner: print_inner }))
             }
             Token::Keyword(Keyword::Pause) => {
                 self.tokens.next();
                 let pause_inner = self.parse_print_inner()?;
-                Some(Statement::Pause { inner: pause_inner })
+                Ok(Some(Statement::Pause { inner: pause_inner }))
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 
@@ -646,265 +866,299 @@ where
         Some(Statement::End)
     }
 
-    fn parse_dim_inner(&mut self) -> Option<DimInner> {
-        match self.peek_token()? {
+    fn parse_dim_inner(&mut self) -> ParseResult<Option<DimInner>> {
+        match self.peek_token() {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
                 self.tokens.next();
-                self.next_if_token_eq(&Token::Symbol(Symbol::LParen))?;
-                let rows = self.parse_expression()?;
-                let maybe_cols = self
+                self.expect_token(
+                    &Token::Symbol(Symbol::LParen),
+                    "Expected '(' after identifier in DIM statement",
+                )?;
+                let rows = self.expect_expression()?;
+                let maybe_cols = if self
                     .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                    .and_then(|_| self.parse_expression());
-                self.next_if_token_eq(&Token::Symbol(Symbol::RParen))?;
-                let string_length = self
-                    .next_if_token_eq(&Token::Symbol(Symbol::Mul))
-                    .and_then(|_| self.parse_expression());
+                    .is_some()
+                {
+                    Some(self.expect_expression()?)
+                } else {
+                    None
+                };
+
+                self.expect_token(
+                    &Token::Symbol(Symbol::RParen),
+                    "Expected ')' after dimensions in DIM statement",
+                )?;
+
+                let string_length = if self.next_if_token_eq(&Token::Symbol(Symbol::Mul)).is_some()
+                {
+                    Some(self.expect_expression()?)
+                } else {
+                    None
+                };
 
                 match maybe_cols {
-                    Some(cols) => Some(DimInner::DimInner2D {
+                    Some(cols) => Ok(Some(DimInner::DimInner2D {
                         identifier,
                         rows,
                         cols,
                         string_length,
-                    }),
-                    None => Some(DimInner::DimInner1D {
+                    })),
+                    None => Ok(Some(DimInner::DimInner1D {
                         identifier,
                         size: rows,
                         string_length,
-                    }),
+                    })),
                 }
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 
-    fn parse_dim_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Dim))?;
-        let mut decls = vec![];
+    fn expect_dim_inner(&mut self) -> ParseResult<DimInner> {
+        match self.parse_dim_inner()? {
+            Some(dim_inner) => Ok(dim_inner),
+            None => Err(ParseError::ExpectedDimInner {
+                span: self.current_span(),
+            }),
+        }
+    }
 
-        while let Some(decl) = self.parse_dim_inner() {
-            decls.push(decl);
+    fn parse_dim_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Dim)) {
+            let mut decls = vec![];
 
-            if self
-                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                .is_none()
-            {
-                break;
+            loop {
+                let decl = self.expect_dim_inner()?;
+                decls.push(decl);
+
+                if self
+                    .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                    .is_none()
+                {
+                    break;
+                }
             }
-        }
 
-        Some(Statement::Dim { decls })
+            Ok(Some(Statement::Dim { decls }))
+        } else {
+            Ok(None)
+        }
     }
 
-    fn parse_statement(&mut self, is_let_mandatory: bool) -> Option<Statement> {
-        if let Some(stmt) = self.parse_print_pause_stmt() {
-            return Some(stmt);
+    fn parse_statement(&mut self, is_let_mandatory: bool) -> ParseResult<Option<Statement>> {
+        if let Some(stmt) = self.parse_print_pause_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_using_clause() {
-            return Some(Statement::Using { using_clause: stmt });
+            return Ok(Some(Statement::Using { using_clause: stmt }));
         }
 
         if let Some(stmt) = self.parse_end_statement() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_if_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_if_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_input_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_input_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_remark_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_for_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_for_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_next_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_next_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_clear_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_goto_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_goto_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_gosub_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_gosub_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_on_error_goto_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_on_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_on_goto_gosub_stmt() {
-            return Some(stmt);
-        }
-
-        if let Some(stmt) = self.parse_wait_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_wait_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_cls_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_random_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_gprint_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_gprint_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_gcursor_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_gcursor_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_cursor_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_cursor_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_beep_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_beep_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_return_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_poke_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_poke_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_dim_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_dim_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_read_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_read_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_data_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_data_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_restore_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_restore_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_arun_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_lock_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_unlock_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_call_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_call_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_text_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_graph_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_color_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_color_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_csize_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_csize_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_lf_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_lf_stmt()? {
+            return Ok(Some(stmt));
         }
 
         if let Some(stmt) = self.parse_radian_stmt() {
-            return Some(stmt);
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_lcursor_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_lcursor_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_lprint_stmt() {
-            return Some(stmt);
+        if let Some(stmt) = self.parse_lprint_stmt()? {
+            return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_let_inner(is_let_mandatory) {
-            return Some(Statement::Let { inner: stmt });
+        if let Some(stmt) = self.parse_let_inner(is_let_mandatory)? {
+            return Ok(Some(Statement::Let { inner: stmt }));
         }
 
-        None
+        Ok(None)
     }
 
-    fn parse_if_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::If))?;
-        let condition = self.parse_expression()?;
-        self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
-        let then_stmt = self.parse_statement(true).or_else(|| {
-            // If no statement after THEN, check for an expression to jump to
-            self.parse_expression()
-                .map(|expr| Statement::Goto { target: expr })
-        })?;
-
-        Some(Statement::If {
-            condition,
-            then_stmt: Box::new(then_stmt),
-        })
-    }
-
-    fn parse_input_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Input))?;
-        let mut input_exprs = vec![];
-
-        loop {
-            // Check for prompt string
-            let prompt = if let Some(Token::StringLiteral(s)) = self.peek_mut_token() {
-                let s = mem::take(s);
-                self.tokens.next();
-                self.next_if_token_eq(&Token::Symbol(Symbol::Semicolon));
-                Some(s)
+    fn parse_if_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::If)) {
+            let condition = self.expect_expression()?;
+            self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
+            if let Some(then_stmt) = self.parse_statement(true)? {
+                return Ok(Some(Statement::If {
+                    condition,
+                    then_stmt: Box::new(then_stmt),
+                }));
             } else {
-                None
-            };
-
-            let lvalue = self.parse_lvalue()?;
-            input_exprs.push((prompt, lvalue));
-
-            if self
-                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                .is_none()
-            {
-                break;
+                let goto_expr = self.expect_expression()?;
+                return Ok(Some(Statement::If {
+                    condition,
+                    then_stmt: Box::new(Statement::Goto { target: goto_expr }),
+                }));
             }
+        } else {
+            Ok(None)
         }
+    }
 
-        Some(Statement::Input { input_exprs })
+    fn parse_input_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Input)) {
+            let mut input_exprs = vec![];
+
+            loop {
+                // Check for prompt string
+                let prompt = if let Some(s) = self.parse_string_literal() {
+                    self.expect_token(
+                        &Token::Symbol(Symbol::Semicolon),
+                        "Expected semicolon after input prompt",
+                    )?;
+                    Some(s)
+                } else {
+                    None
+                };
+
+                let lvalue = self.expect_lvalue()?;
+                input_exprs.push((prompt, lvalue));
+
+                if self
+                    .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                    .is_none()
+                {
+                    break;
+                }
+            }
+
+            Ok(Some(Statement::Input { input_exprs }))
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_remark_stmt(&mut self) -> Option<Statement> {
         match self.peek_mut_token() {
-            Some(Token::Remark(s)) => {
+            Token::Remark(s) => {
                 let s = mem::take(s);
                 self.tokens.next();
                 Some(Statement::Remark {
@@ -915,39 +1169,40 @@ where
         }
     }
 
-    fn parse_for_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::For))?;
-        let assignment = self.parse_assignment()?;
-        self.next_if_token_eq(&Token::Keyword(Keyword::To))?;
-        let to_expr = self.parse_expression()?;
-        let step_expr = if self
-            .next_if_token_eq(&Token::Keyword(Keyword::Step))
-            .is_some()
-        {
-            Some(self.parse_expression()?)
+    fn parse_for_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::For)) {
+            let assignment = self.expect_assignment()?;
+            self.expect_token(
+                &Token::Keyword(Keyword::To),
+                "Expected 'TO' after FOR assignment",
+            )?;
+            let to_expr = self.expect_expression()?;
+            let step_expr = if self
+                .next_if_token_eq(&Token::Keyword(Keyword::Step))
+                .is_some()
+            {
+                Some(self.expect_expression()?)
+            } else {
+                None
+            };
+
+            Ok(Some(Statement::For {
+                assignment,
+                to_expr,
+                step_expr,
+            }))
         } else {
-            None
-        };
-        Some(Statement::For {
-            assignment,
-            to_expr,
-            step_expr,
-        })
+            Ok(None)
+        }
     }
 
-    fn parse_next_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Next))?;
-        let spanned = self
-            .tokens
-            .next()
-            .unwrap_or_else(|| panic!("Expected identifier after NEXT keyword"));
-        let ident = match spanned.token() {
-            Token::Identifier(id) => id,
-            _ => {
-                panic!("Expected identifier after NEXT keyword");
-            }
-        };
-        Some(Statement::Next { ident: *ident })
+    fn parse_next_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Next)) {
+            let lvalue = self.expect_lvalue()?;
+            Ok(Some(Statement::Next { lvalue }))
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_clear_stmt(&mut self) -> Option<Statement> {
@@ -955,95 +1210,78 @@ where
         Some(Statement::Clear)
     }
 
-    fn parse_goto_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Goto))?;
-        let target = self.parse_expression()?;
-        Some(Statement::Goto { target })
-    }
-
-    fn parse_gosub_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Gosub))?;
-        let target = self.parse_expression()?;
-        Some(Statement::Gosub { target })
-    }
-
-    fn parse_on_goto_gosub_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::On))?;
-        let expr = self.parse_expression()?;
-
-        if self
-            .next_if_token_eq(&Token::Keyword(Keyword::Goto))
-            .is_some()
-        {
-            let mut targets = vec![self.parse_expression()?];
-            while self
-                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                .is_some()
-            {
-                targets.push(self.parse_expression()?);
-            }
-            Some(Statement::OnGoto { expr, targets })
-        } else if self
-            .next_if_token_eq(&Token::Keyword(Keyword::Gosub))
-            .is_some()
-        {
-            let mut targets = vec![self.parse_expression()?];
-            while self
-                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-                .is_some()
-            {
-                targets.push(self.parse_expression()?);
-            }
-            Some(Statement::OnGosub { expr, targets })
+    fn parse_goto_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Goto)) {
+            let target = self.expect_expression()?;
+            Ok(Some(Statement::Goto { target }))
         } else {
-            None
+            Ok(None)
         }
     }
 
-    fn parse_on_error_goto_stmt(&mut self) -> Option<Statement> {
-        {
-            let mut cloned_tokens = self.tokens.clone();
-
-            let on_token = cloned_tokens.next()?;
-            if on_token.token() != &Token::Keyword(Keyword::On) {
-                return None;
-            }
-
-            let error_token = cloned_tokens.next()?;
-            if error_token.token() != &Token::Keyword(Keyword::Error) {
-                return None;
-            }
-
-            let goto_token = cloned_tokens.next()?;
-            if goto_token.token() != &Token::Keyword(Keyword::Goto) {
-                return None;
-            }
+    fn parse_gosub_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Gosub)) {
+            let target = self.expect_expression()?;
+            Ok(Some(Statement::Gosub { target }))
+        } else {
+            Ok(None)
         }
-
-        // Consume the 3 tokens
-        self.tokens.next();
-        self.tokens.next();
-        self.tokens.next();
-
-        let target = self.parse_expression()?;
-        Some(Statement::OnErrorGoto { target })
     }
 
-    fn parse_wait_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Wait))?;
-        let expr = if self.peek_token().is_some() {
-            // Check if the next token can start an expression
-            match self.peek_token()? {
-                Token::DecimalNumber(_)
-                | Token::BinaryNumber(_)
-                | Token::Identifier(_)
-                | Token::Symbol(Symbol::LParen) => Some(self.parse_expression()?),
-                _ => None,
+    fn parse_on_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::On)) {
+            if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Error)) {
+                self.expect_token(
+                    &Token::Keyword(Keyword::Goto),
+                    "Expected 'GOTO' after 'ON ERROR'",
+                )?;
+
+                let expr = self.expect_expression()?;
+                return Ok(Some(Statement::OnErrorGoto { target: expr }));
+            }
+
+            let expr = self.expect_expression()?;
+
+            if self
+                .next_if_token_eq(&Token::Keyword(Keyword::Goto))
+                .is_some()
+            {
+                let mut targets = vec![self.expect_expression()?];
+                while self
+                    .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                    .is_some()
+                {
+                    targets.push(self.expect_expression()?);
+                }
+                Ok(Some(Statement::OnGoto { expr, targets }))
+            } else if self
+                .next_if_token_eq(&Token::Keyword(Keyword::Gosub))
+                .is_some()
+            {
+                let mut targets = vec![self.expect_expression()?];
+                while self
+                    .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                    .is_some()
+                {
+                    targets.push(self.expect_expression()?);
+                }
+                Ok(Some(Statement::OnGosub { expr, targets }))
+            } else {
+                Err(ParseError::ExpectedGotoOrGosub {
+                    span: self.current_span(),
+                })
             }
         } else {
-            None
-        };
-        Some(Statement::Wait { expr })
+            Ok(None)
+        }
+    }
+
+    fn parse_wait_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Wait)) {
+            let expr = self.parse_expression()?;
+            return Ok(Some(Statement::Wait { expr }));
+        }
+        Ok(None)
     }
 
     fn parse_cls_stmt(&mut self) -> Option<Statement> {
@@ -1056,79 +1294,98 @@ where
         Some(Statement::Random)
     }
 
-    fn parse_gprint_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Gprint))?;
-        let mut exprs = vec![];
+    fn parse_gprint_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Gprint)) {
+            let mut exprs = vec![];
 
-        while let Some(expr) = self.parse_expression() {
-            let separator = self.parse_print_separator();
-            let is_empty = matches!(separator, PrintSeparator::Empty);
-            exprs.push((expr, separator));
+            loop {
+                let expr = self.expect_expression()?;
+                let print_separator = self.parse_print_separator();
+                exprs.push((expr, print_separator));
 
-            if is_empty {
-                break;
+                if matches!(print_separator, PrintSeparator::Empty) {
+                    break;
+                }
             }
-        }
 
-        Some(Statement::Gprint { exprs })
+            return Ok(Some(Statement::Gprint { exprs }));
+        } else {
+            return Ok(None);
+        }
     }
 
-    fn parse_gcursor_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Gcursor))?;
-        let expr = self.parse_expression()?;
-        Some(Statement::GCursor { expr })
-    }
-
-    fn parse_cursor_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Cursor))?;
-        let expr = self.parse_expression()?;
-        Some(Statement::Cursor { expr })
-    }
-
-    fn parse_beep_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Beep))?;
-
-        // Check for BEEP ON/OFF
-        if let Some(Token::Keyword(Keyword::On)) = self.peek_token() {
-            self.tokens.next();
-            return Some(Statement::BeepOnOff {
-                switch_beep_on: true,
-            });
-        }
-        if let Some(Token::Keyword(Keyword::Off)) = self.peek_token() {
-            self.tokens.next();
-            return Some(Statement::BeepOnOff {
-                switch_beep_on: false,
-            });
-        }
-
-        // Parse BEEP repetitions[,frequency[,duration]]
-        let repetitions_expr = self.parse_expression()?;
-        let optional_params = if self
-            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+    fn parse_gcursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Gcursor))
             .is_some()
         {
-            let frequency = self.parse_expression()?;
-            let duration = if self
+            let expr = self.expect_expression()?;
+            return Ok(Some(Statement::GCursor { expr }));
+        }
+        Ok(None)
+    }
+
+    fn parse_cursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Cursor))
+            .is_some()
+        {
+            let expr = self.expect_expression()?;
+            return Ok(Some(Statement::Cursor { expr }));
+        }
+        Ok(None)
+    }
+
+    fn parse_beep_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Beep))
+            .is_some()
+        {
+            // Check for BEEP ON/OFF
+            if self.peek_token() == &Token::Keyword(Keyword::On) {
+                self.tokens.next();
+                return Ok(Some(Statement::BeepOnOff {
+                    switch_beep_on: true,
+                }));
+            }
+            if self.peek_token() == &Token::Keyword(Keyword::Off) {
+                self.tokens.next();
+                return Ok(Some(Statement::BeepOnOff {
+                    switch_beep_on: false,
+                }));
+            }
+
+            // Parse BEEP repetitions[,frequency[,duration]]
+            let repetitions_expr = self.expect_expression()?;
+
+            let optional_params = if self
                 .next_if_token_eq(&Token::Symbol(Symbol::Comma))
                 .is_some()
             {
-                Some(self.parse_expression()?)
+                let frequency = self.expect_expression()?;
+                let duration = if self
+                    .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                    .is_some()
+                {
+                    Some(self.expect_expression()?)
+                } else {
+                    None
+                };
+                Some(BeepOptionalParams {
+                    frequency,
+                    duration,
+                })
             } else {
                 None
             };
-            Some(BeepOptionalParams {
-                frequency,
-                duration,
-            })
-        } else {
-            None
-        };
 
-        Some(Statement::Beep {
-            repetitions_expr,
-            optional_params,
-        })
+            Ok(Some(Statement::Beep {
+                repetitions_expr,
+                optional_params,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_return_stmt(&mut self) -> Option<Statement> {
@@ -1136,8 +1393,8 @@ where
         Some(Statement::Return)
     }
 
-    fn parse_poke_stmt(&mut self) -> Option<Statement> {
-        let memory_area = match self.peek_token()? {
+    fn parse_poke_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        let memory_area = match self.peek_token() {
             Token::Keyword(Keyword::PokeMem0) => {
                 self.tokens.next();
                 MemoryArea::Me0
@@ -1146,59 +1403,57 @@ where
                 self.tokens.next();
                 MemoryArea::Me1
             }
-            _ => return None,
+            _ => return Ok(None),
         };
 
-        let mut exprs = vec![self.parse_expression()?];
+        let mut exprs = vec![self.expect_expression()?];
         while self
             .next_if_token_eq(&Token::Symbol(Symbol::Comma))
             .is_some()
         {
-            exprs.push(self.parse_expression()?);
+            exprs.push(self.expect_expression()?);
         }
 
-        Some(Statement::Poke { memory_area, exprs })
+        Ok(Some(Statement::Poke { memory_area, exprs }))
     }
 
-    fn parse_read_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Read))?;
-        let mut destinations = vec![self.parse_lvalue()?];
-        while self
-            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-            .is_some()
-        {
-            destinations.push(self.parse_lvalue()?);
-        }
-        Some(Statement::Read { destinations })
-    }
-
-    fn parse_data_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Data))?;
-        let mut exprs = vec![self.parse_expression()?];
-        while self
-            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-            .is_some()
-        {
-            exprs.push(self.parse_expression()?);
-        }
-        Some(Statement::Data(exprs))
-    }
-
-    fn parse_restore_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Restore))?;
-        let expr = if self.peek_token().is_some() {
-            // Check if the next token can start an expression
-            match self.peek_token()? {
-                Token::DecimalNumber(_)
-                | Token::BinaryNumber(_)
-                | Token::Identifier(_)
-                | Token::Symbol(Symbol::LParen) => Some(self.parse_expression()?),
-                _ => None,
+    fn parse_read_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Read)) {
+            let mut destinations = vec![self.expect_lvalue()?];
+            while self
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                .is_some()
+            {
+                destinations.push(self.expect_lvalue()?);
             }
-        } else {
-            None
-        };
-        Some(Statement::Restore { expr })
+            return Ok(Some(Statement::Read { destinations }));
+        }
+        Ok(None)
+    }
+
+    fn parse_data_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Data))
+            .is_some()
+        {
+            let mut exprs = vec![self.expect_expression()?];
+            while self
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                .is_some()
+            {
+                exprs.push(self.expect_expression()?);
+            }
+            return Ok(Some(Statement::Data(exprs)));
+        }
+        Ok(None)
+    }
+
+    fn parse_restore_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Restore)) {
+            let expr = self.parse_expression()?;
+            return Ok(Some(Statement::Restore { expr }));
+        }
+        Ok(None)
     }
 
     fn parse_arun_stmt(&mut self) -> Option<Statement> {
@@ -1216,18 +1471,20 @@ where
         Some(Statement::Unlock)
     }
 
-    fn parse_call_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Call))?;
-        let expr = self.parse_expression()?;
-        let variable = if self
-            .next_if_token_eq(&Token::Symbol(Symbol::Comma))
-            .is_some()
-        {
-            Some(self.parse_lvalue()?)
-        } else {
-            None
-        };
-        Some(Statement::Call { expr, variable })
+    fn parse_call_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Call)) {
+            let expr = self.expect_expression()?;
+            let variable = if self
+                .next_if_token_eq(&Token::Symbol(Symbol::Comma))
+                .is_some()
+            {
+                Some(self.expect_lvalue()?)
+            } else {
+                None
+            };
+            return Ok(Some(Statement::Call { expr, variable }));
+        }
+        Ok(None)
     }
 
     fn parse_text_stmt(&mut self) -> Option<Statement> {
@@ -1240,22 +1497,28 @@ where
         Some(Statement::Graph)
     }
 
-    fn parse_color_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Color))?;
-        let color = self.parse_expression()?;
-        Some(Statement::Color { expr: color })
+    fn parse_color_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Color)) {
+            let color = self.expect_expression()?;
+            return Ok(Some(Statement::Color { expr: color }));
+        }
+        Ok(None)
     }
 
-    fn parse_csize_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Csize))?;
-        let expr = self.parse_expression()?;
-        Some(Statement::CSize { expr })
+    fn parse_csize_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Csize)) {
+            let expr = self.expect_expression()?;
+            return Ok(Some(Statement::CSize { expr }));
+        }
+        Ok(None)
     }
 
-    fn parse_lf_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Lf))?;
-        let expr = self.parse_expression()?;
-        Some(Statement::Lf { expr })
+    fn parse_lf_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Lf)) {
+            let expr = self.expect_expression()?;
+            return Ok(Some(Statement::Lf { expr }));
+        }
+        Ok(None)
     }
 
     fn parse_radian_stmt(&mut self) -> Option<Statement> {
@@ -1263,27 +1526,31 @@ where
         Some(Statement::Radian)
     }
 
-    fn parse_lcursor_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Lcursor))?;
-        let expr = self.parse_expression()?;
-        Some(Statement::LCursor(LCursorClause { expr }))
+    fn parse_lcursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Lcursor)) {
+            let expr = self.expect_expression()?;
+            return Ok(Some(Statement::LCursor(LCursorClause { expr })));
+        }
+        Ok(None)
     }
 
-    fn parse_lprint_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Lprint))?;
-        let inner = self.parse_lprint_inner()?;
-        Some(Statement::LPrint { inner })
+    fn parse_lprint_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Lprint)) {
+            let inner = self.parse_lprint_inner()?;
+            return Ok(Some(Statement::LPrint { inner }));
+        }
+        Ok(None)
     }
 
-    fn parse_lprint_inner(&mut self) -> Option<LPrintInner> {
+    fn parse_lprint_inner(&mut self) -> ParseResult<LPrintInner> {
         let mut exprs = vec![];
 
         loop {
-            let printable = if self.peek_token() == Some(&Token::Keyword(Keyword::Lcursor)) {
+            let printable = if self.peek_token() == (&Token::Keyword(Keyword::Lcursor)) {
                 self.tokens.next();
-                let expr = self.parse_expression()?;
+                let expr = self.expect_expression()?;
                 LPrintable::LCursorClause(LCursorClause { expr })
-            } else if let Some(expr) = self.parse_expression() {
+            } else if let Some(expr) = self.parse_expression()? {
                 LPrintable::Expr(expr)
             } else {
                 break;
@@ -1298,24 +1565,23 @@ where
             }
         }
 
-        Some(LPrintInner { exprs })
+        Ok(LPrintInner { exprs })
     }
 
     fn parse_line(&mut self) -> Option<Line> {
-        match self.peek_token()? {
+        match self.peek_token() {
             Token::DecimalNumber(line_number) => {
                 let line_number = line_number
                     .as_integer()
-                    .and_then(|line_number| u16::try_from(line_number).ok())
-                    .unwrap_or_else(|| {
-                        panic!("Expected a valid line number, got: {line_number:?}")
-                    });
+                    .and_then(|line_number| u16::try_from(line_number).ok());
+                let line_number = match line_number {
+                    Some(num) => num,
+                    None => return None, // Return None instead of panic
+                };
                 self.tokens.next(); // Consume line number
 
                 // Try to parse a line label: a string literal optionally followed by ':'
-                let label = if let Some(token) = self.peek_mut_token()
-                    && let Token::StringLiteral(label) = token
-                {
+                let label = if let Token::StringLiteral(label) = self.peek_mut_token() {
                     let label = mem::take(label);
                     self.tokens.next(); // Consume label
                     self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
@@ -1342,7 +1608,7 @@ where
                 let eof = self.next_if_token_eq(&Token::Symbol(Symbol::Eof));
 
                 if newline.is_none() && eof.is_none() {
-                    panic!("Expected newline or EOF at the end of line {line_number}");
+                    return None; // Return None instead of panic
                 }
 
                 Some(Line {
@@ -1367,6 +1633,121 @@ where
 
     pub fn parse(&mut self) -> program::Program {
         self.parse_program()
+    }
+
+    /// Parse with error collection - collects all parsing errors instead of stopping at first
+    pub fn parse_with_error_recovery(&mut self) -> ParseResult<program::Program> {
+        let mut lines = std::collections::BTreeMap::new();
+        let mut errors = Vec::new();
+
+        while self.tokens.peek().is_some() {
+            match self.parse_line_with_recovery() {
+                Ok(Some(line)) => {
+                    lines.insert(line.number, line);
+                }
+                Ok(None) => {
+                    // Skip to next line on parse failure
+                    self.skip_to_next_line();
+                }
+                Err(error) => {
+                    errors.push(error);
+                    // Skip to next line and continue parsing
+                    self.skip_to_next_line();
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            // For now, return the first error. In the future, we could collect all errors
+            return Err(errors.into_iter().next().unwrap());
+        }
+
+        Ok(program::Program { lines })
+    }
+
+    /// Skip tokens until we reach a newline or EOF
+    fn skip_to_next_line(&mut self) {
+        loop {
+            match self.peek_token() {
+                Token::Symbol(Symbol::Newline) | Token::Symbol(Symbol::Eof) => {
+                    self.next_spanned(); // consume the newline/eof
+                    break;
+                }
+                _ => {
+                    self.next_spanned(); // skip this token
+                }
+            }
+        }
+    }
+
+    /// Parse a line with proper error reporting
+    fn parse_line_with_recovery(&mut self) -> ParseResult<Option<Line>> {
+        let start_span = self.current_span();
+
+        match self.peek_token() {
+            (Token::DecimalNumber(line_number)) => {
+                let line_number = line_number
+                    .as_integer()
+                    .and_then(|line_number| u16::try_from(line_number).ok())
+                    .ok_or_else(|| ParseError::InvalidExpression {
+                        message: format!(
+                            "Invalid line number: expected a valid integer between 0 and 65535"
+                        ),
+                        span: start_span,
+                    })?;
+
+                self.tokens.next(); // Consume line number
+
+                // Try to parse a line label: a string literal optionally followed by ':'
+                let label = if let Token::StringLiteral(label) = self.peek_mut_token() {
+                    let label = mem::take(label);
+                    self.tokens.next(); // Consume label
+                    self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
+                    Some(label)
+                } else {
+                    None
+                };
+
+                let mut statements = vec![];
+
+                while let Some(statement) = self.parse_statement(false) {
+                    statements.push(statement);
+                    // Statements are separated by ':'
+                    if self
+                        .next_if_token_eq(&Token::Symbol(Symbol::Colon))
+                        .is_none()
+                    {
+                        break;
+                    }
+                }
+
+                // Parse line end or EOF
+                let newline = self.next_if_token_eq(&Token::Symbol(Symbol::Newline));
+                let eof = self.next_if_token_eq(&Token::Symbol(Symbol::Eof));
+
+                if newline.is_none() && eof.is_none() {
+                    return Err(ParseError::MissingToken {
+                        token: "newline or end of file".to_string(),
+                        span: self.current_span(),
+                    });
+                }
+
+                Ok(Some(Line {
+                    label,
+                    number: line_number,
+                    statements,
+                }))
+            }
+            (_) => {
+                // Unexpected token at start of line
+                let token = self.next_spanned().unwrap();
+                Err(ParseError::UnexpectedToken {
+                    expected: "line number".to_string(),
+                    found: format!("{}", token.token()),
+                    span: *token.span(),
+                })
+            }
+        }
     }
 }
 

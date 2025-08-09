@@ -59,6 +59,27 @@ pub enum ParseError {
         token: String,
         span: Span,
     },
+    ExpectedExpression {
+        span: Span,
+    },
+    ExpectedExplicitLet {
+        span: Span,
+    },
+    ExpectedAssignment {
+        span: Span,
+    },
+    ExpectedDimInner {
+        span: Span,
+    },
+    ExpectedStatement {
+        span: Span,
+    },
+    ExpectedLValue {
+        span: Span,
+    },
+    ExpectedGotoOrGosub {
+        span: Span,
+    },
 }
 
 /// Error types that can occur during semantic analysis
@@ -169,6 +190,47 @@ pub fn print_error(error: &CompileError, filename: &str, source: &str) {
                 .with_labels(vec![
                     Label::primary(file_id, span.start..span.end)
                         .with_message(format!("expected {token}")),
+                ]),
+            ParseError::ExpectedExpression { span } => Diagnostic::error()
+                .with_message("Expected expression")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end)
+                        .with_message("expected expression"),
+                ]),
+            ParseError::ExpectedExplicitLet { span } => Diagnostic::error()
+                .with_message("Expected explicit 'LET' keyword for let binding")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end)
+                        .with_message("expected 'LET' keyword"),
+                ]),
+            ParseError::ExpectedAssignment { span } => Diagnostic::error()
+                .with_message("Expected assignment")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end)
+                        .with_message("expected assignment"),
+                ]),
+            ParseError::ExpectedDimInner { span } => Diagnostic::error()
+                .with_message("Expected dimension specification")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end)
+                        .with_message("expected dimension specification"),
+                ]),
+            ParseError::ExpectedStatement { span } => Diagnostic::error()
+                .with_message("Expected statement")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end)
+                        .with_message("expected statement"),
+                ]),
+            ParseError::ExpectedLValue { span } => Diagnostic::error()
+                .with_message("Expected lvalue")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end).with_message("expected lvalue"),
+                ]),
+            ParseError::ExpectedGotoOrGosub { span } => Diagnostic::error()
+                .with_message("Expected 'GOTO' or 'GOSUB'")
+                .with_labels(vec![
+                    Label::primary(file_id, span.start..span.end)
+                        .with_message("expected 'GOTO' or 'GOSUB'"),
                 ]),
         },
         CompileError::Semantic(semantic_err) => match semantic_err {
