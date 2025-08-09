@@ -8,9 +8,18 @@ use crate::{
 pub struct UsingClause {
     // -- FIXME: maybe this should allow also variables as format strings?
     pub format: Option<String>,
+    pub span: Span,
 }
 
 impl UsingClause {
+    pub fn new(format: Option<String>, span: Span) -> Self {
+        Self { format, span }
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
     fn write_bytes(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(Keyword::Using.internal_code().to_le_bytes().as_slice());
         if let Some(format) = &self.format {
@@ -35,9 +44,18 @@ impl std::fmt::Display for UsingClause {
 pub struct Assignment {
     pub lvalue: LValue,
     pub expr: Box<Expr>,
+    pub span: Span,
 }
 
 impl Assignment {
+    pub fn new(lvalue: LValue, expr: Box<Expr>, span: Span) -> Self {
+        Self { lvalue, expr, span }
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
         self.lvalue.write_bytes(bytes);
         bytes.push(b'=');
@@ -57,12 +75,14 @@ pub enum DimInner {
         identifier: Identifier,
         size: Expr,
         string_length: Option<Expr>,
+        span: Span,
     },
     DimInner2D {
         identifier: Identifier,
         rows: Expr,
         cols: Expr,
         string_length: Option<Expr>,
+        span: Span,
     },
 }
 
@@ -73,6 +93,7 @@ impl std::fmt::Display for DimInner {
                 identifier,
                 size,
                 string_length,
+                span: _,
             } => {
                 write!(f, "{identifier}({size})")?;
                 if let Some(len) = string_length {
@@ -84,6 +105,7 @@ impl std::fmt::Display for DimInner {
                 rows,
                 cols,
                 string_length,
+                span: _,
             } => {
                 write!(f, "{identifier}({rows},{cols})")?;
                 if let Some(len) = string_length {
@@ -99,6 +121,13 @@ impl std::fmt::Display for DimInner {
 pub struct BeepOptionalParams {
     pub frequency: Expr,
     pub duration: Option<Expr>,
+    pub span: Span,
+}
+
+impl BeepOptionalParams {
+    pub fn new(frequency: Expr, duration: Option<Expr>, span: Span) -> Self {
+        Self { frequency, duration, span }
+    }
 }
 
 impl std::fmt::Display for BeepOptionalParams {
@@ -156,6 +185,13 @@ impl Printable {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrintInner {
     pub exprs: Vec<(Printable, PrintSeparator)>,
+    pub span: Span,
+}
+
+impl PrintInner {
+    pub fn new(exprs: Vec<(Printable, PrintSeparator)>, span: Span) -> Self {
+        Self { exprs, span }
+    }
 }
 
 impl std::fmt::Display for PrintInner {
@@ -173,9 +209,14 @@ impl std::fmt::Display for PrintInner {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCursorClause {
     pub expr: Expr,
+    pub span: Span,
 }
 
 impl LCursorClause {
+    pub fn new(expr: Expr, span: Span) -> Self {
+        Self { expr, span }
+    }
+
     pub fn to_string_with_context(&self, is_inside_lprint: bool) -> String {
         if is_inside_lprint {
             format!("LCURSOR {}", self.expr)
@@ -203,9 +244,14 @@ pub enum LPrintable {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LPrintInner {
     pub exprs: Vec<(LPrintable, PrintSeparator)>,
+    pub span: Span,
 }
 
 impl LPrintInner {
+    pub fn new(exprs: Vec<(LPrintable, PrintSeparator)>, span: Span) -> Self {
+        Self { exprs, span }
+    }
+
     pub fn to_string_with_context(&self, is_inside_lprint: bool) -> String {
         let mut result = String::new();
         for (printable, sep) in self.exprs.iter() {
@@ -238,9 +284,14 @@ impl LPrintInner {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetInner {
     pub assignments: Vec<Assignment>,
+    pub span: Span,
 }
 
 impl LetInner {
+    pub fn new(assignments: Vec<Assignment>, span: Span) -> Self {
+        Self { assignments, span }
+    }
+
     pub fn show_with_context(&self, is_mandatory_let: bool) -> String {
         if is_mandatory_let {
             format!(
@@ -268,9 +319,28 @@ pub struct LineInner {
     pub line_type: Option<Expr>,
     pub color: Option<Expr>,
     pub is_box: bool,
+    pub span: Span,
 }
 
 impl LineInner {
+    pub fn new(
+        start_point: Option<(Expr, Expr)>,
+        end_points: Vec<(Expr, Expr)>,
+        line_type: Option<Expr>,
+        color: Option<Expr>,
+        is_box: bool,
+        span: Span,
+    ) -> Self {
+        Self {
+            start_point,
+            end_points,
+            line_type,
+            color,
+            is_box,
+            span,
+        }
+    }
+
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
         // Handle start point - if None, start with '-'
         if let Some((x, y)) = &self.start_point {
@@ -682,6 +752,7 @@ impl Statement {
                             identifier,
                             size,
                             string_length,
+                            span: _,
                         } => {
                             identifier.write_bytes(bytes);
                             bytes.push(b'(');
@@ -697,6 +768,7 @@ impl Statement {
                             rows,
                             cols,
                             string_length,
+                            span: _,
                         } => {
                             identifier.write_bytes(bytes);
                             bytes.push(b'(');

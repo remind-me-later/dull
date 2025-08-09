@@ -7,6 +7,7 @@ use crate::{
         keyword::Keyword, symbol::Symbol,
     },
     parse::{
+        code_line::CodeLine,
         expression::{
             Expr,
             binary_op::BinaryOp,
@@ -16,7 +17,6 @@ use crate::{
             memory_area::MemoryArea,
             unary_op::UnaryOp,
         },
-        code_line::CodeLine,
         statement::{
             Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
             LetInner, LineInner, PrintInner, PrintSeparator, Printable, Statement, StatementInner,
@@ -25,8 +25,8 @@ use crate::{
     },
 };
 
-pub mod expression;
 pub mod code_line;
+pub mod expression;
 pub mod program;
 pub mod statement;
 
@@ -884,12 +884,12 @@ where
 
     fn parse_assignment(&mut self) -> ParseResult<Option<Assignment>> {
         if let Some(lhs) = self.parse_lvalue()? {
+            let start_span = lhs.span;
             self.expect_token(&Token::Symbol(Symbol::Eq), "Expected '=' in assignment")?;
             let rhs = self.expect_expression()?;
-            Ok(Some(Assignment {
-                lvalue: lhs,
-                expr: Box::new(rhs),
-            }))
+            let end_span = rhs.span;
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Assignment::new(lhs, Box::new(rhs), full_span)))
         } else {
             Ok(None)
         }
@@ -908,9 +908,11 @@ where
         let let_kw = self.next_if_token_eq(&Token::Keyword(Keyword::Let));
 
         if is_let_mandatory {
-            if let_kw.is_none() {
+            let start_span = if let Some(let_token) = let_kw {
+                *let_token.span()
+            } else {
                 return Ok(None);
-            }
+            };
 
             let mut assignments = vec![];
 
@@ -924,12 +926,15 @@ where
                 }
             }
 
-            Ok(Some(LetInner { assignments }))
+            let end_span = assignments.last().map(|a| a.span).unwrap_or(start_span);
+            let full_span = start_span.extend(end_span);
+            Ok(Some(LetInner::new(assignments, full_span)))
         } else if let Some(first_assignment) = self.parse_assignment()? {
+            let start_span = first_assignment.span;
             let mut assignments = vec![first_assignment];
 
             if self.peek_token() == &Token::Symbol(Symbol::Comma) {
-                self.tokens.next(); // Consume ',' {
+                self.tokens.next(); // Consume ','
                 loop {
                     let assignment = self.expect_assignment()?;
                     assignments.push(assignment);
@@ -941,16 +946,24 @@ where
                 }
             }
 
-            Ok(Some(LetInner { assignments }))
+            let end_span = assignments.last().map(|a| a.span).unwrap_or(start_span);
+            let full_span = start_span.extend(end_span);
+            Ok(Some(LetInner::new(assignments, full_span)))
         } else {
             Ok(None)
         }
     }
 
     fn parse_using_clause(&mut self) -> Option<UsingClause> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Using))?;
-        let format = self.parse_string_literal().map(|(s, _span)| s);
-        Some(UsingClause { format })
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Using))?;
+        let start_span = *start_token.span();
+        let (format, end_span) = if let Some((s, span)) = self.parse_string_literal() {
+            (Some(s), span)
+        } else {
+            (None, start_span)
+        };
+        let full_span = start_span.extend(end_span);
+        Some(UsingClause::new(format, full_span))
     }
 
     fn parse_print_separator(&mut self) -> PrintSeparator {
@@ -967,7 +980,7 @@ where
         }
     }
 
-    fn parse_print_inner(&mut self) -> ParseResult<PrintInner> {
+    fn parse_print_inner(&mut self, start_span: Span) -> ParseResult<PrintInner> {
         let mut exprs = Vec::new();
 
         loop {
@@ -982,7 +995,9 @@ where
             }
         }
 
-        Ok(PrintInner { exprs })
+        let end_span = self.current_span();
+        let full_span = start_span.extend(end_span);
+        Ok(PrintInner::new(exprs, full_span))
     }
 
     fn parse_print_pause_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -990,7 +1005,7 @@ where
             Token::Keyword(Keyword::Print) => {
                 let start_token = self.tokens.next().unwrap();
                 let start_span = *start_token.span();
-                let print_inner = self.parse_print_inner()?;
+                let print_inner = self.parse_print_inner(start_span)?;
                 let end_span = self.current_span();
                 let full_span = start_span.extend(end_span);
                 Ok(Some(Statement::new(
@@ -1001,7 +1016,7 @@ where
             Token::Keyword(Keyword::Pause) => {
                 let start_token = self.tokens.next().unwrap();
                 let start_span = *start_token.span();
-                let pause_inner = self.parse_print_inner()?;
+                let pause_inner = self.parse_print_inner(start_span)?;
                 let end_span = self.current_span();
                 let full_span = start_span.extend(end_span);
                 Ok(Some(Statement::new(
@@ -1022,7 +1037,8 @@ where
         match self.peek_token() {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
-                self.tokens.next();
+                let start_token = self.tokens.next().unwrap();
+                let start_span = *start_token.span();
                 self.expect_token(
                     &Token::Symbol(Symbol::LParen),
                     "Expected '(' after identifier in DIM statement",
@@ -1049,17 +1065,25 @@ where
                     None
                 };
 
+                let end_span = string_length
+                    .as_ref()
+                    .map(|e| e.span)
+                    .unwrap_or_else(|| self.current_span());
+                let full_span = start_span.extend(end_span);
+
                 match maybe_cols {
                     Some(cols) => Ok(Some(DimInner::DimInner2D {
                         identifier,
                         rows,
                         cols,
                         string_length,
+                        span: full_span,
                     })),
                     None => Ok(Some(DimInner::DimInner1D {
                         identifier,
                         size: rows,
                         string_length,
+                        span: full_span,
                     })),
                 }
             }
@@ -1674,10 +1698,14 @@ where
                 } else {
                     None
                 };
-                Some(BeepOptionalParams {
+                let param_start_span = frequency.span;
+                let param_end_span = duration.as_ref().map(|d| d.span).unwrap_or(frequency.span);
+                let param_full_span = param_start_span.extend(param_end_span);
+                Some(BeepOptionalParams::new(
                     frequency,
                     duration,
-                })
+                    param_full_span,
+                ))
             } else {
                 None
             };
@@ -1958,16 +1986,10 @@ where
             false
         };
 
-        let inner = LineInner {
-            start_point,
-            end_points,
-            line_type,
-            color,
-            is_box,
-        };
-
         let end_span = self.current_span();
         let full_span = start_span.extend(end_span);
+        let inner = LineInner::new(start_point, end_points, line_type, color, is_box, full_span);
+
         Ok(Some(Statement::new(
             StatementInner::Line { inner },
             full_span,
@@ -2086,16 +2108,10 @@ where
             false
         };
 
-        let inner = LineInner {
-            start_point,
-            end_points,
-            line_type,
-            color,
-            is_box,
-        };
-
         let end_span = self.current_span();
         let full_span = start_span.extend(end_span);
+        let inner = LineInner::new(start_point, end_points, line_type, color, is_box, full_span);
+
         Ok(Some(Statement::new(
             StatementInner::RLine { inner },
             full_span,
@@ -2161,7 +2177,7 @@ where
             let expr = self.expect_expression()?;
             let full_span = start_span.extend(expr.span);
             return Ok(Some(Statement::new(
-                StatementInner::LCursor(LCursorClause { expr }),
+                StatementInner::LCursor(LCursorClause::new(expr, full_span)),
                 full_span,
             )));
         }
@@ -2174,7 +2190,7 @@ where
             .is_some()
         {
             let start_span = self.current_span();
-            let inner = self.parse_lprint_inner()?;
+            let inner = self.parse_lprint_inner(start_span)?;
             let end_span = self.current_span();
             let full_span = start_span.extend(end_span);
             return Ok(Some(Statement::new(
@@ -2185,14 +2201,16 @@ where
         Ok(None)
     }
 
-    fn parse_lprint_inner(&mut self) -> ParseResult<LPrintInner> {
+    fn parse_lprint_inner(&mut self, start_span: Span) -> ParseResult<LPrintInner> {
         let mut exprs = vec![];
 
         loop {
             let printable = if self.peek_token() == (&Token::Keyword(Keyword::Tab)) {
-                self.tokens.next();
+                let start_token = self.tokens.next().unwrap();
+                let start_span = *start_token.span();
                 let expr = self.expect_expression()?;
-                LPrintable::LCursorClause(LCursorClause { expr })
+                let full_span = start_span.extend(expr.span);
+                LPrintable::LCursorClause(LCursorClause::new(expr, full_span))
             } else if let Some(expr) = self.parse_expression()? {
                 LPrintable::Expr(expr)
             } else {
@@ -2208,7 +2226,9 @@ where
             }
         }
 
-        Ok(LPrintInner { exprs })
+        let end_span = self.current_span();
+        let full_span = start_span.extend(end_span);
+        Ok(LPrintInner::new(exprs, full_span))
     }
 
     fn parse_glcursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -2347,12 +2367,18 @@ where
                 }
 
                 // Calculate the full line span from start to end of line
-                let end_span = newline.map(|t| *t.span())
+                let end_span = newline
+                    .map(|t| *t.span())
                     .or_else(|| eof.map(|t| *t.span()))
                     .unwrap_or_else(|| self.current_span());
                 let line_span = start_span.extend(end_span);
 
-                Ok(Some(CodeLine::new(line_number, label, statements, line_span)))
+                Ok(Some(CodeLine::new(
+                    line_number,
+                    label,
+                    statements,
+                    line_span,
+                )))
             }
             _ => {
                 // Check if we're at EOF - this is not an error, just no more lines

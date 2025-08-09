@@ -478,6 +478,7 @@ impl SemanticAnalyzer {
                 identifier,
                 size,
                 string_length,
+                span: _,
             } => {
                 let size_type = self.analyze_expression(size)?;
                 if size_type != BasicType::Numeric {
@@ -511,6 +512,7 @@ impl SemanticAnalyzer {
                 rows,
                 cols,
                 string_length,
+                span: _,
             } => {
                 let rows_type = self.analyze_expression(rows)?;
                 let cols_type = self.analyze_expression(cols)?;
@@ -976,13 +978,14 @@ mod tests {
         // Create identifier "X" (numeric)
         let identifier = Identifier::new(b'X', None, false).unwrap();
 
-        let assignment = Assignment {
-            lvalue: LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
-            expr: Box::new(Expr::new(
+        let assignment = Assignment::new(
+            LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
+            Box::new(Expr::new(
                 ExprInner::DecimalNumber(DecimalNumber::new(42.0)),
                 placeholder_span(),
             )),
-        };
+            placeholder_span(),
+        );
 
         let result = analyzer.analyze_assignment(&assignment);
         assert!(result.is_ok());
@@ -995,13 +998,14 @@ mod tests {
         // Create identifier "X$" (string)
         let identifier = Identifier::new(b'X', None, true).unwrap();
 
-        let assignment = Assignment {
-            lvalue: LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
-            expr: Box::new(Expr::new(
+        let assignment = Assignment::new(
+            LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
+            Box::new(Expr::new(
                 ExprInner::DecimalNumber(DecimalNumber::new(42.0)),
                 placeholder_span(),
             )),
-        };
+            placeholder_span(),
+        );
 
         let result = analyzer.analyze_assignment(&assignment);
         assert!(result.is_err());
