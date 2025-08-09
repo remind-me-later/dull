@@ -1,6 +1,6 @@
 1 "ATERRISSAGE"
-2 "Manche: U I H K N M"
-3 "Ailettes: curs.Haut/Bas"
+2 "Manche: U I H K N M
+3 "Ailettes: curs.Haut/Bas
 10 "A":CLS :CLEAR :WAIT 0:RESTORE :X=5
 20 FOR I=1 TO 9:READ @$(I):NEXT I
 25 PRINT " (1) Commandes   (2) Jeu"

@@ -1,6 +1,6 @@
 1 "BOWLING"
-2 "d/apres Hebdogiciel 13"
-3 "SPACE: lancer la boule."
+2 "d/apres Hebdogiciel 13
+3 "SPACE: lancer la boule.
 5 "A"CLEAR :RANDOM :WAIT 0:CLS 
 7 FOR L=1TO 5:T=0
 10 A=1,B=4,C=16,D=64,E=2,F=8,G=32,H=4,I=16,J=8

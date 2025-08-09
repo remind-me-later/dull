@@ -48,6 +48,12 @@ impl SpannedToken {
     }
 }
 
+impl std::fmt::Display for SpannedToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.token)
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -235,13 +241,29 @@ impl Iterator for Lexer<'_> {
                 let mut string_content = String::new();
                 let mut found_closing_quote = false;
 
-                while let Some(ch) = self.advance() {
+                while let Some(&ch) = self.peek() {
+                    println!("Current char: {}", ch);
                     if ch == '"' {
+                        self.advance();
                         found_closing_quote = true;
                         break;
                     }
+
+                    if ch == '\r' {
+                        self.advance(); // Skip carriage return
+                        continue; // Continue to next character
+                    }
+
+                    if ch == '\n' {
+                        found_closing_quote = true; // Treat newline as end of string
+                        break;
+                    }
+
                     string_content.push(ch);
+                    self.advance();
                 }
+
+                println!("String content: {:?}", string_content);
 
                 if !found_closing_quote {
                     Some(Err(LexError::UnterminatedStringLiteral {
