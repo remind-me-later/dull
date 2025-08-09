@@ -123,11 +123,12 @@ where
             while self.peek_token() == &Token::Symbol(Symbol::Exp) {
                 self.next_spanned();
                 let right = self.expect_expression_factor()?;
+                let span = left.span.extend(right.span);
                 left = Expr::new(ExprInner::Binary(
                     Box::new(left),
                     BinaryOp::Exp,
                     Box::new(right),
-                ));
+                ), span);
             }
 
             Ok(Some(left))
@@ -145,18 +146,22 @@ where
         });
         match maybe_op.as_ref().map(|s| s.token()) {
             Some(Token::Symbol(Symbol::Add)) => {
+                let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
+                let span = op_span.extend(right.span);
                 Ok(Some(Expr::new(ExprInner::Unary(
                     UnaryOp::Plus,
                     Box::new(right),
-                ))))
+                ), span)))
             }
             Some(Token::Symbol(Symbol::Sub)) => {
+                let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
+                let span = op_span.extend(right.span);
                 Ok(Some(Expr::new(ExprInner::Unary(
                     UnaryOp::Minus,
                     Box::new(right),
-                ))))
+                ), span)))
             }
             _ => Ok(self.parse_exponent_expr()?),
         }
@@ -185,11 +190,12 @@ where
                     Token::Symbol(Symbol::Div) => BinaryOp::Div,
                     _ => unreachable!(),
                 };
+                let span = left.span.extend(right.span);
                 left = Expr::new(ExprInner::Binary(
                     Box::new(left),
                     binary_op,
                     Box::new(right),
-                ));
+                ), span);
             }
 
             Ok(Some(left))
@@ -221,11 +227,12 @@ where
                     Token::Symbol(Symbol::Sub) => BinaryOp::Sub,
                     _ => unreachable!(),
                 };
+                let span = left.span.extend(right.span);
                 left = Expr::new(ExprInner::Binary(
                     Box::new(left),
                     binary_op,
                     Box::new(right),
-                ));
+                ), span);
             }
 
             Ok(Some(left))
@@ -266,11 +273,12 @@ where
                     Token::Symbol(Symbol::Geq) => BinaryOp::Geq,
                     _ => unreachable!(),
                 };
+                let span = left.span.extend(right.span);
                 left = Expr::new(ExprInner::Binary(
                     Box::new(left),
                     binary_op,
                     Box::new(right),
-                ));
+                ), span);
             }
 
             Ok(Some(left))
@@ -282,12 +290,14 @@ where
     fn parse_unary_logical_expr(&mut self) -> ParseResult<Option<Expr>> {
         let maybe_op = self.next_if_token_eq(&Token::Keyword(Keyword::Not));
         match maybe_op {
-            Some(_) => {
+            Some(op_token) => {
+                let op_span = *op_token.span();
                 let right = self.expect_unary_logical_expr()?;
+                let span = op_span.extend(right.span);
                 Ok(Some(Expr::new(ExprInner::Unary(
                     UnaryOp::Not,
                     Box::new(right),
-                ))))
+                ), span)))
             }
             None => self.parse_comparison_expr(),
         }
@@ -311,6 +321,7 @@ where
                 )
             }) {
                 let right = self.expect_unary_logical_expr()?;
+                let span = left.span.extend(right.span);
                 left = Expr::new(ExprInner::Binary(
                     Box::new(left),
                     match op.token() {
@@ -319,7 +330,7 @@ where
                         _ => unreachable!(),
                     },
                     Box::new(right),
-                ));
+                ), span);
             }
 
             Ok(Some(left))
@@ -332,34 +343,43 @@ where
         self.parse_and_or_expr()
     }
 
-    fn parse_binary_number(&mut self) -> Option<BinaryNumber> {
-        match self.peek_mut_token()? {
-            Token::BinaryNumber(h) => {
-                let h = *h;
-                self.tokens.next()?;
-                Some(h)
+    fn parse_binary_number(&mut self) -> Option<(BinaryNumber, Span)> {
+        match self.tokens.peek() {
+            Some(spanned_token) if matches!(spanned_token.token(), Token::BinaryNumber(_)) => {
+                let spanned_token = self.tokens.next()?;
+                if let Token::BinaryNumber(binary_number) = spanned_token.token() {
+                    Some((*binary_number, *spanned_token.span()))
+                } else {
+                    unreachable!()
+                }
             }
             _ => None,
         }
     }
 
-    fn parse_decimal_number(&mut self) -> Option<DecimalNumber> {
-        match self.peek_mut_token()? {
-            Token::DecimalNumber(n) => {
-                let n = *n;
-                self.tokens.next()?;
-                Some(n)
+    fn parse_decimal_number(&mut self) -> Option<(DecimalNumber, Span)> {
+        match self.tokens.peek() {
+            Some(spanned_token) if matches!(spanned_token.token(), Token::DecimalNumber(_)) => {
+                let spanned_token = self.tokens.next()?;
+                if let Token::DecimalNumber(decimal_number) = spanned_token.token() {
+                    Some((*decimal_number, *spanned_token.span()))
+                } else {
+                    unreachable!()
+                }
             }
             _ => None,
         }
     }
 
-    fn parse_string_literal(&mut self) -> Option<String> {
-        match self.peek_mut_token()? {
-            Token::StringLiteral(s) => {
-                let string = mem::take(s);
-                self.tokens.next()?;
-                Some(string)
+    fn parse_string_literal(&mut self) -> Option<(String, Span)> {
+        match self.tokens.peek() {
+            Some(spanned_token) if matches!(spanned_token.token(), Token::StringLiteral(_)) => {
+                let spanned_token = self.tokens.next()?;
+                if let Token::StringLiteral(string_literal) = spanned_token.token() {
+                    Some((string_literal.clone(), *spanned_token.span()))
+                } else {
+                    unreachable!()
+                }
             }
             _ => None,
         }
@@ -367,33 +387,39 @@ where
 
     fn parse_expression_factor(&mut self) -> ParseResult<Option<Expr>> {
         if let Some(Token::Symbol(Symbol::LParen)) = self.peek_mut_token() {
+            let start_span = self.current_span();
             self.tokens.next(); // Consume '('
             let expr = self.expect_expression()?;
-            self.expect_token(
+            let end_token = self.expect_token(
                 &Token::Symbol(Symbol::RParen),
                 "Expected closing parenthesis",
             )?;
-            return Ok(Some(expr));
+            let span = start_span.extend(*end_token.span());
+            return Ok(Some(Expr::new(expr.inner, span)));
         }
 
-        if let Some(binary_number) = self.parse_binary_number() {
-            return Ok(Some(Expr::new(ExprInner::BinaryNumber(binary_number))));
+        if let Some((binary_number, span)) = self.parse_binary_number() {
+            return Ok(Some(Expr::new(ExprInner::BinaryNumber(binary_number), span)));
         }
 
-        if let Some(decimal_number) = self.parse_decimal_number() {
-            return Ok(Some(Expr::new(ExprInner::DecimalNumber(decimal_number))));
+        if let Some((decimal_number, span)) = self.parse_decimal_number() {
+            return Ok(Some(Expr::new(ExprInner::DecimalNumber(decimal_number), span)));
         }
 
-        if let Some(string_literal) = self.parse_string_literal() {
-            return Ok(Some(Expr::new(ExprInner::StringLiteral(string_literal))));
+        if let Some((string_literal, span)) = self.parse_string_literal() {
+            return Ok(Some(Expr::new(ExprInner::StringLiteral(string_literal), span)));
         }
 
         if let Some(lvalue) = self.parse_lvalue()? {
-            return Ok(Some(Expr::new(ExprInner::LValue(lvalue))));
+            // TODO: Need to get span for lvalue
+            let span = self.current_span(); // Placeholder
+            return Ok(Some(Expr::new(ExprInner::LValue(lvalue), span)));
         }
 
         if let Some(function) = self.parse_function()? {
-            return Ok(Some(Expr::new(ExprInner::FunctionCall(function))));
+            // TODO: Need to get span for function
+            let span = self.current_span(); // Placeholder
+            return Ok(Some(Expr::new(ExprInner::FunctionCall(function), span)));
         }
 
         Ok(None)
@@ -763,7 +789,7 @@ where
 
     fn parse_using_clause(&mut self) -> Option<UsingClause> {
         self.next_if_token_eq(&Token::Keyword(Keyword::Using))?;
-        let format = self.parse_string_literal();
+        let format = self.parse_string_literal().map(|(s, _span)| s);
         Some(UsingClause { format })
     }
 
@@ -1113,7 +1139,7 @@ where
 
             loop {
                 // Check for prompt string
-                let prompt = if let Some(s) = self.parse_string_literal() {
+                let prompt = if let Some((s, _span)) = self.parse_string_literal() {
                     self.expect_token(
                         &Token::Symbol(Symbol::Semicolon),
                         "Expected semicolon after input prompt",

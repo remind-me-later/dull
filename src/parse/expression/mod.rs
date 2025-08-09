@@ -5,16 +5,17 @@ pub mod lvalue;
 pub mod memory_area;
 pub mod unary_op;
 
-use crate::parse::expression::expr_inner::ExprInner;
+use crate::{parse::expression::expr_inner::ExprInner, error::Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
     pub inner: ExprInner,
+    pub span: Span,
 }
 
 impl Expr {
-    pub fn new(inner: ExprInner) -> Self {
-        Self { inner }
+    pub fn new(inner: ExprInner, span: Span) -> Self {
+        Self { inner, span }
     }
 
     pub fn show_with_context(&self, parent_prec: u8, is_right_side: bool) -> String {
