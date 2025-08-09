@@ -1,9 +1,14 @@
 use crate::error::{SemanticError, SemanticResult, Span};
 use crate::lex::{identifier::Identifier, keyword::Keyword};
+use crate::parse::statement::StatementInner;
 use crate::parse::{
     expression::{
-        Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::{Function, FunctionInner}, 
-        lvalue::{LValue, LValueInner}, unary_op::UnaryOp,
+        Expr,
+        binary_op::BinaryOp,
+        expr_inner::ExprInner,
+        function::{Function, FunctionInner},
+        lvalue::{LValue, LValueInner},
+        unary_op::UnaryOp,
     },
     line::Line,
     program::Program,
@@ -116,13 +121,13 @@ impl SemanticAnalyzer {
 
     /// Analyze a statement
     fn analyze_statement(&mut self, statement: &Statement) -> SemanticResult<()> {
-        match statement {
-            Statement::Let { inner } => {
+        match &statement.inner {
+            StatementInner::Let { inner } => {
                 for assignment in &inner.assignments {
                     self.analyze_assignment(assignment)?;
                 }
             }
-            Statement::If {
+            StatementInner::If {
                 condition,
                 then_stmt,
             } => {
@@ -136,7 +141,7 @@ impl SemanticAnalyzer {
                 }
                 self.analyze_statement(then_stmt)?;
             }
-            Statement::For {
+            StatementInner::For {
                 assignment,
                 to_expr,
                 step_expr,
@@ -161,7 +166,7 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            Statement::Next { lvalue } => {
+            StatementInner::Next { lvalue } => {
                 // Ensure the identifier is numeric (FOR loop variable)
                 let ty = self.analyze_lvalue(lvalue)?;
                 if ty != BasicType::Numeric {
@@ -172,33 +177,33 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::Goto { target } => {
+            StatementInner::Goto { target } => {
                 self.analyze_expression(target)?;
             }
-            Statement::Gosub { target } => {
+            StatementInner::Gosub { target } => {
                 self.analyze_expression(target)?;
             }
-            Statement::Dim { decls } => {
+            StatementInner::Dim { decls } => {
                 for dim in decls {
                     self.analyze_dim_declaration(dim)?;
                 }
             }
-            Statement::Read { destinations } => {
+            StatementInner::Read { destinations } => {
                 for lvalue in destinations {
                     self.analyze_lvalue(lvalue)?;
                 }
             }
-            Statement::Data(expressions) => {
+            StatementInner::Data(expressions) => {
                 for expr in expressions {
                     self.analyze_expression(expr)?;
                 }
             }
-            Statement::Restore { expr } => {
+            StatementInner::Restore { expr } => {
                 if let Some(expr) = expr {
                     self.analyze_expression(expr)?;
                 }
             }
-            Statement::OnGoto { expr, targets } => {
+            StatementInner::OnGoto { expr, targets } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -211,7 +216,7 @@ impl SemanticAnalyzer {
                     self.analyze_expression(target)?;
                 }
             }
-            Statement::OnGosub { expr, targets } => {
+            StatementInner::OnGosub { expr, targets } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -224,7 +229,7 @@ impl SemanticAnalyzer {
                     self.analyze_expression(target)?;
                 }
             }
-            Statement::Wait { expr } => {
+            StatementInner::Wait { expr } => {
                 if let Some(expr) = expr {
                     let expr_type = self.analyze_expression(expr)?;
                     if expr_type != BasicType::Numeric {
@@ -236,7 +241,7 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            Statement::Beep {
+            StatementInner::Beep {
                 repetitions_expr,
                 optional_params,
             } => {
@@ -252,7 +257,7 @@ impl SemanticAnalyzer {
                     self.analyze_beep_params(params)?;
                 }
             }
-            Statement::Cursor { expr } => {
+            StatementInner::Cursor { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -262,7 +267,7 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::GCursor { expr } => {
+            StatementInner::GCursor { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -272,10 +277,10 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::LCursor(clause) => {
+            StatementInner::LCursor(clause) => {
                 self.analyze_lcursor_clause(clause)?;
             }
-            Statement::Color { expr } => {
+            StatementInner::Color { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -285,7 +290,7 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::CSize { expr } => {
+            StatementInner::CSize { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -295,7 +300,7 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::Lf { expr } => {
+            StatementInner::Lf { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::TypeMismatch {
@@ -306,29 +311,29 @@ impl SemanticAnalyzer {
                 }
             }
             // Statements that don't require type checking
-            Statement::Print { .. } => {}  // Print can handle any type
-            Statement::LPrint { .. } => {} // LPrint can handle any type
-            Statement::Gprint { .. } => {} // GPrint can handle any type
-            Statement::Pause { .. } => {}  // Pause can handle any type
-            Statement::Input { .. } => {}  // Input determines types at runtime
-            Statement::Using { .. } => {}  // Using is a formatting directive
-            Statement::End => {}
-            Statement::Clear => {}
-            Statement::Cls => {}
-            Statement::Random => {}
-            Statement::Return => {}
-            Statement::Remark { .. } => {}
-            Statement::Poke { .. } => {} // Poke requires numeric but we'll handle separately
-            Statement::Arun => {}
-            Statement::Lock => {}
-            Statement::Unlock => {}
-            Statement::OnErrorGoto { .. } => {}
-            Statement::Call { .. } => {}
-            Statement::BeepOnOff { .. } => {}
-            Statement::Text => {}
-            Statement::Graph => {}
-            Statement::Radian => {}
-            Statement::GlCursor { x_expr, y_expr } => {
+            StatementInner::Print { .. } => {} // Print can handle any type
+            StatementInner::LPrint { .. } => {} // LPrint can handle any type
+            StatementInner::Gprint { .. } => {} // GPrint can handle any type
+            StatementInner::Pause { .. } => {} // Pause can handle any type
+            StatementInner::Input { .. } => {} // Input determines types at runtime
+            StatementInner::Using { .. } => {} // Using is a formatting directive
+            StatementInner::End => {}
+            StatementInner::Clear => {}
+            StatementInner::Cls => {}
+            StatementInner::Random => {}
+            StatementInner::Return => {}
+            StatementInner::Remark { .. } => {}
+            StatementInner::Poke { .. } => {} // Poke requires numeric but we'll handle separately
+            StatementInner::Arun => {}
+            StatementInner::Lock => {}
+            StatementInner::Unlock => {}
+            StatementInner::OnErrorGoto { .. } => {}
+            StatementInner::Call { .. } => {}
+            StatementInner::BeepOnOff { .. } => {}
+            StatementInner::Text => {}
+            StatementInner::Graph => {}
+            StatementInner::Radian => {}
+            StatementInner::GlCursor { x_expr, y_expr } => {
                 let x_type = self.analyze_expression(x_expr)?;
                 let y_type = self.analyze_expression(y_expr)?;
                 if x_type != BasicType::Numeric || y_type != BasicType::Numeric {
@@ -347,13 +352,13 @@ impl SemanticAnalyzer {
                     });
                 }
             }
-            Statement::Line { inner } => {
+            StatementInner::Line { inner } => {
                 self.analyze_line_inner(inner)?;
             }
-            Statement::RLine { inner } => {
+            StatementInner::RLine { inner } => {
                 self.analyze_line_inner(inner)?;
             }
-            Statement::Sorgn => {}
+            StatementInner::Sorgn => {}
         }
         Ok(())
     }

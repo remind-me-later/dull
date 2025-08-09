@@ -19,7 +19,8 @@ use crate::{
         line::Line,
         statement::{
             Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
-            LetInner, LineInner, PrintInner, PrintSeparator, Printable, Statement, UsingClause,
+            LetInner, LineInner, PrintInner, PrintSeparator, Printable, Statement, StatementInner,
+            UsingClause,
         },
     },
 };
@@ -987,22 +988,34 @@ where
     fn parse_print_pause_stmt(&mut self) -> ParseResult<Option<Statement>> {
         match self.peek_token() {
             Token::Keyword(Keyword::Print) => {
-                self.tokens.next();
+                let start_token = self.tokens.next().unwrap();
+                let start_span = *start_token.span();
                 let print_inner = self.parse_print_inner()?;
-                Ok(Some(Statement::Print { inner: print_inner }))
+                let end_span = self.current_span();
+                let full_span = start_span.extend(end_span);
+                Ok(Some(Statement::new(
+                    StatementInner::Print { inner: print_inner },
+                    full_span,
+                )))
             }
             Token::Keyword(Keyword::Pause) => {
-                self.tokens.next();
+                let start_token = self.tokens.next().unwrap();
+                let start_span = *start_token.span();
                 let pause_inner = self.parse_print_inner()?;
-                Ok(Some(Statement::Pause { inner: pause_inner }))
+                let end_span = self.current_span();
+                let full_span = start_span.extend(end_span);
+                Ok(Some(Statement::new(
+                    StatementInner::Pause { inner: pause_inner },
+                    full_span,
+                )))
             }
             _ => Ok(None),
         }
     }
 
     fn parse_end_statement(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::End))?;
-        Some(Statement::End)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::End))?;
+        Some(Statement::new(StatementInner::End, *start_token.span()))
     }
 
     fn parse_dim_inner(&mut self) -> ParseResult<Option<DimInner>> {
@@ -1068,6 +1081,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Dim))
             .is_some()
         {
+            let start_span = self.current_span();
             let mut decls = vec![];
 
             loop {
@@ -1082,7 +1096,12 @@ where
                 }
             }
 
-            Ok(Some(Statement::Dim { decls }))
+            let end_span = self.current_span();
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Statement::new(
+                StatementInner::Dim { decls },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1094,7 +1113,11 @@ where
         }
 
         if let Some(stmt) = self.parse_using_clause() {
-            return Ok(Some(Statement::Using { using_clause: stmt }));
+            let start_span = self.current_span();
+            return Ok(Some(Statement::new(
+                StatementInner::Using { using_clause: stmt },
+                start_span,
+            )));
         }
 
         if let Some(stmt) = self.parse_end_statement() {
@@ -1254,15 +1277,19 @@ where
         }
 
         if let Some(stmt) = self.parse_let_inner(is_let_mandatory)? {
-            return Ok(Some(Statement::Let { inner: stmt }));
+            let start_span = self.current_span();
+            return Ok(Some(Statement::new(
+                StatementInner::Let { inner: stmt },
+                start_span,
+            )));
         }
 
         Ok(None)
     }
 
     fn parse_sorgn_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Sorgn))?;
-        Some(Statement::Sorgn)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Sorgn))?;
+        Some(Statement::new(StatementInner::Sorgn, *start_token.span()))
     }
 
     fn parse_if_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1270,19 +1297,30 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::If))
             .is_some()
         {
+            let start_span = self.current_span();
             let condition = self.expect_expression()?;
             self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
             if let Some(then_stmt) = self.parse_statement(true)? {
-                Ok(Some(Statement::If {
-                    condition,
-                    then_stmt: Box::new(then_stmt),
-                }))
+                let full_span = start_span.extend(then_stmt.span);
+                Ok(Some(Statement::new(
+                    StatementInner::If {
+                        condition,
+                        then_stmt: Box::new(then_stmt),
+                    },
+                    full_span,
+                )))
             } else {
                 let goto_expr = self.expect_expression()?;
-                Ok(Some(Statement::If {
-                    condition,
-                    then_stmt: Box::new(Statement::Goto { target: goto_expr }),
-                }))
+                let full_span = start_span.extend(goto_expr.span);
+                let goto_stmt =
+                    Statement::new(StatementInner::Goto { target: goto_expr }, full_span);
+                Ok(Some(Statement::new(
+                    StatementInner::If {
+                        condition,
+                        then_stmt: Box::new(goto_stmt),
+                    },
+                    full_span,
+                )))
             }
         } else {
             Ok(None)
@@ -1294,6 +1332,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Input))
             .is_some()
         {
+            let start_span = self.current_span();
             let mut input_exprs = vec![];
 
             loop {
@@ -1319,7 +1358,12 @@ where
                 }
             }
 
-            Ok(Some(Statement::Input { input_exprs }))
+            let end_span = self.current_span();
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Statement::new(
+                StatementInner::Input { input_exprs },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1329,10 +1373,14 @@ where
         match self.peek_mut_token()? {
             Token::Remark(s) => {
                 let s = mem::take(s);
+                let start_span = self.current_span();
                 self.tokens.next();
-                Some(Statement::Remark {
-                    text: s.to_string(),
-                })
+                Some(Statement::new(
+                    StatementInner::Remark {
+                        text: s.to_string(),
+                    },
+                    start_span,
+                ))
             }
             _ => None,
         }
@@ -1343,6 +1391,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::For))
             .is_some()
         {
+            let start_span = self.current_span();
             let assignment = self.expect_assignment()?;
             self.expect_token(
                 &Token::Keyword(Keyword::To),
@@ -1358,11 +1407,16 @@ where
                 None
             };
 
-            Ok(Some(Statement::For {
-                assignment,
-                to_expr,
-                step_expr,
-            }))
+            let end_span = step_expr.as_ref().map(|e| e.span).unwrap_or(to_expr.span);
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Statement::new(
+                StatementInner::For {
+                    assignment,
+                    to_expr,
+                    step_expr,
+                },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1373,16 +1427,21 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Next))
             .is_some()
         {
+            let start_span = self.current_span();
             let lvalue = self.expect_lvalue()?;
-            Ok(Some(Statement::Next { lvalue }))
+            let full_span = start_span.extend(lvalue.span);
+            Ok(Some(Statement::new(
+                StatementInner::Next { lvalue },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
     }
 
     fn parse_clear_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Clear))?;
-        Some(Statement::Clear)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Clear))?;
+        Some(Statement::new(StatementInner::Clear, *start_token.span()))
     }
 
     fn parse_goto_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1390,8 +1449,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Goto))
             .is_some()
         {
+            let start_span = self.current_span();
             let target = self.expect_expression()?;
-            Ok(Some(Statement::Goto { target }))
+            let full_span = start_span.extend(target.span);
+            Ok(Some(Statement::new(
+                StatementInner::Goto { target },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1402,8 +1466,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Gosub))
             .is_some()
         {
+            let start_span = self.current_span();
             let target = self.expect_expression()?;
-            Ok(Some(Statement::Gosub { target }))
+            let full_span = start_span.extend(target.span);
+            Ok(Some(Statement::new(
+                StatementInner::Gosub { target },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1414,6 +1483,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::On))
             .is_some()
         {
+            let start_span = self.current_span();
             if self
                 .next_if_token_eq(&Token::Keyword(Keyword::Error))
                 .is_some()
@@ -1424,7 +1494,11 @@ where
                 )?;
 
                 let expr = self.expect_expression()?;
-                return Ok(Some(Statement::OnErrorGoto { target: expr }));
+                let full_span = start_span.extend(expr.span);
+                return Ok(Some(Statement::new(
+                    StatementInner::OnErrorGoto { target: expr },
+                    full_span,
+                )));
             }
 
             let expr = self.expect_expression()?;
@@ -1440,7 +1514,12 @@ where
                 {
                     targets.push(self.expect_expression()?);
                 }
-                Ok(Some(Statement::OnGoto { expr, targets }))
+                let end_span = targets.last().unwrap().span;
+                let full_span = start_span.extend(end_span);
+                Ok(Some(Statement::new(
+                    StatementInner::OnGoto { expr, targets },
+                    full_span,
+                )))
             } else if self
                 .next_if_token_eq(&Token::Keyword(Keyword::Gosub))
                 .is_some()
@@ -1452,7 +1531,12 @@ where
                 {
                     targets.push(self.expect_expression()?);
                 }
-                Ok(Some(Statement::OnGosub { expr, targets }))
+                let end_span = targets.last().unwrap().span;
+                let full_span = start_span.extend(end_span);
+                Ok(Some(Statement::new(
+                    StatementInner::OnGosub { expr, targets },
+                    full_span,
+                )))
             } else {
                 Err(ParseError::ExpectedGotoOrGosub {
                     span: self.current_span(),
@@ -1468,20 +1552,26 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Wait))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.parse_expression()?;
-            return Ok(Some(Statement::Wait { expr }));
+            let end_span = expr.as_ref().map(|e| e.span).unwrap_or(start_span);
+            let full_span = start_span.extend(end_span);
+            return Ok(Some(Statement::new(
+                StatementInner::Wait { expr },
+                full_span,
+            )));
         }
         Ok(None)
     }
 
     fn parse_cls_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Cls))?;
-        Some(Statement::Cls)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Cls))?;
+        Some(Statement::new(StatementInner::Cls, *start_token.span()))
     }
 
     fn parse_random_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Random))?;
-        Some(Statement::Random)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Random))?;
+        Some(Statement::new(StatementInner::Random, *start_token.span()))
     }
 
     fn parse_gprint_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1489,6 +1579,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Gprint))
             .is_some()
         {
+            let start_span = self.current_span();
             let mut exprs = vec![];
 
             while let Some(expr) = self.parse_expression()? {
@@ -1496,7 +1587,12 @@ where
                 exprs.push((expr, print_separator));
             }
 
-            Ok(Some(Statement::Gprint { exprs }))
+            let end_span = self.current_span();
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Statement::new(
+                StatementInner::Gprint { exprs },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1507,8 +1603,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Gcursor))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            return Ok(Some(Statement::GCursor { expr }));
+            let full_span = start_span.extend(expr.span);
+            return Ok(Some(Statement::new(
+                StatementInner::GCursor { expr },
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -1518,8 +1619,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Cursor))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            return Ok(Some(Statement::Cursor { expr }));
+            let full_span = start_span.extend(expr.span);
+            return Ok(Some(Statement::new(
+                StatementInner::Cursor { expr },
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -1529,18 +1635,27 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Beep))
             .is_some()
         {
+            let start_span = self.current_span();
             // Check for BEEP ON/OFF
             if self.peek_token() == &Token::Keyword(Keyword::On) {
-                self.tokens.next();
-                return Ok(Some(Statement::BeepOnOff {
-                    switch_beep_on: true,
-                }));
+                let on_token = self.tokens.next().unwrap();
+                let full_span = start_span.extend(*on_token.span());
+                return Ok(Some(Statement::new(
+                    StatementInner::BeepOnOff {
+                        switch_beep_on: true,
+                    },
+                    full_span,
+                )));
             }
             if self.peek_token() == &Token::Keyword(Keyword::Off) {
-                self.tokens.next();
-                return Ok(Some(Statement::BeepOnOff {
-                    switch_beep_on: false,
-                }));
+                let off_token = self.tokens.next().unwrap();
+                let full_span = start_span.extend(*off_token.span());
+                return Ok(Some(Statement::new(
+                    StatementInner::BeepOnOff {
+                        switch_beep_on: false,
+                    },
+                    full_span,
+                )));
             }
 
             // Parse BEEP repetitions[,frequency[,duration]]
@@ -1567,21 +1682,32 @@ where
                 None
             };
 
-            Ok(Some(Statement::Beep {
-                repetitions_expr,
-                optional_params,
-            }))
+            let end_span = optional_params
+                .as_ref()
+                .and_then(|p| p.duration.as_ref())
+                .map(|d| d.span)
+                .or_else(|| optional_params.as_ref().map(|p| p.frequency.span))
+                .unwrap_or(repetitions_expr.span);
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Statement::new(
+                StatementInner::Beep {
+                    repetitions_expr,
+                    optional_params,
+                },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
     }
 
     fn parse_return_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Return))?;
-        Some(Statement::Return)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Return))?;
+        Some(Statement::new(StatementInner::Return, *start_token.span()))
     }
 
     fn parse_poke_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        let start_span = self.current_span();
         let memory_area = match self.peek_token() {
             Token::Keyword(Keyword::PokeMem0) => {
                 self.tokens.next();
@@ -1602,7 +1728,12 @@ where
             exprs.push(self.expect_expression()?);
         }
 
-        Ok(Some(Statement::Poke { memory_area, exprs }))
+        let end_span = exprs.last().unwrap().span;
+        let full_span = start_span.extend(end_span);
+        Ok(Some(Statement::new(
+            StatementInner::Poke { memory_area, exprs },
+            full_span,
+        )))
     }
 
     fn parse_read_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1610,6 +1741,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Read))
             .is_some()
         {
+            let start_span = self.current_span();
             let mut destinations = vec![self.expect_lvalue()?];
             while self
                 .next_if_token_eq(&Token::Symbol(Symbol::Comma))
@@ -1617,7 +1749,12 @@ where
             {
                 destinations.push(self.expect_lvalue()?);
             }
-            return Ok(Some(Statement::Read { destinations }));
+            let end_span = destinations.last().unwrap().span;
+            let full_span = start_span.extend(end_span);
+            return Ok(Some(Statement::new(
+                StatementInner::Read { destinations },
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -1627,6 +1764,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Data))
             .is_some()
         {
+            let start_span = self.current_span();
             let mut exprs = vec![self.expect_expression()?];
             while self
                 .next_if_token_eq(&Token::Symbol(Symbol::Comma))
@@ -1634,7 +1772,9 @@ where
             {
                 exprs.push(self.expect_expression()?);
             }
-            return Ok(Some(Statement::Data(exprs)));
+            let end_span = exprs.last().unwrap().span;
+            let full_span = start_span.extend(end_span);
+            return Ok(Some(Statement::new(StatementInner::Data(exprs), full_span)));
         }
         Ok(None)
     }
@@ -1644,25 +1784,31 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Restore))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.parse_expression()?;
-            return Ok(Some(Statement::Restore { expr }));
+            let end_span = expr.as_ref().map(|e| e.span).unwrap_or(start_span);
+            let full_span = start_span.extend(end_span);
+            return Ok(Some(Statement::new(
+                StatementInner::Restore { expr },
+                full_span,
+            )));
         }
         Ok(None)
     }
 
     fn parse_arun_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Arun))?;
-        Some(Statement::Arun)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Arun))?;
+        Some(Statement::new(StatementInner::Arun, *start_token.span()))
     }
 
     fn parse_lock_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Lock))?;
-        Some(Statement::Lock)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Lock))?;
+        Some(Statement::new(StatementInner::Lock, *start_token.span()))
     }
 
     fn parse_unlock_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Unlock))?;
-        Some(Statement::Unlock)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Unlock))?;
+        Some(Statement::new(StatementInner::Unlock, *start_token.span()))
     }
 
     fn parse_call_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1670,6 +1816,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Call))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.expect_expression()?;
             let variable = if self
                 .next_if_token_eq(&Token::Symbol(Symbol::Comma))
@@ -1679,19 +1826,24 @@ where
             } else {
                 None
             };
-            return Ok(Some(Statement::Call { expr, variable }));
+            let end_span = variable.as_ref().map(|v| v.span).unwrap_or(expr.span);
+            let full_span = start_span.extend(end_span);
+            return Ok(Some(Statement::new(
+                StatementInner::Call { expr, variable },
+                full_span,
+            )));
         }
         Ok(None)
     }
 
     fn parse_text_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Text))?;
-        Some(Statement::Text)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Text))?;
+        Some(Statement::new(StatementInner::Text, *start_token.span()))
     }
 
     fn parse_graph_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Graph))?;
-        Some(Statement::Graph)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Graph))?;
+        Some(Statement::new(StatementInner::Graph, *start_token.span()))
     }
 
     fn parse_line_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1702,6 +1854,8 @@ where
             return Ok(None);
         }
 
+        let start_span = self.current_span();
+
         let mut start_point = None;
         let mut end_points = Vec::new();
 
@@ -1812,7 +1966,12 @@ where
             is_box,
         };
 
-        Ok(Some(Statement::Line { inner }))
+        let end_span = self.current_span();
+        let full_span = start_span.extend(end_span);
+        Ok(Some(Statement::new(
+            StatementInner::Line { inner },
+            full_span,
+        )))
     }
 
     fn parse_rline_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1823,6 +1982,8 @@ where
             return Ok(None);
         }
 
+        let start_span = self.current_span();
+
         let mut start_point = None;
         let mut end_points = Vec::new();
 
@@ -1933,7 +2094,12 @@ where
             is_box,
         };
 
-        Ok(Some(Statement::RLine { inner }))
+        let end_span = self.current_span();
+        let full_span = start_span.extend(end_span);
+        Ok(Some(Statement::new(
+            StatementInner::RLine { inner },
+            full_span,
+        )))
     }
 
     fn parse_color_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1941,8 +2107,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Color))
             .is_some()
         {
+            let start_span = self.current_span();
             let color = self.expect_expression()?;
-            return Ok(Some(Statement::Color { expr: color }));
+            let full_span = start_span.extend(color.span);
+            return Ok(Some(Statement::new(
+                StatementInner::Color { expr: color },
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -1952,8 +2123,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Csize))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            return Ok(Some(Statement::CSize { expr }));
+            let full_span = start_span.extend(expr.span);
+            return Ok(Some(Statement::new(
+                StatementInner::CSize { expr },
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -1963,15 +2139,17 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Lf))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            return Ok(Some(Statement::Lf { expr }));
+            let full_span = start_span.extend(expr.span);
+            return Ok(Some(Statement::new(StatementInner::Lf { expr }, full_span)));
         }
         Ok(None)
     }
 
     fn parse_radian_stmt(&mut self) -> Option<Statement> {
-        self.next_if_token_eq(&Token::Keyword(Keyword::Radian))?;
-        Some(Statement::Radian)
+        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Radian))?;
+        Some(Statement::new(StatementInner::Radian, *start_token.span()))
     }
 
     fn parse_lcursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1979,8 +2157,13 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Lcursor))
             .is_some()
         {
+            let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            return Ok(Some(Statement::LCursor(LCursorClause { expr })));
+            let full_span = start_span.extend(expr.span);
+            return Ok(Some(Statement::new(
+                StatementInner::LCursor(LCursorClause { expr }),
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -1990,8 +2173,14 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Lprint))
             .is_some()
         {
+            let start_span = self.current_span();
             let inner = self.parse_lprint_inner()?;
-            return Ok(Some(Statement::LPrint { inner }));
+            let end_span = self.current_span();
+            let full_span = start_span.extend(end_span);
+            return Ok(Some(Statement::new(
+                StatementInner::LPrint { inner },
+                full_span,
+            )));
         }
         Ok(None)
     }
@@ -2027,6 +2216,7 @@ where
             .next_if_token_eq(&Token::Keyword(Keyword::Glcursor))
             .is_some()
         {
+            let start_span = self.current_span();
             self.expect_token(
                 &Token::Symbol(Symbol::LParen),
                 "Expected '(' after GLCURSOR",
@@ -2037,11 +2227,15 @@ where
                 "Expected ',' between GLCURSOR coordinates",
             )?;
             let y_expr = self.expect_expression()?;
-            self.expect_token(
+            let rparen = self.expect_token(
                 &Token::Symbol(Symbol::RParen),
                 "Expected ')' after GLCURSOR coordinates",
             )?;
-            return Ok(Some(Statement::GlCursor { x_expr, y_expr }));
+            let full_span = start_span.extend(*rparen.span());
+            return Ok(Some(Statement::new(
+                StatementInner::GlCursor { x_expr, y_expr },
+                full_span,
+            )));
         }
         Ok(None)
     }

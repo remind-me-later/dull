@@ -1,8 +1,10 @@
 use crate::{
+    error::Span,
     lex::{identifier::Identifier, keyword::Keyword},
     parse::expression::{Expr, lvalue::LValue, memory_area::MemoryArea},
 };
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct UsingClause {
     // -- FIXME: maybe this should allow also variables as format strings?
     pub format: Option<String>,
@@ -29,6 +31,7 @@ impl std::fmt::Display for UsingClause {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Assignment {
     pub lvalue: LValue,
     pub expr: Box<Expr>,
@@ -48,6 +51,7 @@ impl std::fmt::Display for Assignment {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum DimInner {
     DimInner1D {
         identifier: Identifier,
@@ -91,6 +95,7 @@ impl std::fmt::Display for DimInner {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct BeepOptionalParams {
     pub frequency: Expr,
     pub duration: Option<Expr>,
@@ -133,6 +138,7 @@ impl std::fmt::Display for PrintSeparator {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Printable {
     Expr(Expr),
     UsingClause(UsingClause),
@@ -147,6 +153,7 @@ impl Printable {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct PrintInner {
     pub exprs: Vec<(Printable, PrintSeparator)>,
 }
@@ -163,6 +170,7 @@ impl std::fmt::Display for PrintInner {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct LCursorClause {
     pub expr: Expr,
 }
@@ -186,11 +194,13 @@ impl LCursorClause {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum LPrintable {
     Expr(Expr),
     LCursorClause(LCursorClause),
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct LPrintInner {
     pub exprs: Vec<(LPrintable, PrintSeparator)>,
 }
@@ -225,6 +235,7 @@ impl LPrintInner {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct LetInner {
     pub assignments: Vec<Assignment>,
 }
@@ -250,6 +261,7 @@ impl LetInner {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct LineInner {
     pub start_point: Option<(Expr, Expr)>, // None means use current pen position
     pub end_points: Vec<(Expr, Expr)>,
@@ -321,7 +333,21 @@ impl LineInner {
         result
     }
 }
-pub enum Statement {
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Statement {
+    pub inner: StatementInner,
+    pub span: Span,
+}
+
+impl Statement {
+    pub fn new(inner: StatementInner, span: Span) -> Self {
+        Self { inner, span }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StatementInner {
     Let {
         inner: LetInner,
     },
@@ -447,8 +473,8 @@ impl Statement {
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
         use crate::lex::keyword::Keyword;
 
-        match self {
-            Statement::Let { inner } => {
+        match &self.inner {
+            StatementInner::Let { inner } => {
                 for (i, assignment) in inner.assignments.iter().enumerate() {
                     if i > 0 {
                         bytes.push(b',');
@@ -458,20 +484,20 @@ impl Statement {
                     assignment.expr.write_bytes(bytes);
                 }
             }
-            Statement::If {
+            StatementInner::If {
                 condition,
                 then_stmt,
             } => {
                 bytes.extend_from_slice(Keyword::If.internal_code().to_le_bytes().as_slice());
                 condition.write_bytes(bytes);
-                match &**then_stmt {
-                    Statement::Let { inner } => {
+                match &then_stmt.inner {
+                    StatementInner::Let { inner } => {
                         bytes.extend_from_slice(
                             Keyword::Let.internal_code().to_le_bytes().as_slice(),
                         );
                         bytes.extend_from_slice(inner.show_with_context(true).as_bytes());
                     }
-                    Statement::Goto { target } => {
+                    StatementInner::Goto { target } => {
                         target.write_bytes(bytes);
                     }
                     _ => {
@@ -479,28 +505,28 @@ impl Statement {
                     }
                 }
             }
-            Statement::Print { inner } => {
+            StatementInner::Print { inner } => {
                 bytes.extend_from_slice(Keyword::Print.internal_code().to_le_bytes().as_slice());
                 for (printable, sep) in &inner.exprs {
                     printable.write_bytes(bytes);
                     sep.write_bytes(bytes);
                 }
             }
-            Statement::Pause { inner } => {
+            StatementInner::Pause { inner } => {
                 bytes.extend_from_slice(Keyword::Pause.internal_code().to_le_bytes().as_slice());
                 for (printable, sep) in &inner.exprs {
                     printable.write_bytes(bytes);
                     sep.write_bytes(bytes);
                 }
             }
-            Statement::LPrint { inner } => {
+            StatementInner::LPrint { inner } => {
                 bytes.extend_from_slice(Keyword::Lprint.internal_code().to_le_bytes().as_slice());
                 inner.write_bytes_with_context(true, bytes);
             }
-            Statement::Using { using_clause } => {
+            StatementInner::Using { using_clause } => {
                 using_clause.write_bytes(bytes);
             }
-            Statement::Input { input_exprs } => {
+            StatementInner::Input { input_exprs } => {
                 bytes.extend_from_slice(Keyword::Input.internal_code().to_le_bytes().as_slice());
                 for (i, (prompt, lvalue)) in input_exprs.iter().enumerate() {
                     if let Some(prompt) = prompt {
@@ -515,14 +541,14 @@ impl Statement {
                     }
                 }
             }
-            Statement::End => {
+            StatementInner::End => {
                 bytes.extend_from_slice(Keyword::End.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Remark { text: _ } => {
+            StatementInner::Remark { text: _ } => {
                 // FIXME: can we safely omit the text?
                 bytes.extend_from_slice(Keyword::Rem.internal_code().to_le_bytes().as_slice());
             }
-            Statement::For {
+            StatementInner::For {
                 assignment,
                 to_expr,
                 step_expr,
@@ -536,22 +562,22 @@ impl Statement {
                     step.write_bytes(bytes);
                 }
             }
-            Statement::Next { lvalue } => {
+            StatementInner::Next { lvalue } => {
                 bytes.extend_from_slice(Keyword::Next.internal_code().to_le_bytes().as_slice());
                 lvalue.write_bytes(bytes);
             }
-            Statement::Clear => {
+            StatementInner::Clear => {
                 bytes.extend_from_slice(Keyword::Clear.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Goto { target } => {
+            StatementInner::Goto { target } => {
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_le_bytes().as_slice());
                 target.write_bytes(bytes);
             }
-            Statement::Gosub { target } => {
+            StatementInner::Gosub { target } => {
                 bytes.extend_from_slice(Keyword::Gosub.internal_code().to_le_bytes().as_slice());
                 target.write_bytes(bytes);
             }
-            Statement::OnGoto { expr, targets } => {
+            StatementInner::OnGoto { expr, targets } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_le_bytes().as_slice());
@@ -562,7 +588,7 @@ impl Statement {
                     }
                 }
             }
-            Statement::OnGosub { expr, targets } => {
+            StatementInner::OnGosub { expr, targets } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
                 bytes.extend_from_slice(Keyword::Gosub.internal_code().to_le_bytes().as_slice());
@@ -573,40 +599,40 @@ impl Statement {
                     }
                 }
             }
-            Statement::OnErrorGoto { target } => {
+            StatementInner::OnErrorGoto { target } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
                 bytes.extend_from_slice(Keyword::Error.internal_code().to_le_bytes().as_slice());
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_le_bytes().as_slice());
                 target.write_bytes(bytes);
             }
-            Statement::Wait { expr } => {
+            StatementInner::Wait { expr } => {
                 bytes.extend_from_slice(Keyword::Wait.internal_code().to_le_bytes().as_slice());
                 if let Some(expr) = expr {
                     expr.write_bytes(bytes);
                 }
             }
-            Statement::Cls => {
+            StatementInner::Cls => {
                 bytes.extend_from_slice(Keyword::Cls.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Random => {
+            StatementInner::Random => {
                 bytes.extend_from_slice(Keyword::Random.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Gprint { exprs } => {
+            StatementInner::Gprint { exprs } => {
                 bytes.extend_from_slice(Keyword::Gprint.internal_code().to_le_bytes().as_slice());
                 for (expr, sep) in exprs {
                     expr.write_bytes(bytes);
                     sep.write_bytes(bytes);
                 }
             }
-            Statement::GCursor { expr } => {
+            StatementInner::GCursor { expr } => {
                 bytes.extend_from_slice(Keyword::Gcursor.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
             }
-            Statement::Cursor { expr } => {
+            StatementInner::Cursor { expr } => {
                 bytes.extend_from_slice(Keyword::Cursor.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
             }
-            Statement::Beep {
+            StatementInner::Beep {
                 repetitions_expr,
                 optional_params,
             } => {
@@ -621,7 +647,7 @@ impl Statement {
                     }
                 }
             }
-            Statement::BeepOnOff { switch_beep_on } => {
+            StatementInner::BeepOnOff { switch_beep_on } => {
                 bytes.extend_from_slice(Keyword::Beep.internal_code().to_le_bytes().as_slice());
                 if *switch_beep_on {
                     bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
@@ -629,10 +655,10 @@ impl Statement {
                     bytes.extend_from_slice(Keyword::Off.internal_code().to_le_bytes().as_slice());
                 }
             }
-            Statement::Return => {
+            StatementInner::Return => {
                 bytes.extend_from_slice(Keyword::Return.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Poke { memory_area, exprs } => {
+            StatementInner::Poke { memory_area, exprs } => {
                 match memory_area {
                     MemoryArea::Me0 => bytes.extend_from_slice(
                         Keyword::PokeMem0.internal_code().to_le_bytes().as_slice(),
@@ -648,7 +674,7 @@ impl Statement {
                     }
                 }
             }
-            Statement::Dim { decls } => {
+            StatementInner::Dim { decls } => {
                 bytes.extend_from_slice(Keyword::Dim.internal_code().to_le_bytes().as_slice());
                 for (i, decl) in decls.iter().enumerate() {
                     match decl {
@@ -690,7 +716,7 @@ impl Statement {
                     }
                 }
             }
-            Statement::Read { destinations } => {
+            StatementInner::Read { destinations } => {
                 bytes.extend_from_slice(Keyword::Read.internal_code().to_le_bytes().as_slice());
                 for (i, dest) in destinations.iter().enumerate() {
                     dest.write_bytes(bytes);
@@ -699,7 +725,7 @@ impl Statement {
                     }
                 }
             }
-            Statement::Data(exprs) => {
+            StatementInner::Data(exprs) => {
                 bytes.extend_from_slice(Keyword::Data.internal_code().to_le_bytes().as_slice());
                 for (i, expr) in exprs.iter().enumerate() {
                     expr.write_bytes(bytes);
@@ -708,22 +734,22 @@ impl Statement {
                     }
                 }
             }
-            Statement::Restore { expr } => {
+            StatementInner::Restore { expr } => {
                 bytes.extend_from_slice(Keyword::Restore.internal_code().to_le_bytes().as_slice());
                 if let Some(expr) = expr {
                     expr.write_bytes(bytes);
                 }
             }
-            Statement::Arun => {
+            StatementInner::Arun => {
                 bytes.extend_from_slice(Keyword::Arun.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Lock => {
+            StatementInner::Lock => {
                 bytes.extend_from_slice(Keyword::Lock.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Unlock => {
+            StatementInner::Unlock => {
                 bytes.extend_from_slice(Keyword::Unlock.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Call { expr, variable } => {
+            StatementInner::Call { expr, variable } => {
                 bytes.extend_from_slice(Keyword::Call.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
                 if let Some(var) = variable {
@@ -731,31 +757,31 @@ impl Statement {
                     var.write_bytes(bytes);
                 }
             }
-            Statement::Radian => {
+            StatementInner::Radian => {
                 bytes.extend_from_slice(Keyword::Radian.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Text => {
+            StatementInner::Text => {
                 bytes.extend_from_slice(Keyword::Text.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Graph => {
+            StatementInner::Graph => {
                 bytes.extend_from_slice(Keyword::Graph.internal_code().to_le_bytes().as_slice());
             }
-            Statement::Color { expr } => {
+            StatementInner::Color { expr } => {
                 bytes.extend_from_slice(Keyword::Color.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
             }
-            Statement::CSize { expr } => {
+            StatementInner::CSize { expr } => {
                 bytes.extend_from_slice(Keyword::Csize.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
             }
-            Statement::Lf { expr } => {
+            StatementInner::Lf { expr } => {
                 bytes.extend_from_slice(Keyword::Lf.internal_code().to_le_bytes().as_slice());
                 expr.write_bytes(bytes);
             }
-            Statement::LCursor(l_cursor_clause) => {
+            StatementInner::LCursor(l_cursor_clause) => {
                 l_cursor_clause.write_bytes_with_context(false, bytes);
             }
-            Statement::GlCursor { x_expr, y_expr } => {
+            StatementInner::GlCursor { x_expr, y_expr } => {
                 bytes.extend_from_slice(Keyword::Glcursor.internal_code().to_le_bytes().as_slice());
                 bytes.push(b'(');
                 x_expr.write_bytes(bytes);
@@ -763,15 +789,15 @@ impl Statement {
                 y_expr.write_bytes(bytes);
                 bytes.push(b')');
             }
-            Statement::Line { inner } => {
+            StatementInner::Line { inner } => {
                 bytes.extend_from_slice(Keyword::Line.internal_code().to_le_bytes().as_slice());
                 inner.write_bytes(bytes);
             }
-            Statement::RLine { inner } => {
+            StatementInner::RLine { inner } => {
                 bytes.extend_from_slice(Keyword::Rline.internal_code().to_le_bytes().as_slice());
                 inner.write_bytes(bytes);
             }
-            Statement::Sorgn => {
+            StatementInner::Sorgn => {
                 bytes.extend_from_slice(Keyword::Sorgn.internal_code().to_le_bytes().as_slice());
             }
         }
@@ -780,24 +806,24 @@ impl Statement {
 
 impl std::fmt::Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Statement::Let { inner } => write!(f, "{}", inner.show_with_context(false)),
-            Statement::If {
+        match &self.inner {
+            StatementInner::Let { inner } => write!(f, "{}", inner.show_with_context(false)),
+            StatementInner::If {
                 condition,
                 then_stmt,
-            } => match then_stmt.as_ref() {
-                Statement::Let { inner } => {
+            } => match &then_stmt.as_ref().inner {
+                StatementInner::Let { inner } => {
                     write!(f, "IF {condition} THEN {}", inner.show_with_context(true))
                 }
                 _ => write!(f, "IF {condition} THEN {then_stmt}"),
             },
-            Statement::Print { inner } => write!(f, "PRINT {inner}"),
-            Statement::Pause { inner } => write!(f, "PAUSE {inner}"),
-            Statement::LPrint { inner } => {
+            StatementInner::Print { inner } => write!(f, "PRINT {inner}"),
+            StatementInner::Pause { inner } => write!(f, "PAUSE {inner}"),
+            StatementInner::LPrint { inner } => {
                 write!(f, "LPRINT {}", inner.to_string_with_context(true))
             }
-            Statement::Using { using_clause } => write!(f, "{using_clause}"),
-            Statement::Input { input_exprs } => {
+            StatementInner::Using { using_clause } => write!(f, "{using_clause}"),
+            StatementInner::Input { input_exprs } => {
                 let inputs = input_exprs
                     .iter()
                     .map(|(prompt, lval)| {
@@ -813,9 +839,9 @@ impl std::fmt::Display for Statement {
                     .join(",");
                 write!(f, "INPUT {inputs}")
             }
-            Statement::End => write!(f, "END"),
-            Statement::Remark { text } => write!(f, "REM {text}"),
-            Statement::For {
+            StatementInner::End => write!(f, "END"),
+            StatementInner::Remark { text } => write!(f, "REM {text}"),
+            StatementInner::For {
                 assignment,
                 to_expr,
                 step_expr,
@@ -827,11 +853,11 @@ impl std::fmt::Display for Statement {
                 };
                 write!(f, "FOR {assignment} TO {to_expr}{step_str}")
             }
-            Statement::Next { lvalue: ident } => write!(f, "NEXT {ident}"),
-            Statement::Clear => write!(f, "CLEAR"),
-            Statement::Goto { target } => write!(f, "GOTO {target}"),
-            Statement::Gosub { target } => write!(f, "GOSUB {target}"),
-            Statement::OnGoto { expr, targets } => {
+            StatementInner::Next { lvalue: ident } => write!(f, "NEXT {ident}"),
+            StatementInner::Clear => write!(f, "CLEAR"),
+            StatementInner::Goto { target } => write!(f, "GOTO {target}"),
+            StatementInner::Gosub { target } => write!(f, "GOSUB {target}"),
+            StatementInner::OnGoto { expr, targets } => {
                 let targets_str = targets
                     .iter()
                     .map(ToString::to_string)
@@ -839,7 +865,7 @@ impl std::fmt::Display for Statement {
                     .join(",");
                 write!(f, "ON {expr} GOTO {targets_str}")
             }
-            Statement::OnGosub { expr, targets } => {
+            StatementInner::OnGosub { expr, targets } => {
                 let targets_str = targets
                     .iter()
                     .map(ToString::to_string)
@@ -847,15 +873,15 @@ impl std::fmt::Display for Statement {
                     .join(",");
                 write!(f, "ON {expr} GOSUB {targets_str}")
             }
-            Statement::OnErrorGoto { target } => write!(f, "ON ERROR GOTO {target}"),
-            Statement::Wait { expr } => write!(
+            StatementInner::OnErrorGoto { target } => write!(f, "ON ERROR GOTO {target}"),
+            StatementInner::Wait { expr } => write!(
                 f,
                 "WAIT {}",
                 expr.as_ref().map_or(String::new(), ToString::to_string)
             ),
-            Statement::Cls => write!(f, "CLS"),
-            Statement::Random => write!(f, "RANDOM"),
-            Statement::Gprint { exprs } => {
+            StatementInner::Cls => write!(f, "CLS"),
+            StatementInner::Random => write!(f, "RANDOM"),
+            StatementInner::Gprint { exprs } => {
                 let exprs_str = exprs
                     .iter()
                     .map(|(expr, sep)| format!("{expr}{sep}"))
@@ -863,9 +889,9 @@ impl std::fmt::Display for Statement {
                     .join(" ");
                 write!(f, "GPRINT {exprs_str}")
             }
-            Statement::GCursor { expr } => write!(f, "GCURSOR {expr}"),
-            Statement::Cursor { expr } => write!(f, "CURSOR {expr}"),
-            Statement::Beep {
+            StatementInner::GCursor { expr } => write!(f, "GCURSOR {expr}"),
+            StatementInner::Cursor { expr } => write!(f, "CURSOR {expr}"),
+            StatementInner::Beep {
                 repetitions_expr,
                 optional_params,
             } => {
@@ -874,11 +900,11 @@ impl std::fmt::Display for Statement {
                     .map_or(String::new(), |params| params.to_string());
                 write!(f, "BEEP {repetitions_expr}{params_str}")
             }
-            Statement::BeepOnOff { switch_beep_on } => {
+            StatementInner::BeepOnOff { switch_beep_on } => {
                 write!(f, "BEEP {}", if *switch_beep_on { "ON" } else { "OFF" })
             }
-            Statement::Return => write!(f, "RETURN"),
-            Statement::Poke { memory_area, exprs } => {
+            StatementInner::Return => write!(f, "RETURN"),
+            StatementInner::Poke { memory_area, exprs } => {
                 let exprs_str = exprs
                     .iter()
                     .map(ToString::to_string)
@@ -890,7 +916,7 @@ impl std::fmt::Display for Statement {
                     MemoryArea::Me1 => write!(f, "# {exprs_str}"),
                 }
             }
-            Statement::Dim { decls } => {
+            StatementInner::Dim { decls } => {
                 let decls_str = decls
                     .iter()
                     .map(ToString::to_string)
@@ -898,7 +924,7 @@ impl std::fmt::Display for Statement {
                     .join(",");
                 write!(f, "DIM {decls_str}")
             }
-            Statement::Read { destinations } => {
+            StatementInner::Read { destinations } => {
                 let destinations_str = destinations
                     .iter()
                     .map(ToString::to_string)
@@ -906,7 +932,7 @@ impl std::fmt::Display for Statement {
                     .join(",");
                 write!(f, "READ {destinations_str}")
             }
-            Statement::Data(exprs) => {
+            StatementInner::Data(exprs) => {
                 let exprs_str = exprs
                     .iter()
                     .map(ToString::to_string)
@@ -914,39 +940,41 @@ impl std::fmt::Display for Statement {
                     .join(",");
                 write!(f, "DATA {exprs_str}")
             }
-            Statement::Restore { expr } => write!(
+            StatementInner::Restore { expr } => write!(
                 f,
                 "RESTORE {}",
                 expr.as_ref().map_or(String::new(), ToString::to_string)
             ),
-            Statement::Arun => write!(f, "ARUN"),
-            Statement::Lock => write!(f, "LOCK"),
-            Statement::Unlock => write!(f, "UNLOCK"),
-            Statement::Call { expr, variable } => {
+            StatementInner::Arun => write!(f, "ARUN"),
+            StatementInner::Lock => write!(f, "LOCK"),
+            StatementInner::Unlock => write!(f, "UNLOCK"),
+            StatementInner::Call { expr, variable } => {
                 let var_str = variable
                     .as_ref()
                     .map_or(String::new(), |v| format!(", {v}"));
                 write!(f, "CALL {expr}{var_str}")
             }
-            Statement::Radian => write!(f, "RADIAN"),
-            Statement::Text => write!(f, "TEXT"),
-            Statement::Graph => write!(f, "GRAPH"),
-            Statement::Color { expr } => write!(f, "COLOR {expr}"),
-            Statement::CSize { expr } => write!(f, "CSIZE {expr}"),
-            Statement::Lf { expr } => write!(f, "LF {expr}"),
-            Statement::LCursor(l_cursor_clause) => write!(
+            StatementInner::Radian => write!(f, "RADIAN"),
+            StatementInner::Text => write!(f, "TEXT"),
+            StatementInner::Graph => write!(f, "GRAPH"),
+            StatementInner::Color { expr } => write!(f, "COLOR {expr}"),
+            StatementInner::CSize { expr } => write!(f, "CSIZE {expr}"),
+            StatementInner::Lf { expr } => write!(f, "LF {expr}"),
+            StatementInner::LCursor(l_cursor_clause) => write!(
                 f,
                 "LCURSOR {}",
                 l_cursor_clause.to_string_with_context(false)
             ),
-            Statement::GlCursor { x_expr, y_expr } => write!(f, "GLCURSOR ({x_expr}, {y_expr})"),
-            Statement::Line { inner } => {
+            StatementInner::GlCursor { x_expr, y_expr } => {
+                write!(f, "GLCURSOR ({x_expr}, {y_expr})")
+            }
+            StatementInner::Line { inner } => {
                 write!(f, "{}", inner.to_string_with_prefix("LINE"))
             }
-            Statement::RLine { inner } => {
+            StatementInner::RLine { inner } => {
                 write!(f, "{}", inner.to_string_with_prefix("RLINE"))
             }
-            Statement::Sorgn => write!(f, "SORGN"),
+            StatementInner::Sorgn => write!(f, "SORGN"),
         }
     }
 }
