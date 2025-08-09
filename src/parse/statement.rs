@@ -290,6 +290,10 @@ pub enum Statement {
     LCursor(LCursorClause),
 }
 
+impl Statement {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {}
+}
+
 impl std::fmt::Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

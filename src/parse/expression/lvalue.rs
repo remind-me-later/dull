@@ -27,6 +27,44 @@ pub enum LValue {
     },
 }
 
+impl LValue {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+        match self {
+            LValue::Identifier(id) => id.write_bytes(bytes),
+            LValue::BuiltInIdentifier(bi) => {
+                bytes.extend_from_slice(bi.internal_code().to_le_bytes().as_slice());
+            }
+            LValue::Array1DAccess { identifier, index } => {
+                identifier.write_bytes(bytes);
+                bytes.push(b'(');
+                index.write_bytes(bytes);
+                bytes.push(b')');
+            }
+            LValue::Array2DAccess {
+                identifier,
+                row_index,
+                col_index,
+            } => {
+                identifier.write_bytes(bytes);
+                bytes.push(b'(');
+                row_index.write_bytes(bytes);
+                bytes.push(b',');
+                col_index.write_bytes(bytes);
+                bytes.push(b')');
+            }
+            LValue::FixedMemoryAreaAccess { index, has_dollar } => {
+                bytes.push(b'@');
+                if *has_dollar {
+                    bytes.push(b'$');
+                }
+                bytes.push(b'(');
+                index.write_bytes(bytes);
+                bytes.push(b')');
+            }
+        }
+    }
+}
+
 impl std::fmt::Display for LValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

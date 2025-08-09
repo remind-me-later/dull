@@ -1,5 +1,3 @@
-use smallvec::SmallVec;
-
 use crate::lex::keyword::Keyword;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,9 +32,7 @@ impl BinaryOp {
         }
     }
 
-    pub fn as_bytes(&self) -> SmallVec<[u8; 2]> {
-        let mut bytes = SmallVec::new();
-
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
         match self {
             BinaryOp::Add => bytes.push(b'+'),
             BinaryOp::Sub => bytes.push(b'-'),
@@ -56,8 +52,6 @@ impl BinaryOp {
                 bytes.extend_from_slice(Keyword::Or.internal_code().to_le_bytes().as_slice())
             }
         }
-
-        bytes
     }
 }
 

@@ -27,6 +27,16 @@ impl Identifier {
     pub fn has_dollar(&self) -> bool {
         self.has_dollar
     }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+        bytes.push(self.char1.get());
+        if let Some(char2) = self.char2 {
+            bytes.push(char2.get());
+        }
+        if self.has_dollar {
+            bytes.push(b'$');
+        }
+    }
 }
 
 impl std::str::FromStr for Identifier {

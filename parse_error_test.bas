@@ -1,1 +1,0 @@
-ABC PRINT "HELLO"

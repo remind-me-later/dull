@@ -7,6 +7,10 @@ impl BinaryNumber {
     pub fn new(value: u16) -> Self {
         BinaryNumber { value }
     }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(format!("&{:X}", self.value).as_bytes());
+    }
 }
 
 impl std::str::FromStr for BinaryNumber {

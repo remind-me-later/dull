@@ -1,4 +1,7 @@
-use crate::parse::expression::{Expr, memory_area::MemoryArea};
+use crate::{
+    lex::keyword::Keyword,
+    parse::expression::{Expr, memory_area::MemoryArea},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 
@@ -77,6 +80,143 @@ pub enum Function {
     Sqr {
         expr: Box<Expr>, // The numeric expression to get the square root of
     },
+}
+
+impl Function {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Function::Mid {
+                string,
+                start,
+                length,
+            } => {
+                bytes
+                    .extend_from_slice(Keyword::MidDollar.internal_code().to_le_bytes().as_slice());
+                bytes.push(b'(');
+                string.write_bytes(bytes);
+                bytes.push(b',');
+                start.write_bytes(bytes);
+                bytes.push(b',');
+                length.write_bytes(bytes);
+                bytes.push(b')');
+            }
+            Function::Left { string, length } => {
+                bytes.extend_from_slice(
+                    Keyword::LeftDollar.internal_code().to_le_bytes().as_slice(),
+                );
+                bytes.push(b'(');
+                string.write_bytes(bytes);
+                bytes.push(b',');
+                length.write_bytes(bytes);
+                bytes.push(b')');
+            }
+            Function::Right { string, length } => {
+                bytes.extend_from_slice(
+                    Keyword::RightDollar
+                        .internal_code()
+                        .to_le_bytes()
+                        .as_slice(),
+                );
+                bytes.push(b'(');
+                string.write_bytes(bytes);
+                bytes.push(b',');
+                length.write_bytes(bytes);
+                bytes.push(b')');
+            }
+            Function::Asc { expr } => {
+                bytes.extend_from_slice(Keyword::Asc.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Point { position } => {
+                bytes.extend_from_slice(Keyword::Point.internal_code().to_le_bytes().as_slice());
+                position.write_bytes(bytes);
+            }
+            Function::Rnd { range_end } => {
+                bytes.extend_from_slice(Keyword::Rnd.internal_code().to_le_bytes().as_slice());
+                range_end.write_bytes(bytes);
+            }
+            Function::Int { expr } => {
+                bytes.extend_from_slice(Keyword::Int.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Sgn { expr } => {
+                bytes.extend_from_slice(Keyword::Sgn.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Status { arg } => {
+                bytes.extend_from_slice(Keyword::Status.internal_code().to_le_bytes().as_slice());
+                arg.write_bytes(bytes);
+            }
+            Function::Val { expr } => {
+                bytes.extend_from_slice(Keyword::Val.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Str { expr } => {
+                bytes
+                    .extend_from_slice(Keyword::StrDollar.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Chr { expr } => {
+                bytes
+                    .extend_from_slice(Keyword::ChrDollar.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Abs { expr } => {
+                bytes.extend_from_slice(Keyword::Abs.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Len { expr } => {
+                bytes.extend_from_slice(Keyword::Len.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Peek {
+                memory_area,
+                address,
+            } => {
+                match memory_area {
+                    MemoryArea::Me0 => bytes.extend_from_slice(
+                        Keyword::PeekMem0.internal_code().to_le_bytes().as_slice(),
+                    ),
+                    MemoryArea::Me1 => bytes.extend_from_slice(
+                        Keyword::PeekMem1.internal_code().to_le_bytes().as_slice(),
+                    ),
+                }
+                address.write_bytes(bytes);
+            }
+            Function::Ln { expr } => {
+                bytes.extend_from_slice(Keyword::Ln.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Log { expr } => {
+                bytes.extend_from_slice(Keyword::Log.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Dms { expr } => {
+                bytes.extend_from_slice(Keyword::Dms.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Deg { expr } => {
+                bytes.extend_from_slice(Keyword::Deg.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Tan { expr } => {
+                bytes.extend_from_slice(Keyword::Tan.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Cos { expr } => {
+                bytes.extend_from_slice(Keyword::Cos.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Sin { expr } => {
+                bytes.extend_from_slice(Keyword::Sin.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+            Function::Sqr { expr } => {
+                bytes.extend_from_slice(Keyword::Sqr.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for Function {

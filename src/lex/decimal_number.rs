@@ -20,6 +20,11 @@ impl DecimalNumber {
             None
         }
     }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+        let formatted = format!("{}", self.double);
+        bytes.extend_from_slice(formatted.as_bytes());
+    }
 }
 
 impl std::str::FromStr for DecimalNumber {
