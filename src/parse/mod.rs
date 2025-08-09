@@ -1552,7 +1552,7 @@ where
         let mut exprs = vec![];
 
         loop {
-            let printable = if self.peek_token() == (&Token::Keyword(Keyword::Lcursor)) {
+            let printable = if self.peek_token() == (&Token::Keyword(Keyword::Tab)) {
                 self.tokens.next();
                 let expr = self.expect_expression()?;
                 LPrintable::LCursorClause(LCursorClause { expr })

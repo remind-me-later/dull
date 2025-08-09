@@ -5,6 +5,7 @@ mod parse;
 mod semantic_analysis;
 
 use crate::error::{CompileError, print_error};
+use crate::header::Header;
 use crate::lex::{Lexer, SpannedToken};
 use crate::parse::Parser;
 use crate::semantic_analysis::analyze_program;
@@ -26,6 +27,14 @@ struct Args {
     /// Run semantic analysis on the parsed AST (implies --parse)
     #[arg(long)]
     analyze: bool,
+
+    /// Compile the BASIC program to bytes with header (implies --parse)
+    #[arg(long)]
+    compile: bool,
+
+    /// Output file for compiled bytes (only used with --compile)
+    #[arg(short, long, value_name = "FILE")]
+    output: Option<PathBuf>,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -37,11 +46,18 @@ fn main() {
     let args = Args::parse();
 
     // Get the input source
-    let (input, filename) = match args.input {
+    let (input, filename, program_name) = match args.input {
         Some(file_path) => {
             // Read from file
             match fs::read_to_string(&file_path) {
-                Ok(content) => (content, file_path.display().to_string()),
+                Ok(content) => {
+                    let prog_name = file_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("PROGRAM")
+                        .to_string();
+                    (content, file_path.display().to_string(), prog_name)
+                }
                 Err(e) => {
                     eprintln!("Error reading file {}: {}", file_path.display(), e);
                     std::process::exit(1);
@@ -72,18 +88,56 @@ fn main() {
     if args.analyze {
         // Parse the tokens into an AST and run semantic analysis
         let mut parser = Parser::new(tokens.into_iter());
-        
+
+        match parser.parse_with_error_recovery() {
+            Ok(program) => match analyze_program(&program) {
+                Ok(symbol_table) => {
+                    println!("Semantic analysis completed successfully!");
+                    println!("Symbol table: {symbol_table:#?}");
+                }
+                Err(semantic_error) => {
+                    let compile_error = CompileError::from(semantic_error);
+                    print_error(&compile_error, &filename, &input);
+                    std::process::exit(1);
+                }
+            },
+            Err(parse_error) => {
+                let compile_error = CompileError::from(parse_error);
+                print_error(&compile_error, &filename, &input);
+                std::process::exit(1);
+            }
+        }
+    } else if args.compile {
+        // Parse the tokens into an AST and compile to bytes with header
+        let mut parser = Parser::new(tokens.into_iter());
+
         match parser.parse_with_error_recovery() {
             Ok(program) => {
-                match analyze_program(&program) {
-                    Ok(symbol_table) => {
-                        println!("Semantic analysis completed successfully!");
-                        println!("Symbol table: {symbol_table:#?}");
+                // Generate program bytes
+                let mut program_bytes = Vec::new();
+                program.write_bytes(&mut program_bytes);
+
+                // Create header with program length
+                let header = Header::new(&program_name, program_bytes.len() as u16);
+                let mut output_bytes = header.to_bytes();
+                output_bytes.extend(program_bytes);
+
+                // Write to output file or stdout
+                match args.output {
+                    Some(output_path) => {
+                        if let Err(e) = fs::write(&output_path, &output_bytes) {
+                            eprintln!("Error writing output file {}: {}", output_path.display(), e);
+                            std::process::exit(1);
+                        }
+                        println!("Compiled program written to {}", output_path.display());
                     }
-                    Err(semantic_error) => {
-                        let compile_error = CompileError::from(semantic_error);
-                        print_error(&compile_error, &filename, &input);
-                        std::process::exit(1);
+                    None => {
+                        // Output to stdout as binary
+                        use std::io::{self, Write};
+                        if let Err(e) = io::stdout().write_all(&output_bytes) {
+                            eprintln!("Error writing to stdout: {}", e);
+                            std::process::exit(1);
+                        }
                     }
                 }
             }
@@ -96,7 +150,7 @@ fn main() {
     } else if args.parse {
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens.into_iter());
-        
+
         match parser.parse_with_error_recovery() {
             Ok(program) => {
                 print!("{program}");
