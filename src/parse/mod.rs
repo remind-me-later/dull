@@ -425,14 +425,12 @@ where
         }
 
         if let Some(lvalue) = self.parse_lvalue()? {
-            // TODO: Need to get span for lvalue
-            let span = self.current_span(); // Placeholder
+            let span = lvalue.span;
             return Ok(Some(Expr::new(ExprInner::LValue(lvalue), span)));
         }
 
         if let Some(function) = self.parse_function()? {
-            // TODO: Need to get span for function
-            let span = self.current_span(); // Placeholder
+            let span = function.span;
             return Ok(Some(Expr::new(ExprInner::FunctionCall(function), span)));
         }
 
@@ -2288,18 +2286,18 @@ where
         let mut errors = Vec::new();
 
         while self.tokens.peek().is_some() {
-            match self.parse_line_with_recovery() {
+            match self.parse_code_line_with_recovery() {
                 Ok(Some(line)) => {
                     lines.insert(line.number, line);
                 }
                 Ok(None) => {
                     // Skip to next line on parse failure
-                    self.skip_to_next_line();
+                    self.skip_to_next_code_line();
                 }
                 Err(error) => {
                     errors.push(error);
                     // Skip to next line and continue parsing
-                    self.skip_to_next_line();
+                    self.skip_to_next_code_line();
                 }
             }
         }
@@ -2308,11 +2306,21 @@ where
     }
 
     /// Skip tokens until we reach a newline or EOF
-    fn skip_to_next_line(&mut self) {
+    fn skip_to_next_code_line(&mut self) {
         loop {
             match self.peek_token() {
-                Token::Symbol(Symbol::Newline) | Token::Symbol(Symbol::Eof) => {
-                    self.next_spanned(); // consume the newline/eof
+                Token::Symbol(Symbol::Newline) => {
+                    // Skip empty lines, skip newlines until we reach something different
+                    while self
+                        .next_if_token_eq(&Token::Symbol(Symbol::Newline))
+                        .is_some()
+                    {}
+
+                    // If we reached EOF consume it
+                    self.next_if_token_eq(&Token::Symbol(Symbol::Eof));
+                }
+                Token::Symbol(Symbol::Eof) => {
+                    self.next_spanned(); // consume the eof
                     break;
                 }
                 _ => {
@@ -2323,7 +2331,7 @@ where
     }
 
     /// Parse a line with proper error reporting
-    fn parse_line_with_recovery(&mut self) -> ParseResult<Option<CodeLine>> {
+    fn parse_code_line_with_recovery(&mut self) -> ParseResult<Option<CodeLine>> {
         let start_span = self.current_span();
 
         match self.peek_token() {
@@ -2379,6 +2387,13 @@ where
 
                 // Parse line end or EOF
                 let newline = self.next_if_token_eq(&Token::Symbol(Symbol::Newline));
+
+                // Parse as many newlines as possible
+                while self
+                    .next_if_token_eq(&Token::Symbol(Symbol::Newline))
+                    .is_some()
+                {}
+
                 let eof = self.next_if_token_eq(&Token::Symbol(Symbol::Eof));
 
                 if newline.is_none() && eof.is_none() {
