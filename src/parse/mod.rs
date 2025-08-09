@@ -13,7 +13,7 @@ use crate::{
         },
         line::Line,
         statement::{
-            Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
+            Assignment, BeepOptionalParams, DimInner, LCursorClause, LineInner, LPrintInner, LPrintable,
             LetInner, PrintInner, PrintSeparator, Printable, Statement, UsingClause,
         },
     },
@@ -1028,6 +1028,14 @@ where
             return Ok(Some(stmt));
         }
 
+        if let Some(stmt) = self.parse_line_stmt()? {
+            return Ok(Some(stmt));
+        }
+
+        if let Some(stmt) = self.parse_rline_stmt()? {
+            return Ok(Some(stmt));
+        }
+
         if let Some(stmt) = self.parse_color_stmt()? {
             return Ok(Some(stmt));
         }
@@ -1052,11 +1060,24 @@ where
             return Ok(Some(stmt));
         }
 
+        if let Some(stmt) = self.parse_glcursor_stmt()? {
+            return Ok(Some(stmt));
+        }
+
+        if let Some(stmt) = self.parse_sorgn_stmt() {
+            return Ok(Some(stmt));
+        }
+
         if let Some(stmt) = self.parse_let_inner(is_let_mandatory)? {
             return Ok(Some(Statement::Let { inner: stmt }));
         }
 
         Ok(None)
+    }
+
+    fn parse_sorgn_stmt(&mut self) -> Option<Statement> {
+        self.next_if_token_eq(&Token::Keyword(Keyword::Sorgn))?;
+        Some(Statement::Sorgn)
     }
 
     fn parse_if_stmt(&mut self) -> ParseResult<Option<Statement>> {
@@ -1488,6 +1509,248 @@ where
         Some(Statement::Graph)
     }
 
+    fn parse_line_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Line))
+            .is_none()
+        {
+            return Ok(None);
+        }
+
+        let mut start_point = None;
+        let mut end_points = Vec::new();
+
+        // Check if it starts with '-' (omit first point, use current position)
+        if self.peek_token() == &Token::Symbol(Symbol::Sub) {
+            self.next_spanned(); // consume the '-'
+
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "expected '(' for coordinates",
+            )?;
+            let x = self.expect_expression()?;
+            self.expect_token(&Token::Symbol(Symbol::Comma), "expected ',' in coordinates")?;
+            let y = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "expected ')' after coordinates",
+            )?;
+            end_points.push((x, y));
+        } else if self.peek_token() == &Token::Symbol(Symbol::LParen) {
+            // Parse the first point explicitly
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "expected '(' for coordinates",
+            )?;
+            let x = self.expect_expression()?;
+            self.expect_token(&Token::Symbol(Symbol::Comma), "expected ',' in coordinates")?;
+            let y = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "expected ')' after coordinates",
+            )?;
+            start_point = Some((x, y));
+        }
+
+        // Parse subsequent points preceded by '-'
+        while self.peek_token() == &Token::Symbol(Symbol::Sub) {
+            self.next_spanned(); // consume the '-'
+
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "expected '(' for coordinates",
+            )?;
+            let x = self.expect_expression()?;
+            self.expect_token(&Token::Symbol(Symbol::Comma), "expected ',' in coordinates")?;
+            let y = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "expected ')' after coordinates",
+            )?;
+            end_points.push((x, y));
+        }
+
+        // Parse optional line-type parameter
+        let line_type = if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+            self.next_spanned(); // consume comma
+            if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                // Empty line-type parameter
+                None
+            } else {
+                Some(self.expect_expression()?)
+            }
+        } else {
+            None
+        };
+
+        // Parse optional color parameter
+        let color = if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+            self.next_spanned(); // consume comma
+            if self.peek_token() == &Token::Symbol(Symbol::Comma)
+                || matches!(self.peek_token(), Token::Identifier(_))
+                || matches!(
+                    self.peek_token(),
+                    Token::Symbol(Symbol::Newline) | Token::Symbol(Symbol::Eof)
+                )
+            {
+                // Empty color parameter or end of statement
+                None
+            } else {
+                Some(self.expect_expression()?)
+            }
+        } else {
+            None
+        };
+
+        // Parse optional box parameter (B)
+        let is_box = if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+            self.next_spanned(); // consume comma
+            if let Some(Token::Identifier(id)) = self.peek_mut_token() {
+                if id.to_string().to_uppercase() == "B" {
+                    self.next_spanned(); // consume B
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        let inner = LineInner {
+            start_point,
+            end_points,
+            line_type,
+            color,
+            is_box,
+        };
+
+        Ok(Some(Statement::Line { inner }))
+    }
+
+    fn parse_rline_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Rline))
+            .is_none()
+        {
+            return Ok(None);
+        }
+
+        let mut start_point = None;
+        let mut end_points = Vec::new();
+
+        // Check if it starts with '-' (omit first point, use current position)
+        if self.peek_token() == &Token::Symbol(Symbol::Sub) {
+            self.next_spanned(); // consume the '-'
+
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "expected '(' for coordinates",
+            )?;
+            let x = self.expect_expression()?;
+            self.expect_token(&Token::Symbol(Symbol::Comma), "expected ',' in coordinates")?;
+            let y = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "expected ')' after coordinates",
+            )?;
+            end_points.push((x, y));
+        } else if self.peek_token() == &Token::Symbol(Symbol::LParen) {
+            // Parse the first point explicitly
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "expected '(' for coordinates",
+            )?;
+            let x = self.expect_expression()?;
+            self.expect_token(&Token::Symbol(Symbol::Comma), "expected ',' in coordinates")?;
+            let y = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "expected ')' after coordinates",
+            )?;
+            start_point = Some((x, y));
+        }
+
+        // Parse subsequent points preceded by '-'
+        while self.peek_token() == &Token::Symbol(Symbol::Sub) {
+            self.next_spanned(); // consume the '-'
+
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "expected '(' for coordinates",
+            )?;
+            let x = self.expect_expression()?;
+            self.expect_token(&Token::Symbol(Symbol::Comma), "expected ',' in coordinates")?;
+            let y = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "expected ')' after coordinates",
+            )?;
+            end_points.push((x, y));
+        }
+
+        // Parse optional line-type parameter
+        let line_type = if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+            self.next_spanned(); // consume comma
+            if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                // Empty line-type parameter
+                None
+            } else {
+                Some(self.expect_expression()?)
+            }
+        } else {
+            None
+        };
+
+        // Parse optional color parameter
+        let color = if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+            self.next_spanned(); // consume comma
+            if self.peek_token() == &Token::Symbol(Symbol::Comma)
+                || matches!(self.peek_token(), Token::Identifier(_))
+                || matches!(
+                    self.peek_token(),
+                    Token::Symbol(Symbol::Newline) | Token::Symbol(Symbol::Eof)
+                )
+            {
+                // Empty color parameter or end of statement
+                None
+            } else {
+                Some(self.expect_expression()?)
+            }
+        } else {
+            None
+        };
+
+        // Parse optional box parameter (B)
+        let is_box = if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+            self.next_spanned(); // consume comma
+            if let Some(Token::Identifier(id)) = self.peek_mut_token() {
+                if id.to_string().to_uppercase() == "B" {
+                    self.next_spanned(); // consume B
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        let inner = LineInner {
+            start_point,
+            end_points,
+            line_type,
+            color,
+            is_box,
+        };
+
+        Ok(Some(Statement::RLine { inner }))
+    }
+
     fn parse_color_stmt(&mut self) -> ParseResult<Option<Statement>> {
         if self
             .next_if_token_eq(&Token::Keyword(Keyword::Color))
@@ -1572,6 +1835,30 @@ where
         }
 
         Ok(LPrintInner { exprs })
+    }
+
+    fn parse_glcursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Glcursor))
+            .is_some()
+        {
+            self.expect_token(
+                &Token::Symbol(Symbol::LParen),
+                "Expected '(' after GLCURSOR",
+            )?;
+            let x_expr = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::Comma),
+                "Expected ',' between GLCURSOR coordinates",
+            )?;
+            let y_expr = self.expect_expression()?;
+            self.expect_token(
+                &Token::Symbol(Symbol::RParen),
+                "Expected ')' after GLCURSOR coordinates",
+            )?;
+            return Ok(Some(Statement::GlCursor { x_expr, y_expr }));
+        }
+        Ok(None)
     }
 
     /// Parse with error collection - collects all parsing errors instead of stopping at first

@@ -7,7 +7,7 @@ use crate::parse::{
     },
     line::Line,
     program::Program,
-    statement::{Assignment, BeepOptionalParams, DimInner, LCursorClause, Statement},
+    statement::{Assignment, BeepOptionalParams, DimInner, LCursorClause, LineInner, Statement},
 };
 use std::collections::HashMap;
 
@@ -323,6 +323,32 @@ impl SemanticAnalyzer {
             Statement::Text => {}
             Statement::Graph => {}
             Statement::Radian => {}
+            Statement::GlCursor { x_expr, y_expr } => {
+                let x_type = self.analyze_expression(x_expr)?;
+                let y_type = self.analyze_expression(y_expr)?;
+                if x_type != BasicType::Numeric || y_type != BasicType::Numeric {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: BasicType::Numeric,
+                        found: if x_type != BasicType::Numeric {
+                            x_type
+                        } else {
+                            y_type
+                        },
+                        span: placeholder_span(),
+                    });
+                }
+            }
+            Statement::Line {
+                inner,
+            } => {
+                self.analyze_line_inner(inner)?;
+            }
+            Statement::RLine {
+                inner,
+            } => {
+                self.analyze_line_inner(inner)?;
+            }
+            Statement::Sorgn => {}
         }
         Ok(())
     }
@@ -547,6 +573,69 @@ impl SemanticAnalyzer {
                 span: placeholder_span(),
             });
         }
+        Ok(())
+    }
+
+    /// Analyze LINE/RLINE inner parameters
+    fn analyze_line_inner(&mut self, inner: &LineInner) -> SemanticResult<()> {
+        // Analyze start point if present
+        if let Some((x_expr, y_expr)) = &inner.start_point {
+            let x_type = self.analyze_expression(x_expr)?;
+            let y_type = self.analyze_expression(y_expr)?;
+            if x_type != BasicType::Numeric || y_type != BasicType::Numeric {
+                return Err(SemanticError::TypeMismatch {
+                    expected: BasicType::Numeric,
+                    found: if x_type != BasicType::Numeric {
+                        x_type
+                    } else {
+                        y_type
+                    },
+                    span: placeholder_span(),
+                });
+            }
+        }
+
+        // Analyze all end points
+        for (x_expr, y_expr) in &inner.end_points {
+            let x_type = self.analyze_expression(x_expr)?;
+            let y_type = self.analyze_expression(y_expr)?;
+            if x_type != BasicType::Numeric || y_type != BasicType::Numeric {
+                return Err(SemanticError::TypeMismatch {
+                    expected: BasicType::Numeric,
+                    found: if x_type != BasicType::Numeric {
+                        x_type
+                    } else {
+                        y_type
+                    },
+                    span: placeholder_span(),
+                });
+            }
+        }
+
+        // Analyze optional line type
+        if let Some(line_type_expr) = &inner.line_type {
+            let line_type_t = self.analyze_expression(line_type_expr)?;
+            if line_type_t != BasicType::Numeric {
+                return Err(SemanticError::TypeMismatch {
+                    expected: BasicType::Numeric,
+                    found: line_type_t,
+                    span: placeholder_span(),
+                });
+            }
+        }
+
+        // Analyze optional color
+        if let Some(color_expr) = &inner.color {
+            let color_t = self.analyze_expression(color_expr)?;
+            if color_t != BasicType::Numeric {
+                return Err(SemanticError::TypeMismatch {
+                    expected: BasicType::Numeric,
+                    found: color_t,
+                    span: placeholder_span(),
+                });
+            }
+        }
+
         Ok(())
     }
 

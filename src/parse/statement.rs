@@ -249,6 +249,78 @@ impl LetInner {
         }
     }
 }
+
+pub struct LineInner {
+    pub start_point: Option<(Expr, Expr)>, // None means use current pen position
+    pub end_points: Vec<(Expr, Expr)>,
+    pub line_type: Option<Expr>,
+    pub color: Option<Expr>,
+    pub is_box: bool,
+}
+
+impl LineInner {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+        // Handle start point - if None, start with '-'
+        if let Some((x, y)) = &self.start_point {
+            bytes.push(b'(');
+            x.write_bytes(bytes);
+            bytes.push(b',');
+            y.write_bytes(bytes);
+            bytes.push(b')');
+        }
+
+        for (x, y) in &self.end_points {
+            bytes.push(b'-');
+            bytes.push(b'(');
+            x.write_bytes(bytes);
+            bytes.push(b',');
+            y.write_bytes(bytes);
+            bytes.push(b')');
+        }
+
+        if let Some(line_type) = &self.line_type {
+            bytes.push(b',');
+            line_type.write_bytes(bytes);
+        }
+
+        if let Some(color) = &self.color {
+            bytes.push(b',');
+            color.write_bytes(bytes);
+        }
+
+        if self.is_box {
+            bytes.push(b',');
+            bytes.push(b'B');
+        }
+    }
+
+    pub fn to_string_with_prefix(&self, prefix: &str) -> String {
+        let mut result = format!("{prefix} ");
+
+        // Handle start point - if None, start with '-'
+        if let Some((x, y)) = &self.start_point {
+            result.push_str(&format!("({x},{y})"));
+        }
+
+        for (x, y) in &self.end_points {
+            result.push_str(&format!("-({x},{y})"));
+        }
+
+        if let Some(line_type) = &self.line_type {
+            result.push_str(&format!(",{line_type}"));
+        }
+
+        if let Some(color) = &self.color {
+            result.push_str(&format!(",{color}"));
+        }
+
+        if self.is_box {
+            result.push_str(",B");
+        }
+
+        result
+    }
+}
 pub enum Statement {
     Let {
         inner: LetInner,
@@ -358,6 +430,17 @@ pub enum Statement {
         expr: Expr,
     },
     LCursor(LCursorClause),
+    GlCursor {
+        x_expr: Expr,
+        y_expr: Expr,
+    },
+    Line {
+        inner: LineInner,
+    },
+    RLine {
+        inner: LineInner,
+    },
+    Sorgn,
 }
 
 impl Statement {
@@ -672,6 +755,25 @@ impl Statement {
             Statement::LCursor(l_cursor_clause) => {
                 l_cursor_clause.write_bytes_with_context(false, bytes);
             }
+            Statement::GlCursor { x_expr, y_expr } => {
+                bytes.extend_from_slice(Keyword::Glcursor.internal_code().to_le_bytes().as_slice());
+                bytes.push(b'(');
+                x_expr.write_bytes(bytes);
+                bytes.push(b',');
+                y_expr.write_bytes(bytes);
+                bytes.push(b')');
+            }
+            Statement::Line { inner } => {
+                bytes.extend_from_slice(Keyword::Line.internal_code().to_le_bytes().as_slice());
+                inner.write_bytes(bytes);
+            }
+            Statement::RLine { inner } => {
+                bytes.extend_from_slice(Keyword::Rline.internal_code().to_le_bytes().as_slice());
+                inner.write_bytes(bytes);
+            }
+            Statement::Sorgn => {
+                bytes.extend_from_slice(Keyword::Sorgn.internal_code().to_le_bytes().as_slice());
+            }
         }
     }
 }
@@ -837,6 +939,14 @@ impl std::fmt::Display for Statement {
                 "LCURSOR {}",
                 l_cursor_clause.to_string_with_context(false)
             ),
+            Statement::GlCursor { x_expr, y_expr } => write!(f, "GLCURSOR ({x_expr}, {y_expr})"),
+            Statement::Line { inner } => {
+                write!(f, "{}", inner.to_string_with_prefix("LINE"))
+            }
+            Statement::RLine { inner } => {
+                write!(f, "{}", inner.to_string_with_prefix("RLINE"))
+            }
+            Statement::Sorgn => write!(f, "SORGN"),
         }
     }
 }
