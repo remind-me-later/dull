@@ -14,14 +14,14 @@ A BASIC to binary compiler for the Sharp PC-1500 series of computers.
 | bombardments           | [x]    |                                     |
 | bowling                | [x]    |                                     |
 | course                 | [x]    |                                     |
-| dames                  | [x]    |            |
+| dames                  | [x]    |                                     |
 | decathlon              | [ ]    | Printer commands missing            |
 | donkey_kong            | [x]    |                                     |
 | DungeonQuest           | [x]    |                                     |
 | formula1               | [x]    |                                     |
 | ghosthouse             | [x]    |                                     |
 | invader                | [x]    |                                     |
-| force                  | [ ]    | Printing commands missing           |
+| force                  | [ ]    | Tape commands: PRINT#               |
 | jackpot                | [x]    |                                     |
 | jeu-des-blocks         | [x]    |                                     |
 | labyrinthe             | [x]    |                                     |
@@ -31,13 +31,13 @@ A BASIC to binary compiler for the Sharp PC-1500 series of computers.
 | minenboot              | [x]    |                                     |
 | mole                   | [x]    |                                     |
 | monstres&merveilles    | [x]    |                                     |
-| morpion                | [x]    |             |
-| othello                | [x]    |            |
+| morpion                | [x]    |                                     |
+| othello                | [x]    |                                     |
 | pacman                 | [x]    |                                     |
 | piles_jr               | [x]    |                                     |
 | rase_mottes            | [x]    |                                     |
-| scrabble               | [x]    |            |
-| simulateur-de-vol      | [ ]    | Strange '['             |
+| scrabble               | [x]    |                                     |
+| simulateur-de-vol      | [ ]    | Strange '['                         |
 | slalom                 | [x]    |                                     |
 | tank                   | [x]    |                                     |
 | tempter                | [ ]    | IF without THEN clause in line 40   |

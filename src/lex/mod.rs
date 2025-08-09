@@ -221,6 +221,10 @@ impl Iterator for Lexer<'_> {
                 Token::Symbol(Symbol::Dollar),
                 self.span_from(start_pos),
             ))),
+            '#' => Some(Ok(SpannedToken::new(
+                Token::Symbol(Symbol::Hash),
+                self.span_from(start_pos),
+            ))),
             '√' => Some(Ok(SpannedToken::new(
                 Token::Keyword(Keyword::Sqr),
                 self.span_from(start_pos),

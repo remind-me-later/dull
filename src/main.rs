@@ -89,20 +89,30 @@ fn main() {
         // Parse the tokens into an AST and run semantic analysis
         let mut parser = Parser::new(tokens.into_iter());
 
-        match parser.parse_with_error_recovery() {
-            Ok(program) => match analyze_program(&program) {
-                Ok(symbol_table) => {
-                    println!("Semantic analysis completed successfully!");
-                    println!("Symbol table: {symbol_table:#?}");
-                }
-                Err(semantic_error) => {
-                    let compile_error = CompileError::from(semantic_error);
-                    print_error(&compile_error, &filename, &input);
-                    std::process::exit(1);
-                }
-            },
-            Err(parse_error) => {
-                let compile_error = CompileError::from(parse_error);
+        let (program, parse_errors) = parser.parse_with_error_recovery();
+
+        // Report any parse errors but continue if we got some lines
+        for parse_error in &parse_errors {
+            let compile_error = CompileError::from(parse_error.clone());
+            print_error(&compile_error, &filename, &input);
+        }
+
+        if !parse_errors.is_empty() {
+            eprintln!(
+                "\nWarning: {} parse error(s) occurred. Continuing with {} successfully parsed line(s).",
+                parse_errors.len(),
+                program.lines.len()
+            );
+            std::process::exit(1);
+        }
+
+        match analyze_program(&program) {
+            Ok(symbol_table) => {
+                println!("Semantic analysis completed successfully!");
+                println!("Symbol table: {symbol_table:#?}");
+            }
+            Err(semantic_error) => {
+                let compile_error = CompileError::from(semantic_error);
                 print_error(&compile_error, &filename, &input);
                 std::process::exit(1);
             }
@@ -111,56 +121,72 @@ fn main() {
         // Parse the tokens into an AST and compile to bytes with header
         let mut parser = Parser::new(tokens.into_iter());
 
-        match parser.parse_with_error_recovery() {
-            Ok(program) => {
-                // Generate program bytes
-                let mut program_bytes = Vec::new();
-                program.write_bytes(&mut program_bytes);
+        let (program, parse_errors) = parser.parse_with_error_recovery();
 
-                // Create header with program length
-                let header = Header::new(&program_name, program_bytes.len() as u16);
-                let mut output_bytes = header.to_bytes();
-                output_bytes.extend(program_bytes);
+        // Report any parse errors but continue if we got some lines
+        for parse_error in &parse_errors {
+            let compile_error = CompileError::from(parse_error.clone());
+            print_error(&compile_error, &filename, &input);
+        }
 
-                // Write to output file or stdout
-                match args.output {
-                    Some(output_path) => {
-                        if let Err(e) = fs::write(&output_path, &output_bytes) {
-                            eprintln!("Error writing output file {}: {}", output_path.display(), e);
-                            std::process::exit(1);
-                        }
-                        println!("Compiled program written to {}", output_path.display());
-                    }
-                    None => {
-                        // Output to stdout as binary
-                        use std::io::{self, Write};
-                        if let Err(e) = io::stdout().write_all(&output_bytes) {
-                            eprintln!("Error writing to stdout: {}", e);
-                            std::process::exit(1);
-                        }
-                    }
+        if !parse_errors.is_empty() {
+            eprintln!(
+                "\nWarning: {} parse error(s) occurred. Continuing with {} successfully parsed line(s).",
+                parse_errors.len(),
+                program.lines.len()
+            );
+            std::process::exit(1);
+        }
+
+        // Generate program bytes
+        let mut program_bytes = Vec::new();
+        program.write_bytes(&mut program_bytes);
+
+        // Create header with program length
+        let header = Header::new(&program_name, program_bytes.len() as u16);
+        let mut output_bytes = header.to_bytes();
+        output_bytes.extend(program_bytes);
+
+        // Write to output file or stdout
+        match args.output {
+            Some(output_path) => {
+                if let Err(e) = fs::write(&output_path, &output_bytes) {
+                    eprintln!("Error writing output file {}: {}", output_path.display(), e);
+                    std::process::exit(1);
                 }
+                println!("Compiled program written to {}", output_path.display());
             }
-            Err(parse_error) => {
-                let compile_error = CompileError::from(parse_error);
-                print_error(&compile_error, &filename, &input);
-                std::process::exit(1);
+            None => {
+                // Output to stdout as binary
+                use std::io::{self, Write};
+                if let Err(e) = io::stdout().write_all(&output_bytes) {
+                    eprintln!("Error writing to stdout: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     } else if args.parse {
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens.into_iter());
 
-        match parser.parse_with_error_recovery() {
-            Ok(program) => {
-                print!("{program}");
-            }
-            Err(parse_error) => {
-                let compile_error = CompileError::from(parse_error);
-                print_error(&compile_error, &filename, &input);
-                std::process::exit(1);
-            }
+        let (program, parse_errors) = parser.parse_with_error_recovery();
+
+        // Report any parse errors but continue if we got some lines
+        for parse_error in &parse_errors {
+            let compile_error = CompileError::from(parse_error.clone());
+            print_error(&compile_error, &filename, &input);
         }
+
+        if !parse_errors.is_empty() {
+            eprintln!(
+                "\nWarning: {} parse error(s) occurred. Continuing with {} successfully parsed line(s).",
+                parse_errors.len(),
+                program.lines.len()
+            );
+            std::process::exit(1);
+        }
+
+        print!("{program}");
     } else {
         // Just output the tokens
         for (i, token) in tokens.iter().enumerate() {

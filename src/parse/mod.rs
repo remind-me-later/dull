@@ -1862,7 +1862,7 @@ where
     }
 
     /// Parse with error collection - collects all parsing errors instead of stopping at first
-    pub fn parse_with_error_recovery(&mut self) -> ParseResult<program::Program> {
+    pub fn parse_with_error_recovery(&mut self) -> (program::Program, Vec<ParseError>) {
         let mut lines = std::collections::BTreeMap::new();
         let mut errors = Vec::new();
 
@@ -1883,12 +1883,7 @@ where
             }
         }
 
-        if !errors.is_empty() {
-            // For now, return the first error. In the future, we could collect all errors
-            return Err(errors.into_iter().next().unwrap());
-        }
-
-        Ok(program::Program { lines })
+        (program::Program { lines }, errors)
     }
 
     /// Skip tokens until we reach a newline or EOF
