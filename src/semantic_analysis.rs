@@ -2,8 +2,8 @@ use crate::error::{SemanticError, SemanticResult, Span};
 use crate::lex::{identifier::Identifier, keyword::Keyword};
 use crate::parse::{
     expression::{
-        Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::Function, lvalue::LValue,
-        unary_op::UnaryOp,
+        Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::{Function, FunctionInner}, 
+        lvalue::{LValue, LValueInner}, unary_op::UnaryOp,
     },
     line::Line,
     program::Program,
@@ -376,8 +376,8 @@ impl SemanticAnalyzer {
 
     /// Analyze an lvalue and return its type, also inserting it into the symbol table if it's a new variable
     fn analyze_lvalue(&mut self, lvalue: &LValue) -> SemanticResult<BasicType> {
-        match lvalue {
-            LValue::Identifier(identifier) => {
+        match &lvalue.inner {
+            LValueInner::Identifier(identifier) => {
                 let var_type = if identifier.has_dollar() {
                     BasicType::String
                 } else {
@@ -386,7 +386,7 @@ impl SemanticAnalyzer {
                 self.state.insert_variable(identifier, var_type);
                 Ok(var_type)
             }
-            LValue::BuiltInIdentifier(keyword) => {
+            LValueInner::BuiltInIdentifier(keyword) => {
                 let var_type = match keyword {
                     Keyword::Time => BasicType::Numeric,
                     Keyword::InkeyDollar => BasicType::String,
@@ -399,7 +399,7 @@ impl SemanticAnalyzer {
                 };
                 Ok(var_type)
             }
-            LValue::Array1DAccess { identifier, index } => {
+            LValueInner::Array1DAccess { identifier, index } => {
                 let index_type = self.analyze_expression(index)?;
                 if index_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidArrayIndex {
@@ -421,7 +421,7 @@ impl SemanticAnalyzer {
                 };
                 Ok(element_type)
             }
-            LValue::Array2DAccess {
+            LValueInner::Array2DAccess {
                 identifier,
                 row_index,
                 col_index,
@@ -448,7 +448,7 @@ impl SemanticAnalyzer {
                 };
                 Ok(element_type)
             }
-            LValue::FixedMemoryAreaAccess { index, has_dollar } => {
+            LValueInner::FixedMemoryAreaAccess { index, has_dollar } => {
                 let index_type = self.analyze_expression(index)?;
                 if index_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidArrayIndex {
@@ -753,8 +753,8 @@ impl SemanticAnalyzer {
 
     /// Analyze a function call and return its return type
     fn analyze_function_call(&mut self, function: &Function) -> SemanticResult<BasicType> {
-        match function {
-            Function::Mid {
+        match &function.inner {
+            FunctionInner::Mid {
                 string,
                 start,
                 length,
@@ -786,7 +786,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::String)
             }
-            Function::Left { string, length } => {
+            FunctionInner::Left { string, length } => {
                 let string_type = self.analyze_expression(string)?;
                 let length_type = self.analyze_expression(length)?;
 
@@ -806,7 +806,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::String)
             }
-            Function::Right { string, length } => {
+            FunctionInner::Right { string, length } => {
                 let string_type = self.analyze_expression(string)?;
                 let length_type = self.analyze_expression(length)?;
 
@@ -826,7 +826,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::String)
             }
-            Function::Asc { expr } => {
+            FunctionInner::Asc { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -837,7 +837,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Point { position } => {
+            FunctionInner::Point { position } => {
                 let pos_type = self.analyze_expression(position)?;
                 if pos_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -848,7 +848,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Rnd { range_end } => {
+            FunctionInner::Rnd { range_end } => {
                 let range_type = self.analyze_expression(range_end)?;
                 if range_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -859,17 +859,17 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Int { expr }
-            | Function::Sgn { expr }
-            | Function::Abs { expr }
-            | Function::Ln { expr }
-            | Function::Log { expr }
-            | Function::Dms { expr }
-            | Function::Deg { expr }
-            | Function::Tan { expr }
-            | Function::Cos { expr }
-            | Function::Sin { expr }
-            | Function::Sqr { expr } => {
+            FunctionInner::Int { expr }
+            | FunctionInner::Sgn { expr }
+            | FunctionInner::Abs { expr }
+            | FunctionInner::Ln { expr }
+            | FunctionInner::Log { expr }
+            | FunctionInner::Dms { expr }
+            | FunctionInner::Deg { expr }
+            | FunctionInner::Tan { expr }
+            | FunctionInner::Cos { expr }
+            | FunctionInner::Sin { expr }
+            | FunctionInner::Sqr { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -880,7 +880,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Status { arg } => {
+            FunctionInner::Status { arg } => {
                 let arg_type = self.analyze_expression(arg)?;
                 if arg_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -891,7 +891,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Val { expr } => {
+            FunctionInner::Val { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -902,7 +902,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Str { expr } => {
+            FunctionInner::Str { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -913,7 +913,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::String)
             }
-            Function::Chr { expr } => {
+            FunctionInner::Chr { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -924,7 +924,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::String)
             }
-            Function::Len { expr } => {
+            FunctionInner::Len { expr } => {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -935,7 +935,7 @@ impl SemanticAnalyzer {
                 }
                 Ok(BasicType::Numeric)
             }
-            Function::Peek { address, .. } => {
+            FunctionInner::Peek { address, .. } => {
                 let addr_type = self.analyze_expression(address)?;
                 if addr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
@@ -972,7 +972,7 @@ mod tests {
         let identifier = Identifier::new(b'X', None, false).unwrap();
 
         let assignment = Assignment {
-            lvalue: LValue::Identifier(identifier),
+            lvalue: LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
             expr: Box::new(Expr::new(
                 ExprInner::DecimalNumber(DecimalNumber::new(42.0)),
                 placeholder_span(),
@@ -991,7 +991,7 @@ mod tests {
         let identifier = Identifier::new(b'X', None, true).unwrap();
 
         let assignment = Assignment {
-            lvalue: LValue::Identifier(identifier),
+            lvalue: LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
             expr: Box::new(Expr::new(
                 ExprInner::DecimalNumber(DecimalNumber::new(42.0)),
                 placeholder_span(),

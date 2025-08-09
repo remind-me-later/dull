@@ -1,10 +1,17 @@
 use crate::{
     lex::{identifier::Identifier, keyword::Keyword},
     parse::expression::Expr,
+    error::Span,
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LValue {
+pub struct LValue {
+    pub inner: LValueInner,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LValueInner {
     // A, BB$, etc.
     Identifier(Identifier),
     // TIME, INKEY$, etc.
@@ -28,19 +35,23 @@ pub enum LValue {
 }
 
 impl LValue {
+    pub fn new(inner: LValueInner, span: Span) -> Self {
+        Self { inner, span }
+    }
+
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        match self {
-            LValue::Identifier(id) => id.write_bytes(bytes),
-            LValue::BuiltInIdentifier(bi) => {
+        match &self.inner {
+            LValueInner::Identifier(id) => id.write_bytes(bytes),
+            LValueInner::BuiltInIdentifier(bi) => {
                 bytes.extend_from_slice(bi.internal_code().to_le_bytes().as_slice());
             }
-            LValue::Array1DAccess { identifier, index } => {
+            LValueInner::Array1DAccess { identifier, index } => {
                 identifier.write_bytes(bytes);
                 bytes.push(b'(');
                 index.write_bytes(bytes);
                 bytes.push(b')');
             }
-            LValue::Array2DAccess {
+            LValueInner::Array2DAccess {
                 identifier,
                 row_index,
                 col_index,
@@ -52,7 +63,7 @@ impl LValue {
                 col_index.write_bytes(bytes);
                 bytes.push(b')');
             }
-            LValue::FixedMemoryAreaAccess { index, has_dollar } => {
+            LValueInner::FixedMemoryAreaAccess { index, has_dollar } => {
                 bytes.push(b'@');
                 if *has_dollar {
                     bytes.push(b'$');
@@ -67,16 +78,16 @@ impl LValue {
 
 impl std::fmt::Display for LValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LValue::Identifier(id) => write!(f, "{id}"),
-            LValue::BuiltInIdentifier(bi) => write!(f, "{bi}"),
-            LValue::Array1DAccess { identifier, index } => write!(f, "{identifier}({index})"),
-            LValue::Array2DAccess {
+        match &self.inner {
+            LValueInner::Identifier(id) => write!(f, "{id}"),
+            LValueInner::BuiltInIdentifier(bi) => write!(f, "{bi}"),
+            LValueInner::Array1DAccess { identifier, index } => write!(f, "{identifier}({index})"),
+            LValueInner::Array2DAccess {
                 identifier,
                 row_index,
                 col_index,
             } => write!(f, "{identifier}({row_index},{col_index})"),
-            LValue::FixedMemoryAreaAccess { index, has_dollar } => {
+            LValueInner::FixedMemoryAreaAccess { index, has_dollar } => {
                 if *has_dollar {
                     write!(f, "@$({index})")
                 } else {

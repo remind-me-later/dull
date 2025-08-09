@@ -8,8 +8,13 @@ use crate::{
     },
     parse::{
         expression::{
-            Expr, binary_op::BinaryOp, expr_inner::ExprInner, function::Function, lvalue::LValue,
-            memory_area::MemoryArea, unary_op::UnaryOp,
+            Expr,
+            binary_op::BinaryOp,
+            expr_inner::ExprInner,
+            function::{Function, FunctionInner},
+            lvalue::{LValue, LValueInner},
+            memory_area::MemoryArea,
+            unary_op::UnaryOp,
         },
         line::Line,
         statement::{
@@ -124,11 +129,10 @@ where
                 self.next_spanned();
                 let right = self.expect_expression_factor()?;
                 let span = left.span.extend(right.span);
-                left = Expr::new(ExprInner::Binary(
-                    Box::new(left),
-                    BinaryOp::Exp,
-                    Box::new(right),
-                ), span);
+                left = Expr::new(
+                    ExprInner::Binary(Box::new(left), BinaryOp::Exp, Box::new(right)),
+                    span,
+                );
             }
 
             Ok(Some(left))
@@ -149,19 +153,19 @@ where
                 let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
                 let span = op_span.extend(right.span);
-                Ok(Some(Expr::new(ExprInner::Unary(
-                    UnaryOp::Plus,
-                    Box::new(right),
-                ), span)))
+                Ok(Some(Expr::new(
+                    ExprInner::Unary(UnaryOp::Plus, Box::new(right)),
+                    span,
+                )))
             }
             Some(Token::Symbol(Symbol::Sub)) => {
                 let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
                 let span = op_span.extend(right.span);
-                Ok(Some(Expr::new(ExprInner::Unary(
-                    UnaryOp::Minus,
-                    Box::new(right),
-                ), span)))
+                Ok(Some(Expr::new(
+                    ExprInner::Unary(UnaryOp::Minus, Box::new(right)),
+                    span,
+                )))
             }
             _ => Ok(self.parse_exponent_expr()?),
         }
@@ -191,11 +195,10 @@ where
                     _ => unreachable!(),
                 };
                 let span = left.span.extend(right.span);
-                left = Expr::new(ExprInner::Binary(
-                    Box::new(left),
-                    binary_op,
-                    Box::new(right),
-                ), span);
+                left = Expr::new(
+                    ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
+                    span,
+                );
             }
 
             Ok(Some(left))
@@ -228,11 +231,10 @@ where
                     _ => unreachable!(),
                 };
                 let span = left.span.extend(right.span);
-                left = Expr::new(ExprInner::Binary(
-                    Box::new(left),
-                    binary_op,
-                    Box::new(right),
-                ), span);
+                left = Expr::new(
+                    ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
+                    span,
+                );
             }
 
             Ok(Some(left))
@@ -274,11 +276,10 @@ where
                     _ => unreachable!(),
                 };
                 let span = left.span.extend(right.span);
-                left = Expr::new(ExprInner::Binary(
-                    Box::new(left),
-                    binary_op,
-                    Box::new(right),
-                ), span);
+                left = Expr::new(
+                    ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
+                    span,
+                );
             }
 
             Ok(Some(left))
@@ -294,10 +295,10 @@ where
                 let op_span = *op_token.span();
                 let right = self.expect_unary_logical_expr()?;
                 let span = op_span.extend(right.span);
-                Ok(Some(Expr::new(ExprInner::Unary(
-                    UnaryOp::Not,
-                    Box::new(right),
-                ), span)))
+                Ok(Some(Expr::new(
+                    ExprInner::Unary(UnaryOp::Not, Box::new(right)),
+                    span,
+                )))
             }
             None => self.parse_comparison_expr(),
         }
@@ -322,15 +323,18 @@ where
             }) {
                 let right = self.expect_unary_logical_expr()?;
                 let span = left.span.extend(right.span);
-                left = Expr::new(ExprInner::Binary(
-                    Box::new(left),
-                    match op.token() {
-                        Token::Keyword(Keyword::Or) => BinaryOp::Or,
-                        Token::Keyword(Keyword::And) => BinaryOp::And,
-                        _ => unreachable!(),
-                    },
-                    Box::new(right),
-                ), span);
+                left = Expr::new(
+                    ExprInner::Binary(
+                        Box::new(left),
+                        match op.token() {
+                            Token::Keyword(Keyword::Or) => BinaryOp::Or,
+                            Token::Keyword(Keyword::And) => BinaryOp::And,
+                            _ => unreachable!(),
+                        },
+                        Box::new(right),
+                    ),
+                    span,
+                );
             }
 
             Ok(Some(left))
@@ -399,15 +403,24 @@ where
         }
 
         if let Some((binary_number, span)) = self.parse_binary_number() {
-            return Ok(Some(Expr::new(ExprInner::BinaryNumber(binary_number), span)));
+            return Ok(Some(Expr::new(
+                ExprInner::BinaryNumber(binary_number),
+                span,
+            )));
         }
 
         if let Some((decimal_number, span)) = self.parse_decimal_number() {
-            return Ok(Some(Expr::new(ExprInner::DecimalNumber(decimal_number), span)));
+            return Ok(Some(Expr::new(
+                ExprInner::DecimalNumber(decimal_number),
+                span,
+            )));
         }
 
         if let Some((string_literal, span)) = self.parse_string_literal() {
-            return Ok(Some(Expr::new(ExprInner::StringLiteral(string_literal), span)));
+            return Ok(Some(Expr::new(
+                ExprInner::StringLiteral(string_literal),
+                span,
+            )));
         }
 
         if let Some(lvalue) = self.parse_lvalue()? {
@@ -428,132 +441,224 @@ where
     fn parse_function(&mut self) -> ParseResult<Option<Function>> {
         match self.peek_token() {
             Token::Keyword(Keyword::Int) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Int {
-                    expr: Box::new(expr),
-                }))
+                // Create a span that extends from start to the end of the expression
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Int {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Sgn) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Sgn {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Sgn {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Status) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let arg = self.expect_expression_factor()?;
-                Ok(Some(Function::Status { arg: Box::new(arg) }))
+                let span = start_span.extend(arg.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Status { arg: Box::new(arg) },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Val) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Val {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Val {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::StrDollar) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Str {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Str {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::ChrDollar) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Chr {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Chr {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Abs) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Abs {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Abs {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Len) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Len {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Len {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::PeekMem0) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
-                Ok(Some(Function::Peek {
-                    memory_area: MemoryArea::Me0,
-                    address: Box::new(address),
-                }))
+                let span = start_span.extend(address.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Peek {
+                        memory_area: MemoryArea::Me0,
+                        address: Box::new(address),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::PeekMem1) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
-                Ok(Some(Function::Peek {
-                    memory_area: MemoryArea::Me1,
-                    address: Box::new(address),
-                }))
+                let span = start_span.extend(address.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Peek {
+                        memory_area: MemoryArea::Me1,
+                        address: Box::new(address),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Ln) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Ln {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Ln {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Log) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Log {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Log {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Dms) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Dms {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Dms {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Deg) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Deg {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Deg {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Tan) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Tan {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Tan {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Cos) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Cos {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Cos {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Sin) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Sin {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Sin {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Sqr) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Sqr {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Sqr {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::MidDollar) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 // Parse '('
                 self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after MID$")?;
@@ -563,7 +668,7 @@ where
                     &Token::Symbol(Symbol::Comma),
                     "Expected ',' after MID$ string",
                 )?;
-                let start = self.expect_expression()?;
+                let start_pos = self.expect_expression()?;
 
                 self.expect_token(
                     &Token::Symbol(Symbol::Comma),
@@ -571,17 +676,22 @@ where
                 )?;
                 let length = self.expect_expression()?;
 
-                self.expect_token(
+                let end_token = self.expect_token(
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after MID$ length",
                 )?;
-                Ok(Some(Function::Mid {
-                    string: Box::new(string),
-                    start: Box::new(start),
-                    length: Box::new(length),
-                }))
+                let span = start_span.extend(*end_token.span());
+                Ok(Some(Function::new(
+                    FunctionInner::Mid {
+                        string: Box::new(string),
+                        start: Box::new(start_pos),
+                        length: Box::new(length),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::LeftDollar) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 // Parse '('
                 self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after LEFT$")?;
@@ -592,16 +702,21 @@ where
                     "Expected ',' after LEFT$ string",
                 )?;
                 let length = self.expect_expression()?;
-                self.expect_token(
+                let end_token = self.expect_token(
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after LEFT$ length",
                 )?;
-                Ok(Some(Function::Left {
-                    string: Box::new(string),
-                    length: Box::new(length),
-                }))
+                let span = start_span.extend(*end_token.span());
+                Ok(Some(Function::new(
+                    FunctionInner::Left {
+                        string: Box::new(string),
+                        length: Box::new(length),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::RightDollar) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 // Parse '('
                 self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after RIGHT$")?;
@@ -611,35 +726,54 @@ where
                     "Expected ',' after RIGHT$ string",
                 )?;
                 let length = self.expect_expression()?;
-                self.expect_token(
+                let end_token = self.expect_token(
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after RIGHT$ length",
                 )?;
-                Ok(Some(Function::Right {
-                    string: Box::new(string),
-                    length: Box::new(length),
-                }))
+                let span = start_span.extend(*end_token.span());
+                Ok(Some(Function::new(
+                    FunctionInner::Right {
+                        string: Box::new(string),
+                        length: Box::new(length),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Asc) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                Ok(Some(Function::Asc {
-                    expr: Box::new(expr),
-                }))
+                let span = start_span.extend(expr.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Asc {
+                        expr: Box::new(expr),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Point) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let position = self.expect_expression_factor()?;
-                Ok(Some(Function::Point {
-                    position: Box::new(position),
-                }))
+                let span = start_span.extend(position.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Point {
+                        position: Box::new(position),
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Rnd) => {
+                let start_span = self.current_span();
                 self.tokens.next();
                 let range_end = self.expect_expression_factor()?;
-                Ok(Some(Function::Rnd {
-                    range_end: Box::new(range_end),
-                }))
+                let span = start_span.extend(range_end.span);
+                Ok(Some(Function::new(
+                    FunctionInner::Rnd {
+                        range_end: Box::new(range_end),
+                    },
+                    span,
+                )))
             }
             _ => Ok(None),
         }
@@ -649,6 +783,7 @@ where
         match self.peek_token() {
             Token::Identifier(identifier) => {
                 let identifier = *identifier;
+                let start_span = self.current_span();
                 self.tokens.next();
 
                 // Check for array access
@@ -659,30 +794,42 @@ where
                     if self.peek_token() == &Token::Symbol(Symbol::Comma) {
                         self.tokens.next(); // Consume ','
                         let col_index = self.expect_expression()?;
-                        self.expect_token(
+                        let end_token = self.expect_token(
                             &Token::Symbol(Symbol::RParen),
                             "Expected ')' after 2D array indices",
                         )?;
-                        return Ok(Some(LValue::Array2DAccess {
-                            identifier,
-                            row_index: Box::new(index),
-                            col_index: Box::new(col_index),
+                        let span = start_span.extend(*end_token.span());
+                        return Ok(Some(LValue {
+                            inner: LValueInner::Array2DAccess {
+                                identifier,
+                                row_index: Box::new(index),
+                                col_index: Box::new(col_index),
+                            },
+                            span,
                         }));
                     }
 
-                    self.expect_token(
+                    let end_token = self.expect_token(
                         &Token::Symbol(Symbol::RParen),
                         "Expected ')' after 1D array index",
                     )?;
-                    return Ok(Some(LValue::Array1DAccess {
-                        identifier,
-                        index: Box::new(index),
+                    let span = start_span.extend(*end_token.span());
+                    return Ok(Some(LValue {
+                        inner: LValueInner::Array1DAccess {
+                            identifier,
+                            index: Box::new(index),
+                        },
+                        span,
                     }));
                 }
 
-                Ok(Some(LValue::Identifier(identifier)))
+                Ok(Some(LValue::new(
+                    LValueInner::Identifier(identifier),
+                    start_span,
+                )))
             }
             Token::Symbol(Symbol::At) => {
+                let start_span = self.current_span();
                 self.tokens.next();
 
                 let has_dollar = self
@@ -691,23 +838,35 @@ where
 
                 self.expect_token(&Token::Symbol(Symbol::LParen), "Expected '(' after @")?;
                 let index = self.expect_expression()?;
-                self.expect_token(
+                let end_token = self.expect_token(
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after memory area index",
                 )?;
+                let span = start_span.extend(*end_token.span());
 
-                Ok(Some(LValue::FixedMemoryAreaAccess {
-                    index: Box::new(index),
-                    has_dollar,
-                }))
+                Ok(Some(LValue::new(
+                    LValueInner::FixedMemoryAreaAccess {
+                        index: Box::new(index),
+                        has_dollar,
+                    },
+                    span,
+                )))
             }
             Token::Keyword(Keyword::Time) => {
+                let start_span = self.current_span();
                 self.tokens.next();
-                Ok(Some(LValue::BuiltInIdentifier(Keyword::Time)))
+                Ok(Some(LValue::new(
+                    LValueInner::BuiltInIdentifier(Keyword::Time),
+                    start_span,
+                )))
             }
             Token::Keyword(Keyword::InkeyDollar) => {
+                let start_span = self.current_span();
                 self.tokens.next();
-                Ok(Some(LValue::BuiltInIdentifier(Keyword::InkeyDollar)))
+                Ok(Some(LValue::new(
+                    LValueInner::BuiltInIdentifier(Keyword::InkeyDollar),
+                    start_span,
+                )))
             }
             _ => Ok(None),
         }
