@@ -359,6 +359,16 @@ impl SemanticAnalyzer {
                 self.analyze_line_inner(inner)?;
             }
             StatementInner::Sorgn => {}
+            StatementInner::Rotate { expr } => {
+                let expr_type = self.analyze_expression(expr)?;
+                if expr_type != BasicType::Numeric {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: BasicType::Numeric,
+                        found: expr_type,
+                        span: expr.span,
+                    });
+                }
+            }
         }
         Ok(())
     }

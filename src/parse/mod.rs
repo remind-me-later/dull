@@ -1131,6 +1131,24 @@ where
         }
     }
 
+    fn parse_rotate_stmt(&mut self) -> ParseResult<Option<Statement>> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Rotate))
+            .is_some()
+        {
+            let start_span = self.current_span();
+            let expr = self.expect_expression()?;
+            let end_span = self.current_span();
+            let full_span = start_span.extend(end_span);
+            Ok(Some(Statement::new(
+                StatementInner::Rotate { expr },
+                full_span,
+            )))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn parse_statement(&mut self, is_let_mandatory: bool) -> ParseResult<Option<Statement>> {
         if let Some(stmt) = self.parse_print_pause_stmt()? {
             return Ok(Some(stmt));
@@ -1297,6 +1315,10 @@ where
         }
 
         if let Some(stmt) = self.parse_sorgn_stmt() {
+            return Ok(Some(stmt));
+        }
+
+        if let Some(stmt) = self.parse_rotate_stmt()? {
             return Ok(Some(stmt));
         }
 

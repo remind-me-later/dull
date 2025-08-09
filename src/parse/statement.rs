@@ -126,7 +126,11 @@ pub struct BeepOptionalParams {
 
 impl BeepOptionalParams {
     pub fn new(frequency: Expr, duration: Option<Expr>, span: Span) -> Self {
-        Self { frequency, duration, span }
+        Self {
+            frequency,
+            duration,
+            span,
+        }
     }
 }
 
@@ -537,6 +541,9 @@ pub enum StatementInner {
         inner: LineInner,
     },
     Sorgn,
+    Rotate {
+        expr: Expr,
+    },
 }
 
 impl Statement {
@@ -872,6 +879,10 @@ impl Statement {
             StatementInner::Sorgn => {
                 bytes.extend_from_slice(Keyword::Sorgn.internal_code().to_le_bytes().as_slice());
             }
+            StatementInner::Rotate { expr } => {
+                bytes.extend_from_slice(Keyword::Rotate.internal_code().to_le_bytes().as_slice());
+                expr.write_bytes(bytes);
+            }
         }
     }
 }
@@ -1047,6 +1058,7 @@ impl std::fmt::Display for Statement {
                 write!(f, "{}", inner.to_string_with_prefix("RLINE"))
             }
             StatementInner::Sorgn => write!(f, "SORGN"),
+            StatementInner::Rotate { expr } => write!(f, "ROTATE {expr}"),
         }
     }
 }
