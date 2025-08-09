@@ -46,14 +46,11 @@ where
         self.tokens
             .peek()
             .map(|spanned| spanned.token())
-            .unwrap_or_else(|| panic!("Expected token but found none"))
+            .unwrap_or(&Token::Symbol(Symbol::Eof))
     }
 
-    fn peek_mut_token(&mut self) -> &mut Token {
-        self.tokens
-            .peek_mut()
-            .map(|spanned| spanned.token_mut())
-            .unwrap_or_else(|| panic!("Expected token but found none"))
+    fn peek_mut_token(&mut self) -> Option<&mut Token> {
+        self.tokens.peek_mut().map(|spanned| spanned.token_mut())
     }
 
     /// Helper method to get the next token with span
@@ -103,27 +100,6 @@ where
         }
     }
 
-    /// Helper method to expect a token matching a predicate
-    fn expect_token_where(
-        &mut self,
-        predicate: impl Fn(&Token) -> bool,
-        expected_desc: &str,
-        context: &str,
-    ) -> ParseResult<SpannedToken> {
-        match self.next_spanned() {
-            Some(token) if predicate(token.token()) => Ok(token),
-            Some(token) => Err(ParseError::UnexpectedToken {
-                expected: expected_desc.to_string(),
-                found: format!("{}", token.token()),
-                span: *token.span(),
-            }),
-            None => Err(ParseError::UnexpectedEndOfInput {
-                expected: format!("{expected_desc} ({context})"),
-                span: self.current_span(),
-            }),
-        }
-    }
-
     fn expect_expression(&mut self) -> ParseResult<Expr> {
         match self.parse_expression()? {
             Some(expr) => Ok(expr),
@@ -157,15 +133,6 @@ where
             Ok(Some(left))
         } else {
             Ok(None)
-        }
-    }
-
-    fn expect_exponent_expr(&mut self) -> ParseResult<Expr> {
-        match self.parse_exponent_expr()? {
-            Some(expr) => Ok(expr),
-            None => Err(ParseError::ExpectedExpression {
-                span: self.current_span(),
-            }),
         }
     }
 
@@ -312,15 +279,6 @@ where
         }
     }
 
-    fn expect_comparison_expr(&mut self) -> ParseResult<Expr> {
-        match self.parse_comparison_expr()? {
-            Some(expr) => Ok(expr),
-            None => Err(ParseError::ExpectedExpression {
-                span: self.current_span(),
-            }),
-        }
-    }
-
     fn parse_unary_logical_expr(&mut self) -> ParseResult<Option<Expr>> {
         let maybe_op = self.next_if_token_eq(&Token::Keyword(Keyword::Not));
         match maybe_op {
@@ -375,7 +333,7 @@ where
     }
 
     fn parse_binary_number(&mut self) -> Option<BinaryNumber> {
-        match self.peek_mut_token() {
+        match self.peek_mut_token()? {
             Token::BinaryNumber(h) => {
                 let h = *h;
                 self.tokens.next()?;
@@ -386,7 +344,7 @@ where
     }
 
     fn parse_decimal_number(&mut self) -> Option<DecimalNumber> {
-        match self.peek_mut_token() {
+        match self.peek_mut_token()? {
             Token::DecimalNumber(n) => {
                 let n = *n;
                 self.tokens.next()?;
@@ -397,7 +355,7 @@ where
     }
 
     fn parse_string_literal(&mut self) -> Option<String> {
-        match self.peek_mut_token() {
+        match self.peek_mut_token()? {
             Token::StringLiteral(s) => {
                 let string = mem::take(s);
                 self.tokens.next()?;
@@ -408,7 +366,7 @@ where
     }
 
     fn parse_expression_factor(&mut self) -> ParseResult<Option<Expr>> {
-        if let Token::Symbol(Symbol::LParen) = self.peek_mut_token() {
+        if let Some(Token::Symbol(Symbol::LParen)) = self.peek_mut_token() {
             self.tokens.next(); // Consume '('
             let expr = self.expect_expression()?;
             self.expect_token(
@@ -765,9 +723,7 @@ where
 
         if is_let_mandatory {
             if let_kw.is_none() {
-                return Err(ParseError::ExpectedExplicitLet {
-                    span: self.current_span(),
-                });
+                return Ok(None);
             }
 
             let mut assignments = vec![];
@@ -783,27 +739,25 @@ where
             }
 
             Ok(Some(LetInner { assignments }))
-        } else {
-            if let Some(first_assignment) = self.parse_assignment()? {
-                let mut assignments = vec![first_assignment];
+        } else if let Some(first_assignment) = self.parse_assignment()? {
+            let mut assignments = vec![first_assignment];
 
-                if self.peek_token() == &Token::Symbol(Symbol::Comma) {
-                    self.tokens.next(); // Consume ',' {
-                    loop {
-                        let assignment = self.expect_assignment()?;
-                        assignments.push(assignment);
-                        if self.peek_token() == &Token::Symbol(Symbol::Comma) {
-                            self.tokens.next(); // Consume ','
-                        } else {
-                            break;
-                        }
+            if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                self.tokens.next(); // Consume ',' {
+                loop {
+                    let assignment = self.expect_assignment()?;
+                    assignments.push(assignment);
+                    if self.peek_token() == &Token::Symbol(Symbol::Comma) {
+                        self.tokens.next(); // Consume ','
+                    } else {
+                        break;
                     }
                 }
-
-                Ok(Some(LetInner { assignments }))
-            } else {
-                Ok(None)
             }
+
+            Ok(Some(LetInner { assignments }))
+        } else {
+            Ok(None)
         }
     }
 
@@ -925,7 +879,10 @@ where
     }
 
     fn parse_dim_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Dim)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Dim))
+            .is_some()
+        {
             let mut decls = vec![];
 
             loop {
@@ -1103,20 +1060,23 @@ where
     }
 
     fn parse_if_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::If)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::If))
+            .is_some()
+        {
             let condition = self.expect_expression()?;
             self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
             if let Some(then_stmt) = self.parse_statement(true)? {
-                return Ok(Some(Statement::If {
+                Ok(Some(Statement::If {
                     condition,
                     then_stmt: Box::new(then_stmt),
-                }));
+                }))
             } else {
                 let goto_expr = self.expect_expression()?;
-                return Ok(Some(Statement::If {
+                Ok(Some(Statement::If {
                     condition,
                     then_stmt: Box::new(Statement::Goto { target: goto_expr }),
-                }));
+                }))
             }
         } else {
             Ok(None)
@@ -1124,7 +1084,10 @@ where
     }
 
     fn parse_input_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Input)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Input))
+            .is_some()
+        {
             let mut input_exprs = vec![];
 
             loop {
@@ -1157,7 +1120,7 @@ where
     }
 
     fn parse_remark_stmt(&mut self) -> Option<Statement> {
-        match self.peek_mut_token() {
+        match self.peek_mut_token()? {
             Token::Remark(s) => {
                 let s = mem::take(s);
                 self.tokens.next();
@@ -1170,7 +1133,10 @@ where
     }
 
     fn parse_for_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::For)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::For))
+            .is_some()
+        {
             let assignment = self.expect_assignment()?;
             self.expect_token(
                 &Token::Keyword(Keyword::To),
@@ -1197,7 +1163,10 @@ where
     }
 
     fn parse_next_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Next)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Next))
+            .is_some()
+        {
             let lvalue = self.expect_lvalue()?;
             Ok(Some(Statement::Next { lvalue }))
         } else {
@@ -1211,7 +1180,10 @@ where
     }
 
     fn parse_goto_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Goto)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Goto))
+            .is_some()
+        {
             let target = self.expect_expression()?;
             Ok(Some(Statement::Goto { target }))
         } else {
@@ -1220,7 +1192,10 @@ where
     }
 
     fn parse_gosub_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Gosub)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Gosub))
+            .is_some()
+        {
             let target = self.expect_expression()?;
             Ok(Some(Statement::Gosub { target }))
         } else {
@@ -1229,8 +1204,14 @@ where
     }
 
     fn parse_on_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::On)) {
-            if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Error)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::On))
+            .is_some()
+        {
+            if self
+                .next_if_token_eq(&Token::Keyword(Keyword::Error))
+                .is_some()
+            {
                 self.expect_token(
                     &Token::Keyword(Keyword::Goto),
                     "Expected 'GOTO' after 'ON ERROR'",
@@ -1277,7 +1258,10 @@ where
     }
 
     fn parse_wait_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Wait)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Wait))
+            .is_some()
+        {
             let expr = self.parse_expression()?;
             return Ok(Some(Statement::Wait { expr }));
         }
@@ -1295,22 +1279,20 @@ where
     }
 
     fn parse_gprint_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Gprint)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Gprint))
+            .is_some()
+        {
             let mut exprs = vec![];
 
-            loop {
-                let expr = self.expect_expression()?;
+            while let Some(expr) = self.parse_expression()? {
                 let print_separator = self.parse_print_separator();
                 exprs.push((expr, print_separator));
-
-                if matches!(print_separator, PrintSeparator::Empty) {
-                    break;
-                }
             }
 
-            return Ok(Some(Statement::Gprint { exprs }));
+            Ok(Some(Statement::Gprint { exprs }))
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -1418,7 +1400,10 @@ where
     }
 
     fn parse_read_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Read)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Read))
+            .is_some()
+        {
             let mut destinations = vec![self.expect_lvalue()?];
             while self
                 .next_if_token_eq(&Token::Symbol(Symbol::Comma))
@@ -1449,7 +1434,10 @@ where
     }
 
     fn parse_restore_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Restore)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Restore))
+            .is_some()
+        {
             let expr = self.parse_expression()?;
             return Ok(Some(Statement::Restore { expr }));
         }
@@ -1472,7 +1460,10 @@ where
     }
 
     fn parse_call_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Call)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Call))
+            .is_some()
+        {
             let expr = self.expect_expression()?;
             let variable = if self
                 .next_if_token_eq(&Token::Symbol(Symbol::Comma))
@@ -1498,7 +1489,10 @@ where
     }
 
     fn parse_color_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Color)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Color))
+            .is_some()
+        {
             let color = self.expect_expression()?;
             return Ok(Some(Statement::Color { expr: color }));
         }
@@ -1506,7 +1500,10 @@ where
     }
 
     fn parse_csize_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Csize)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Csize))
+            .is_some()
+        {
             let expr = self.expect_expression()?;
             return Ok(Some(Statement::CSize { expr }));
         }
@@ -1514,7 +1511,10 @@ where
     }
 
     fn parse_lf_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Lf)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Lf))
+            .is_some()
+        {
             let expr = self.expect_expression()?;
             return Ok(Some(Statement::Lf { expr }));
         }
@@ -1527,7 +1527,10 @@ where
     }
 
     fn parse_lcursor_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Lcursor)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Lcursor))
+            .is_some()
+        {
             let expr = self.expect_expression()?;
             return Ok(Some(Statement::LCursor(LCursorClause { expr })));
         }
@@ -1535,7 +1538,10 @@ where
     }
 
     fn parse_lprint_stmt(&mut self) -> ParseResult<Option<Statement>> {
-        if let Some(_) = self.next_if_token_eq(&Token::Keyword(Keyword::Lprint)) {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Lprint))
+            .is_some()
+        {
             let inner = self.parse_lprint_inner()?;
             return Ok(Some(Statement::LPrint { inner }));
         }
@@ -1569,55 +1575,14 @@ where
     }
 
     fn parse_line(&mut self) -> Option<Line> {
-        match self.peek_token() {
-            Token::DecimalNumber(line_number) => {
-                let line_number = line_number
-                    .as_integer()
-                    .and_then(|line_number| u16::try_from(line_number).ok());
-                let line_number = match line_number {
-                    Some(num) => num,
-                    None => return None, // Return None instead of panic
-                };
-                self.tokens.next(); // Consume line number
-
-                // Try to parse a line label: a string literal optionally followed by ':'
-                let label = if let Token::StringLiteral(label) = self.peek_mut_token() {
-                    let label = mem::take(label);
-                    self.tokens.next(); // Consume label
-                    self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
-                    Some(label)
-                } else {
-                    None
-                };
-
-                let mut statements = vec![];
-
-                while let Some(statement) = self.parse_statement(false) {
-                    statements.push(statement);
-                    // Statements are separated by ':'
-                    if self
-                        .next_if_token_eq(&Token::Symbol(Symbol::Colon))
-                        .is_none()
-                    {
-                        break;
-                    }
-                }
-
-                // Parse line end or EOF
-                let newline = self.next_if_token_eq(&Token::Symbol(Symbol::Newline));
-                let eof = self.next_if_token_eq(&Token::Symbol(Symbol::Eof));
-
-                if newline.is_none() && eof.is_none() {
-                    return None; // Return None instead of panic
-                }
-
-                Some(Line {
-                    label,
-                    number: line_number,
-                    statements,
-                })
+        // Use the error recovery version but ignore errors for compatibility
+        match self.parse_line_with_recovery() {
+            Ok(line_opt) => line_opt,
+            Err(_) => {
+                // Skip to next line on error and return None
+                self.skip_to_next_line();
+                None
             }
-            _ => None,
         }
     }
 
@@ -1685,13 +1650,14 @@ where
         let start_span = self.current_span();
 
         match self.peek_token() {
-            (Token::DecimalNumber(line_number)) => {
+            Token::DecimalNumber(line_number) => {
                 let line_number = line_number
                     .as_integer()
                     .and_then(|line_number| u16::try_from(line_number).ok())
                     .ok_or_else(|| ParseError::InvalidExpression {
                         message: format!(
-                            "Invalid line number: expected a valid integer between 0 and 65535"
+                            "Invalid line number: expected a valid integer between 0 and 65535, got {}",
+                            line_number
                         ),
                         span: start_span,
                     })?;
@@ -1699,7 +1665,7 @@ where
                 self.tokens.next(); // Consume line number
 
                 // Try to parse a line label: a string literal optionally followed by ':'
-                let label = if let Token::StringLiteral(label) = self.peek_mut_token() {
+                let label = if let Some(Token::StringLiteral(label)) = self.peek_mut_token() {
                     let label = mem::take(label);
                     self.tokens.next(); // Consume label
                     self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
@@ -1710,14 +1676,27 @@ where
 
                 let mut statements = vec![];
 
-                while let Some(statement) = self.parse_statement(false) {
-                    statements.push(statement);
-                    // Statements are separated by ':'
-                    if self
-                        .next_if_token_eq(&Token::Symbol(Symbol::Colon))
-                        .is_none()
-                    {
-                        break;
+                // Parse statements with error recovery
+                loop {
+                    match self.parse_statement(false) {
+                        Ok(Some(statement)) => {
+                            statements.push(statement);
+                            // Statements are separated by ':'
+                            if self
+                                .next_if_token_eq(&Token::Symbol(Symbol::Colon))
+                                .is_none()
+                            {
+                                break;
+                            }
+                        }
+                        Ok(None) => {
+                            // No more statements to parse
+                            break;
+                        }
+                        Err(parse_error) => {
+                            // Return the error for higher-level error recovery
+                            return Err(parse_error);
+                        }
                     }
                 }
 
@@ -1738,7 +1717,12 @@ where
                     statements,
                 }))
             }
-            (_) => {
+            _ => {
+                // Check if we're at EOF - this is not an error, just no more lines
+                if matches!(self.peek_token(), Token::Symbol(Symbol::Eof)) {
+                    return Ok(None);
+                }
+
                 // Unexpected token at start of line
                 let token = self.next_spanned().unwrap();
                 Err(ParseError::UnexpectedToken {
@@ -1760,7 +1744,7 @@ mod tests {
         let lexer = Lexer::new(input);
         let tokens: Vec<SpannedToken> = lexer.filter_map(|result| result.ok()).collect();
         let mut parser = Parser::new(tokens.into_iter());
-        parser.parse_expression()
+        parser.parse_expression().ok().flatten()
     }
 
     #[test]

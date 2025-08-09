@@ -90,10 +90,6 @@ impl<'a> Lexer<'a> {
         self.input.peek()
     }
 
-    fn current_span(&self) -> Span {
-        Span::single(self.position)
-    }
-
     fn span_from(&self, start: usize) -> Span {
         Span::new(start, self.position)
     }
@@ -296,16 +292,29 @@ impl Iterator for Lexer<'_> {
                         number_str.push(ch);
                         self.advance();
                     } else if (ch == 'E') && !has_e {
+                        // Do some lookahead to avoid parsing a keyword starting with E
+                        {
+                            let mut cloned_iter = self.input.clone();
+                            cloned_iter.next(); // Skip the 'E'
+                            match cloned_iter.peek() {
+                                Some(&next_ch)
+                                    if next_ch.is_ascii_digit()
+                                        || next_ch == '+'
+                                        || next_ch == '-' => {}
+                                _ => break, // Not a valid exponent
+                            }
+                        }
+
                         has_e = true;
                         number_str.push(ch);
                         self.advance();
 
                         // Handle optional + or - after E
-                        if let Some(&next_ch) = self.peek() {
-                            if next_ch == '+' || next_ch == '-' {
-                                number_str.push(next_ch);
-                                self.advance();
-                            }
+                        if let Some(&next_ch) = self.peek()
+                            && (next_ch == '+' || next_ch == '-')
+                        {
+                            number_str.push(next_ch);
+                            self.advance();
                         }
                     } else {
                         break;

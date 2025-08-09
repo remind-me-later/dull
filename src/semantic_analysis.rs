@@ -156,9 +156,16 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            Statement::Next { lvalue: ident } => {
+            Statement::Next { lvalue } => {
                 // Ensure the identifier is numeric (FOR loop variable)
-                self.state.insert_variable(ident, BasicType::Numeric);
+                let ty = self.analyze_lvalue(lvalue)?;
+                if ty != BasicType::Numeric {
+                    return Err(SemanticError::TypeMismatch {
+                        expected: BasicType::Numeric,
+                        found: ty,
+                        span: placeholder_span(),
+                    });
+                }
             }
             Statement::Goto { target } => {
                 self.analyze_expression(target)?;
