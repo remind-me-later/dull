@@ -1,5 +1,5 @@
 pub struct Program {
-    pub lines: std::collections::BTreeMap<u16, crate::parse::line::Line>,
+    pub lines: std::collections::BTreeMap<u16, crate::parse::code_line::CodeLine>,
 }
 
 impl Program {

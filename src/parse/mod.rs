@@ -16,7 +16,7 @@ use crate::{
             memory_area::MemoryArea,
             unary_op::UnaryOp,
         },
-        line::Line,
+        code_line::CodeLine,
         statement::{
             Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
             LetInner, LineInner, PrintInner, PrintSeparator, Printable, Statement, StatementInner,
@@ -26,7 +26,7 @@ use crate::{
 };
 
 pub mod expression;
-pub mod line;
+pub mod code_line;
 pub mod program;
 pub mod statement;
 
@@ -2281,7 +2281,7 @@ where
     }
 
     /// Parse a line with proper error reporting
-    fn parse_line_with_recovery(&mut self) -> ParseResult<Option<Line>> {
+    fn parse_line_with_recovery(&mut self) -> ParseResult<Option<CodeLine>> {
         let start_span = self.current_span();
 
         match self.peek_token() {
@@ -2346,11 +2346,13 @@ where
                     });
                 }
 
-                Ok(Some(Line {
-                    label,
-                    number: line_number,
-                    statements,
-                }))
+                // Calculate the full line span from start to end of line
+                let end_span = newline.map(|t| *t.span())
+                    .or_else(|| eof.map(|t| *t.span()))
+                    .unwrap_or_else(|| self.current_span());
+                let line_span = start_span.extend(end_span);
+
+                Ok(Some(CodeLine::new(line_number, label, statements, line_span)))
             }
             _ => {
                 // Check if we're at EOF - this is not an error, just no more lines

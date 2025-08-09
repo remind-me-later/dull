@@ -1,12 +1,27 @@
+use crate::error::Span;
 use crate::parse::statement::Statement;
 
-pub struct Line {
+pub struct CodeLine {
     pub number: u16,
     pub label: Option<String>,
     pub statements: Vec<Statement>,
+    pub span: Span,
 }
 
-impl Line {
+impl CodeLine {
+    pub fn new(number: u16, label: Option<String>, statements: Vec<Statement>, span: Span) -> Self {
+        Self {
+            number,
+            label,
+            statements,
+            span,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(self.number.to_le_bytes().as_slice());
         if let Some(label) = &self.label {
@@ -23,7 +38,7 @@ impl Line {
     }
 }
 
-impl std::fmt::Display for Line {
+impl std::fmt::Display for CodeLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(label) = &self.label {
             write!(f, "{} \"{}\"", self.number, label)?;

@@ -2,6 +2,7 @@ use crate::error::{SemanticError, SemanticResult, Span};
 use crate::lex::{identifier::Identifier, keyword::Keyword};
 use crate::parse::statement::StatementInner;
 use crate::parse::{
+    code_line::CodeLine,
     expression::{
         Expr,
         binary_op::BinaryOp,
@@ -10,7 +11,6 @@ use crate::parse::{
         lvalue::{LValue, LValueInner},
         unary_op::UnaryOp,
     },
-    line::Line,
     program::Program,
     statement::{Assignment, BeepOptionalParams, DimInner, LCursorClause, LineInner, Statement},
 };
@@ -107,7 +107,7 @@ impl SemanticAnalyzer {
     }
 
     /// Analyze a single line
-    fn analyze_line(&mut self, line: &Line) -> SemanticResult<()> {
+    fn analyze_line(&mut self, line: &CodeLine) -> SemanticResult<()> {
         // println!("Analyzing line {} with statements:", line.number);
         // for (i, statement) in line.statements.iter().enumerate() {
         //     println!("  Statement {}: {}", i + 1, statement);
