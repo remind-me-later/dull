@@ -1,12 +1,12 @@
 1 "LE LOUP DES MERS"
 2 "Hebdogiciel no.84"
-3 " directions : 8,6,4,2"
-4 " periscope : P,O"
-5 " radar : L,K"
-6 " check-list : CL"
-7 " assiette : fleches"
-8 " torpille : shift +C,D"
-9 " base en (0,0,-100)"
+3 " directions : 8,6,4,2
+4 " periscope : P,O
+5 " radar : L,K
+6 " check-list : CL
+7 " assiette : fleches
+8 " torpille : shift +C,D
+9 " base en (0,0,-100)
 20 "A"CLEAR :RESTORE :ON ERROR  GOTO "%"
 25 DIM A$(4)*48,B$(4)*32,E$(3)*20,C(4),D(4)
 28 RANDOM :C(1)=RND 10,C(2)=RND 10+10,C(3)=0,C(4)=20
@@ -127,8 +127,8 @@
 718 GCURSOR 100:GPRINT 0
 723 FOR M=1 TO -CP:BEEP 1,M,10:NEXT M
 725 IF CP=PR THEN 1000
-730 IF CP-10=PR OR CP-20=PR OR CP+10=PR OR CP+20=PR LET ET=ET-RND 8:FOR M=-30 TO 0:BEEP 2,-M,5:NEXT M
-740 IF CP+40=PR OR CP+30=PR LET ET=ET-RND 2:FOR M=20 TO 1 STEP -1:BEEP 1,M,2:NEXT M
+730 IF CP-10=PR OR CP-20=PR OR CP+10=PR OR CP+20=PRLET ET=ET-RND 8:FOR M=-30 TO 0:BEEP 2,-M,5:NEXT M
+740 IF CP+40=PR OR CP+30=PRLET ET=ET-RND 2:FOR M=20 TO 1 STEP -1:BEEP 1,M,2:NEXT M
 755 IF ET<0 THEN 1000
 760 IF RND 2=1 THEN 236
 780  GOTO 710

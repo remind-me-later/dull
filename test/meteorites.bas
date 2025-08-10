@@ -1,5 +1,5 @@
-1 "METEORITES - hebdo 58"
-2 "Touches: A Q 2 4 6 8"
+1 "METEORITES - hebdo 58
+2 "Touches: A Q 2 4 6 8
 9 "A"CLEAR :T=4,Y=10,E$="0000000000":RANDOM 
 10 R=500,A=12,B=28,E=8,T=T-1
 14 IF T=0WAIT :PRINT "Score final";S:END

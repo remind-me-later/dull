@@ -1,8 +1,8 @@
 1 "SLALOM"
-2 "Hebdogiciel No 90"
-3 "Deplacement: SHIFT / ."
-4 "Chgt vitesse: pave num."
-5 "Voir les scores: DEF Z"
+2 "Hebdogiciel No 90
+3 "Deplacement: SHIFT / .
+4 "Chgt vitesse: pave num.
+5 "Voir les scores: DEF Z
 30 "A"RANDOM :CLS :WAIT 0:CLEAR :POKE &79B4,&B2,0:DIM A$(0)*80:Y$=CHR$ 34
 50 CURSOR 10:Y=PEEK &764E,Z=PEEK &764F:POKE &764E,0,0
 60 GPRINT "242A2A2A12003E20202020003C0A0A0A3C003E20202020001C2222221C003E0408043E"

@@ -1,7 +1,7 @@
 1 "TEMPTER"
-2 "Sharpentiers No 8"
-3 "Deplacements: 2 4 6 8"
-4 "Feu!:SPACE Trou mur:G"
+2 "Sharpentiers No 8
+3 "Deplacements: 2 4 6 8
+4 "Feu!:SPACE Trou mur:G
 5 "A" GOTO 800
 10 DATA E-1,F
 11 DATA E,F-1
