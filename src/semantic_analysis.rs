@@ -126,7 +126,7 @@ impl SemanticAnalyzer {
     /// Analyze a statement
     fn analyze_statement(&mut self, statement: &Statement) -> SemanticResult<()> {
         match &statement.inner {
-            StatementInner::Let { inner } => {
+            StatementInner::Let { inner, .. } => {
                 for assignment in inner.assignments() {
                     self.analyze_assignment(assignment)?;
                 }
@@ -134,6 +134,7 @@ impl SemanticAnalyzer {
             StatementInner::If {
                 condition,
                 then_stmt,
+                ..
             } => {
                 // Surprisingly, the condition can be a string
                 let _condition_type = self.analyze_expression(condition)?;

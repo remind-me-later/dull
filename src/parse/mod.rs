@@ -908,7 +908,7 @@ where
         }
     }
 
-    fn parse_let_inner(&mut self, is_let_mandatory: bool) -> ParseResult<Option<LetInner>> {
+    fn parse_let_stmt(&mut self, is_let_mandatory: bool) -> ParseResult<Option<Statement>> {
         let let_kw = self.next_if_token_eq(&Token::Keyword(Keyword::Let));
 
         if is_let_mandatory {
@@ -932,7 +932,13 @@ where
 
             let end_span = assignments.last().map(|a| a.span()).unwrap_or(start_span);
             let full_span = start_span.extend(end_span);
-            Ok(Some(LetInner::new(assignments, full_span)))
+            Ok(Some(Statement::new(
+                StatementInner::Let {
+                    inner: LetInner::new(assignments, full_span),
+                    is_let_kw_present_in_source: true,
+                },
+                full_span,
+            )))
         } else if let Some(first_assignment) = self.parse_assignment()? {
             let start_span = first_assignment.span();
             let mut assignments = vec![first_assignment];
@@ -952,7 +958,13 @@ where
 
             let end_span = assignments.last().map(|a| a.span()).unwrap_or(start_span);
             let full_span = start_span.extend(end_span);
-            Ok(Some(LetInner::new(assignments, full_span)))
+            Ok(Some(Statement::new(
+                StatementInner::Let {
+                    inner: LetInner::new(assignments, full_span),
+                    is_let_kw_present_in_source: let_kw.is_some(),
+                },
+                full_span,
+            )))
         } else {
             Ok(None)
         }
@@ -1326,12 +1338,8 @@ where
             return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_let_inner(is_let_mandatory)? {
-            let start_span = self.current_span();
-            return Ok(Some(Statement::new(
-                StatementInner::Let { inner: stmt },
-                start_span,
-            )));
+        if let Some(stmt) = self.parse_let_stmt(is_let_mandatory)? {
+            return Ok(Some(stmt));
         }
 
         Ok(None)
@@ -1349,13 +1357,17 @@ where
         {
             let start_span = self.current_span();
             let condition = self.expect_expression()?;
-            self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
+            let then_kw = self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
             if let Some(then_stmt) = self.parse_statement(true)? {
                 let full_span = start_span.extend(then_stmt.span);
+                let is_goto_stmt = matches!(then_stmt.inner, StatementInner::Goto { .. });
+
                 Ok(Some(Statement::new(
                     StatementInner::If {
                         condition,
                         then_stmt: Box::new(then_stmt),
+                        is_then_kw_present_in_source: then_kw.is_some(),
+                        is_goto_kw_present_in_source: is_goto_stmt,
                     },
                     full_span,
                 )))
@@ -1368,6 +1380,8 @@ where
                     StatementInner::If {
                         condition,
                         then_stmt: Box::new(goto_stmt),
+                        is_then_kw_present_in_source: then_kw.is_some(),
+                        is_goto_kw_present_in_source: false,
                     },
                     full_span,
                 )))

@@ -1,4 +1,4 @@
-use crate::{error::Span, parse::statement::assignment::Assignment};
+use crate::{error::Span, lex::keyword::Keyword, parse::statement::assignment::Assignment};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetInner {
@@ -35,6 +35,15 @@ impl LetInner {
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(",")
+        }
+    }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
+        for (i, assignment) in self.assignments.iter().enumerate() {
+            assignment.write_bytes(bytes, preserve_source_parens);
+            if i < self.assignments.len() - 1 {
+                bytes.push(b',');
+            }
         }
     }
 }

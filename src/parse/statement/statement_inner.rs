@@ -12,10 +12,13 @@ use crate::parse::{
 pub enum StatementInner {
     Let {
         inner: LetInner,
+        is_let_kw_present_in_source: bool,
     },
     If {
         condition: Expr,
         then_stmt: Box<Statement>,
+        is_then_kw_present_in_source: bool,
+        is_goto_kw_present_in_source: bool,
     },
     Print {
         inner: PrintInner,
@@ -139,28 +142,41 @@ impl StatementInner {
         use crate::lex::keyword::Keyword;
 
         match self {
-            StatementInner::Let { inner } => {
-                for (i, assignment) in inner.assignments().iter().enumerate() {
-                    assignment.write_bytes(bytes, preserve_source_parens);
-                    if i < inner.assignments().len() - 1 {
-                        bytes.push(b',');
-                    }
+            StatementInner::Let {
+                inner,
+                is_let_kw_present_in_source,
+            } => {
+                if preserve_source_parens && *is_let_kw_present_in_source {
+                    bytes.extend_from_slice(Keyword::Let.internal_code().to_be_bytes().as_slice());
                 }
+
+                inner.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::If {
                 condition,
                 then_stmt,
+                is_then_kw_present_in_source,
+                is_goto_kw_present_in_source,
             } => {
                 bytes.extend_from_slice(Keyword::If.internal_code().to_be_bytes().as_slice());
                 condition.write_bytes(bytes, preserve_source_parens);
+                if preserve_source_parens && *is_then_kw_present_in_source {
+                    bytes.extend_from_slice(Keyword::Then.internal_code().to_be_bytes().as_slice());
+                }
                 match &then_stmt.inner {
-                    StatementInner::Let { inner } => {
+                    StatementInner::Let { inner, .. } => {
+                        // LET keyword is mandatory here
                         bytes.extend_from_slice(
                             Keyword::Let.internal_code().to_be_bytes().as_slice(),
                         );
-                        bytes.extend_from_slice(inner.show_with_context(true).as_bytes());
+                        inner.write_bytes(bytes, preserve_source_parens);
                     }
                     StatementInner::Goto { target } => {
+                        if preserve_source_parens && *is_goto_kw_present_in_source {
+                            bytes.extend_from_slice(
+                                Keyword::Goto.internal_code().to_be_bytes().as_slice(),
+                            );
+                        }
                         target.write_bytes(bytes, preserve_source_parens);
                     }
                     _ => {
@@ -477,12 +493,13 @@ impl StatementInner {
 impl std::fmt::Display for StatementInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StatementInner::Let { inner } => write!(f, "{}", inner.show_with_context(false)),
+            StatementInner::Let { inner, .. } => write!(f, "{}", inner.show_with_context(false)),
             StatementInner::If {
                 condition,
                 then_stmt,
+                ..
             } => match &then_stmt.as_ref().inner {
-                StatementInner::Let { inner } => {
+                StatementInner::Let { inner, .. } => {
                     write!(f, "IF {condition} THEN {}", inner.show_with_context(true))
                 }
                 _ => write!(f, "IF {condition} THEN {then_stmt}"),
