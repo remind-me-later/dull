@@ -90,7 +90,7 @@ where
         self.tokens
             .peek()
             .map(|token| *token.span())
-            .unwrap_or_else(|| Span::single(0)) // Default span if no tokens left
+            .unwrap_or_else(|| unreachable!())
     }
 
     /// Helper method to expect a specific token and return an error if not found
@@ -132,7 +132,7 @@ where
             while self.peek_token() == &Token::Symbol(Symbol::Exp) {
                 self.next_spanned();
                 let right = self.expect_expression_factor()?;
-                let span = left.span().extend(right.span());
+                let span = left.span().merge(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), BinaryOp::Exp, Box::new(right)),
                     span,
@@ -156,7 +156,7 @@ where
             Some(Token::Symbol(Symbol::Add)) => {
                 let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
-                let span = op_span.extend(right.span());
+                let span = op_span.merge(right.span());
                 Ok(Some(Expr::new(
                     ExprInner::Unary(UnaryOp::Plus, Box::new(right)),
                     span,
@@ -165,7 +165,7 @@ where
             Some(Token::Symbol(Symbol::Sub)) => {
                 let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
-                let span = op_span.extend(right.span());
+                let span = op_span.merge(right.span());
                 Ok(Some(Expr::new(
                     ExprInner::Unary(UnaryOp::Minus, Box::new(right)),
                     span,
@@ -198,7 +198,7 @@ where
                     Token::Symbol(Symbol::Div) => BinaryOp::Div,
                     _ => unreachable!(),
                 };
-                let span = left.span().extend(right.span());
+                let span = left.span().merge(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
                     span,
@@ -234,7 +234,7 @@ where
                     Token::Symbol(Symbol::Sub) => BinaryOp::Sub,
                     _ => unreachable!(),
                 };
-                let span = left.span().extend(right.span());
+                let span = left.span().merge(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
                     span,
@@ -279,7 +279,7 @@ where
                     Token::Symbol(Symbol::Geq) => BinaryOp::Geq,
                     _ => unreachable!(),
                 };
-                let span = left.span().extend(right.span());
+                let span = left.span().merge(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
                     span,
@@ -298,7 +298,7 @@ where
             Some(op_token) => {
                 let op_span = *op_token.span();
                 let right = self.expect_unary_logical_expr()?;
-                let span = op_span.extend(right.span());
+                let span = op_span.merge(right.span());
                 Ok(Some(Expr::new(
                     ExprInner::Unary(UnaryOp::Not, Box::new(right)),
                     span,
@@ -326,7 +326,7 @@ where
                 )
             }) {
                 let right = self.expect_unary_logical_expr()?;
-                let span = left.span().extend(right.span());
+                let span = left.span().merge(right.span());
                 left = Expr::new(
                     ExprInner::Binary(
                         Box::new(left),
@@ -413,7 +413,7 @@ where
                 &Token::Symbol(Symbol::RParen),
                 "Expected closing parenthesis",
             )?;
-            let span = start_span.extend(*end_token.span());
+            let span = start_span.merge(*end_token.span());
             return Ok(Some(Expr::new(
                 ExprInner::Parentheses(Box::new(expr)),
                 span,
@@ -457,8 +457,8 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                // Create a span that extends from start to the end of the expression
-                let span = start_span.extend(expr.span());
+                // Create a span that merges from start to the end of the expression
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Int {
                         expr: Box::new(expr),
@@ -470,7 +470,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Sgn {
                         expr: Box::new(expr),
@@ -482,7 +482,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let arg = self.expect_expression_factor()?;
-                let span = start_span.extend(arg.span());
+                let span = start_span.merge(arg.span());
                 Ok(Some(Function::new(
                     FunctionInner::Status { arg: Box::new(arg) },
                     span,
@@ -492,7 +492,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Val {
                         expr: Box::new(expr),
@@ -504,7 +504,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Str {
                         expr: Box::new(expr),
@@ -516,7 +516,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Chr {
                         expr: Box::new(expr),
@@ -528,7 +528,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Abs {
                         expr: Box::new(expr),
@@ -540,7 +540,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Len {
                         expr: Box::new(expr),
@@ -552,7 +552,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
-                let span = start_span.extend(address.span());
+                let span = start_span.merge(address.span());
                 Ok(Some(Function::new(
                     FunctionInner::Peek {
                         memory_area: MemoryArea::Me0,
@@ -565,7 +565,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
-                let span = start_span.extend(address.span());
+                let span = start_span.merge(address.span());
                 Ok(Some(Function::new(
                     FunctionInner::Peek {
                         memory_area: MemoryArea::Me1,
@@ -578,7 +578,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Ln {
                         expr: Box::new(expr),
@@ -590,7 +590,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Log {
                         expr: Box::new(expr),
@@ -602,7 +602,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Dms {
                         expr: Box::new(expr),
@@ -614,7 +614,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Deg {
                         expr: Box::new(expr),
@@ -626,7 +626,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Tan {
                         expr: Box::new(expr),
@@ -638,7 +638,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Cos {
                         expr: Box::new(expr),
@@ -650,7 +650,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Sin {
                         expr: Box::new(expr),
@@ -662,7 +662,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Sqr {
                         expr: Box::new(expr),
@@ -693,7 +693,7 @@ where
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after MID$ length",
                 )?;
-                let span = start_span.extend(*end_token.span());
+                let span = start_span.merge(*end_token.span());
                 Ok(Some(Function::new(
                     FunctionInner::Mid {
                         string: Box::new(string),
@@ -719,7 +719,7 @@ where
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after LEFT$ length",
                 )?;
-                let span = start_span.extend(*end_token.span());
+                let span = start_span.merge(*end_token.span());
                 Ok(Some(Function::new(
                     FunctionInner::Left {
                         string: Box::new(string),
@@ -743,7 +743,7 @@ where
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after RIGHT$ length",
                 )?;
-                let span = start_span.extend(*end_token.span());
+                let span = start_span.merge(*end_token.span());
                 Ok(Some(Function::new(
                     FunctionInner::Right {
                         string: Box::new(string),
@@ -756,7 +756,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span());
+                let span = start_span.merge(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Asc {
                         expr: Box::new(expr),
@@ -768,7 +768,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let position = self.expect_expression_factor()?;
-                let span = start_span.extend(position.span());
+                let span = start_span.merge(position.span());
                 Ok(Some(Function::new(
                     FunctionInner::Point {
                         position: Box::new(position),
@@ -780,7 +780,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let range_end = self.expect_expression_factor()?;
-                let span = start_span.extend(range_end.span());
+                let span = start_span.merge(range_end.span());
                 Ok(Some(Function::new(
                     FunctionInner::Rnd {
                         range_end: Box::new(range_end),
@@ -811,7 +811,7 @@ where
                             &Token::Symbol(Symbol::RParen),
                             "Expected ')' after 2D array indices",
                         )?;
-                        let span = start_span.extend(*end_token.span());
+                        let span = start_span.merge(*end_token.span());
                         return Ok(Some(LValue {
                             inner: LValueInner::Array2DAccess {
                                 identifier,
@@ -826,7 +826,7 @@ where
                         &Token::Symbol(Symbol::RParen),
                         "Expected ')' after 1D array index",
                     )?;
-                    let span = start_span.extend(*end_token.span());
+                    let span = start_span.merge(*end_token.span());
                     return Ok(Some(LValue {
                         inner: LValueInner::Array1DAccess {
                             identifier,
@@ -855,7 +855,7 @@ where
                     &Token::Symbol(Symbol::RParen),
                     "Expected ')' after memory area index",
                 )?;
-                let span = start_span.extend(*end_token.span());
+                let span = start_span.merge(*end_token.span());
 
                 Ok(Some(LValue::new(
                     LValueInner::FixedMemoryAreaAccess {
@@ -900,7 +900,7 @@ where
             self.expect_token(&Token::Symbol(Symbol::Eq), "Expected '=' in assignment")?;
             let rhs = self.expect_expression()?;
             let end_span = rhs.span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Assignment::new(lhs, Box::new(rhs), full_span)))
         } else {
             Ok(None)
@@ -939,7 +939,7 @@ where
             }
 
             let end_span = assignments.last().map(|a| a.span()).unwrap_or(start_span);
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Let {
                     inner: LetInner::new(assignments, full_span),
@@ -965,7 +965,7 @@ where
             }
 
             let end_span = assignments.last().map(|a| a.span()).unwrap_or(start_span);
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Let {
                     inner: LetInner::new(assignments, full_span),
@@ -983,7 +983,7 @@ where
             let start_span = *start_token.span();
             let format = self.parse_expression()?;
             if let Some(format) = format {
-                let full_span = start_span.extend(format.span());
+                let full_span = start_span.merge(format.span());
                 Ok(Some(UsingClause::new(Some(format), full_span)))
             } else {
                 Ok(Some(UsingClause::new(None, start_span)))
@@ -1023,7 +1023,7 @@ where
         }
 
         let end_span = self.current_span();
-        let full_span = start_span.extend(end_span);
+        let full_span = start_span.merge(end_span);
         Ok(PrintInner::new(exprs, full_span))
     }
 
@@ -1034,7 +1034,7 @@ where
                 let start_span = *start_token.span();
                 let print_inner = self.parse_print_inner(start_span)?;
                 let end_span = self.current_span();
-                let full_span = start_span.extend(end_span);
+                let full_span = start_span.merge(end_span);
                 Ok(Some(Statement::new(
                     StatementInner::Print { inner: print_inner },
                     full_span,
@@ -1045,7 +1045,7 @@ where
                 let start_span = *start_token.span();
                 let pause_inner = self.parse_print_inner(start_span)?;
                 let end_span = self.current_span();
-                let full_span = start_span.extend(end_span);
+                let full_span = start_span.merge(end_span);
                 Ok(Some(Statement::new(
                     StatementInner::Pause { inner: pause_inner },
                     full_span,
@@ -1096,7 +1096,7 @@ where
                     .as_ref()
                     .map(|e| e.span())
                     .unwrap_or_else(|| self.current_span());
-                let full_span = start_span.extend(end_span);
+                let full_span = start_span.merge(end_span);
 
                 match maybe_cols {
                     Some(cols) => Ok(Some(DimInner::DimInner2D {
@@ -1148,7 +1148,7 @@ where
             }
 
             let end_span = self.current_span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Dim { decls },
                 full_span,
@@ -1166,7 +1166,7 @@ where
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
             let end_span = self.current_span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Rotate { expr },
                 full_span,
@@ -1370,7 +1370,7 @@ where
             let condition = self.expect_expression()?;
             let then_kw = self.next_if_token_eq(&Token::Keyword(Keyword::Then)); // optional
             if let Some(then_stmt) = self.parse_statement(true)? {
-                let full_span = start_span.extend(then_stmt.span);
+                let full_span = start_span.merge(then_stmt.span);
                 let is_goto_stmt = matches!(then_stmt.inner, StatementInner::Goto { .. });
 
                 Ok(Some(Statement::new(
@@ -1384,7 +1384,7 @@ where
                 )))
             } else {
                 let goto_expr = self.expect_expression()?;
-                let full_span = start_span.extend(goto_expr.span());
+                let full_span = start_span.merge(goto_expr.span());
                 let goto_stmt =
                     Statement::new(StatementInner::Goto { target: goto_expr }, full_span);
                 Ok(Some(Statement::new(
@@ -1434,7 +1434,7 @@ where
             }
 
             let end_span = self.current_span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Input { input_exprs },
                 full_span,
@@ -1486,7 +1486,7 @@ where
                 .as_ref()
                 .map(|e| e.span())
                 .unwrap_or(to_expr.span());
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::For {
                     assignment,
@@ -1507,7 +1507,7 @@ where
         {
             let start_span = self.current_span();
             let lvalue = self.expect_lvalue()?;
-            let full_span = start_span.extend(lvalue.span);
+            let full_span = start_span.merge(lvalue.span);
             Ok(Some(Statement::new(
                 StatementInner::Next { lvalue },
                 full_span,
@@ -1529,7 +1529,7 @@ where
         {
             let start_span = self.current_span();
             let target = self.expect_expression()?;
-            let full_span = start_span.extend(target.span());
+            let full_span = start_span.merge(target.span());
             Ok(Some(Statement::new(
                 StatementInner::Goto { target },
                 full_span,
@@ -1546,7 +1546,7 @@ where
         {
             let start_span = self.current_span();
             let target = self.expect_expression()?;
-            let full_span = start_span.extend(target.span());
+            let full_span = start_span.merge(target.span());
             Ok(Some(Statement::new(
                 StatementInner::Gosub { target },
                 full_span,
@@ -1572,7 +1572,7 @@ where
                 )?;
 
                 let expr = self.expect_expression()?;
-                let full_span = start_span.extend(expr.span());
+                let full_span = start_span.merge(expr.span());
                 return Ok(Some(Statement::new(
                     StatementInner::OnErrorGoto { target: expr },
                     full_span,
@@ -1593,7 +1593,7 @@ where
                     targets.push(self.expect_expression()?);
                 }
                 let end_span = targets.last().unwrap().span();
-                let full_span = start_span.extend(end_span);
+                let full_span = start_span.merge(end_span);
                 Ok(Some(Statement::new(
                     StatementInner::OnGoto { expr, targets },
                     full_span,
@@ -1610,7 +1610,7 @@ where
                     targets.push(self.expect_expression()?);
                 }
                 let end_span = targets.last().unwrap().span();
-                let full_span = start_span.extend(end_span);
+                let full_span = start_span.merge(end_span);
                 Ok(Some(Statement::new(
                     StatementInner::OnGosub { expr, targets },
                     full_span,
@@ -1633,7 +1633,7 @@ where
             let start_span = self.current_span();
             let expr = self.parse_expression()?;
             let end_span = expr.as_ref().map(|e| e.span()).unwrap_or(start_span);
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Wait { expr },
                 full_span,
@@ -1666,7 +1666,7 @@ where
             }
 
             let end_span = self.current_span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Gprint { exprs },
                 full_span,
@@ -1683,7 +1683,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span());
+            let full_span = start_span.merge(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::GCursor { expr },
                 full_span,
@@ -1699,7 +1699,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span());
+            let full_span = start_span.merge(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::Cursor { expr },
                 full_span,
@@ -1717,7 +1717,7 @@ where
             // Check for BEEP ON/OFF
             if self.peek_token() == &Token::Keyword(Keyword::On) {
                 let on_token = self.tokens.next().unwrap();
-                let full_span = start_span.extend(*on_token.span());
+                let full_span = start_span.merge(*on_token.span());
                 return Ok(Some(Statement::new(
                     StatementInner::BeepOnOff {
                         switch_beep_on: true,
@@ -1727,7 +1727,7 @@ where
             }
             if self.peek_token() == &Token::Keyword(Keyword::Off) {
                 let off_token = self.tokens.next().unwrap();
-                let full_span = start_span.extend(*off_token.span());
+                let full_span = start_span.merge(*off_token.span());
                 return Ok(Some(Statement::new(
                     StatementInner::BeepOnOff {
                         switch_beep_on: false,
@@ -1757,7 +1757,7 @@ where
                     .as_ref()
                     .map(|d| d.span())
                     .unwrap_or(frequency.span());
-                let param_full_span = param_start_span.extend(param_end_span);
+                let param_full_span = param_start_span.merge(param_end_span);
                 Some(BeepParams::new(frequency, duration, param_full_span))
             } else {
                 None
@@ -1769,7 +1769,7 @@ where
                 .map(|d| d.span())
                 .or_else(|| optional_params.as_ref().map(|p| p.frequency.span()))
                 .unwrap_or(repetitions_expr.span());
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Beep {
                     repetitions_expr,
@@ -1810,7 +1810,7 @@ where
         }
 
         let end_span = exprs.last().unwrap().span();
-        let full_span = start_span.extend(end_span);
+        let full_span = start_span.merge(end_span);
         Ok(Some(Statement::new(
             StatementInner::Poke { memory_area, exprs },
             full_span,
@@ -1831,7 +1831,7 @@ where
                 destinations.push(self.expect_lvalue()?);
             }
             let end_span = destinations.last().unwrap().span;
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Read { destinations },
                 full_span,
@@ -1854,7 +1854,7 @@ where
                 exprs.push(self.expect_expression()?);
             }
             let end_span = exprs.last().unwrap().span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             return Ok(Some(Statement::new(StatementInner::Data(exprs), full_span)));
         }
         Ok(None)
@@ -1868,7 +1868,7 @@ where
             let start_span = self.current_span();
             let expr = self.parse_expression()?;
             let end_span = expr.as_ref().map(|e| e.span()).unwrap_or(start_span);
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Restore { expr },
                 full_span,
@@ -1908,7 +1908,7 @@ where
                 None
             };
             let end_span = variable.as_ref().map(|v| v.span).unwrap_or(expr.span());
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Call { expr, variable },
                 full_span,
@@ -2040,7 +2040,7 @@ where
         };
 
         let end_span = self.current_span();
-        let full_span = start_span.extend(end_span);
+        let full_span = start_span.merge(end_span);
         let inner = LineInner::new(start_point, end_points, line_type, color, is_box, full_span);
 
         Ok(Some(Statement::new(
@@ -2162,7 +2162,7 @@ where
         };
 
         let end_span = self.current_span();
-        let full_span = start_span.extend(end_span);
+        let full_span = start_span.merge(end_span);
         let inner = LineInner::new(start_point, end_points, line_type, color, is_box, full_span);
 
         Ok(Some(Statement::new(
@@ -2178,7 +2178,7 @@ where
         {
             let start_span = self.current_span();
             let color = self.expect_expression()?;
-            let full_span = start_span.extend(color.span());
+            let full_span = start_span.merge(color.span());
             return Ok(Some(Statement::new(
                 StatementInner::Color { expr: color },
                 full_span,
@@ -2194,7 +2194,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span());
+            let full_span = start_span.merge(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::CSize { expr },
                 full_span,
@@ -2210,7 +2210,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span());
+            let full_span = start_span.merge(expr.span());
             return Ok(Some(Statement::new(StatementInner::Lf { expr }, full_span)));
         }
         Ok(None)
@@ -2228,7 +2228,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span());
+            let full_span = start_span.merge(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::LCursor(LCursorClause::new(expr, full_span)),
                 full_span,
@@ -2245,7 +2245,7 @@ where
             let start_span = self.current_span();
             let inner = self.parse_lprint_inner(start_span)?;
             let end_span = self.current_span();
-            let full_span = start_span.extend(end_span);
+            let full_span = start_span.merge(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::LPrint { inner },
                 full_span,
@@ -2262,7 +2262,7 @@ where
                 let start_token = self.tokens.next().unwrap();
                 let start_span = *start_token.span();
                 let expr = self.expect_expression()?;
-                let full_span = start_span.extend(expr.span());
+                let full_span = start_span.merge(expr.span());
                 LPrintPrintable::LCursorClause(LCursorClause::new(expr, full_span))
             } else if let Some(expr) = self.parse_expression()? {
                 LPrintPrintable::Expr(expr)
@@ -2280,7 +2280,7 @@ where
         }
 
         let end_span = self.current_span();
-        let full_span = start_span.extend(end_span);
+        let full_span = start_span.merge(end_span);
         Ok(LPrintInner::new(exprs, full_span))
     }
 
@@ -2304,7 +2304,7 @@ where
                 &Token::Symbol(Symbol::RParen),
                 "Expected ')' after GLCURSOR coordinates",
             )?;
-            let full_span = start_span.extend(*rparen.span());
+            let full_span = start_span.merge(*rparen.span());
             return Ok(Some(Statement::new(
                 StatementInner::GlCursor { x_expr, y_expr },
                 full_span,
@@ -2446,7 +2446,7 @@ where
                     .map(|t| *t.span())
                     .or_else(|| eof.map(|t| *t.span()))
                     .unwrap_or_else(|| self.current_span());
-                let line_span = start_span.extend(end_span);
+                let line_span = start_span.merge(end_span);
 
                 Ok(Some(CodeLine::new(
                     line_number,

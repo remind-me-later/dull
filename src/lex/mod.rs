@@ -6,6 +6,8 @@ pub mod symbol;
 
 use std::iter::Peekable;
 
+use codespan::{ByteIndex, ByteOffset};
+
 use self::{
     binary_number::BinaryNumber, decimal_number::DecimalNumber, identifier::Identifier,
     keyword::Keyword, symbol::Symbol,
@@ -73,7 +75,7 @@ impl std::fmt::Display for Token {
 
 pub struct Lexer<'a> {
     input: Peekable<std::str::Chars<'a>>,
-    position: usize,
+    position: ByteIndex,
     is_done: bool,
 }
 
@@ -81,14 +83,14 @@ impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Lexer {
             input: input.chars().peekable(),
-            position: 0,
+            position: ByteIndex::from(0),
             is_done: false,
         }
     }
 
     fn advance(&mut self) -> Option<char> {
         if let Some(ch) = self.input.next() {
-            self.position += 1;
+            self.position += ByteOffset::from(ch.len_utf8() as i64);
             Some(ch)
         } else {
             None
@@ -99,7 +101,7 @@ impl<'a> Lexer<'a> {
         self.input.peek()
     }
 
-    fn span_from(&self, start: usize) -> Span {
+    fn span_from(&self, start: ByteIndex) -> Span {
         Span::new(start, self.position)
     }
 }
