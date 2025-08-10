@@ -27,10 +27,10 @@ impl Assignment {
         &self.expr
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
-        self.lvalue.write_bytes(bytes, preserve_source_parens);
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
+        self.lvalue.write_bytes(bytes, preserve_source_wording);
         bytes.push(b'=');
-        self.expr.write_bytes(bytes, preserve_source_parens);
+        self.expr.write_bytes(bytes, preserve_source_wording);
     }
 }
 

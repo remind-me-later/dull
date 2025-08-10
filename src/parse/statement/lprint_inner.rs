@@ -34,13 +34,13 @@ impl LPrintInner {
         &self,
         is_inside_lprint: bool,
         bytes: &mut Vec<u8>,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
         for (printable, sep) in self.exprs.iter() {
             match printable {
-                LPrintPrintable::Expr(expr) => expr.write_bytes(bytes, preserve_source_parens),
+                LPrintPrintable::Expr(expr) => expr.write_bytes(bytes, preserve_source_wording),
                 LPrintPrintable::LCursorClause(cursor) => {
-                    cursor.write_bytes_with_context(is_inside_lprint, bytes, preserve_source_parens)
+                    cursor.write_bytes_with_context(is_inside_lprint, bytes, preserve_source_wording)
                 }
             }
             sep.write_bytes(bytes);

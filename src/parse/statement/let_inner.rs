@@ -38,9 +38,9 @@ impl LetInner {
         }
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         for (i, assignment) in self.assignments.iter().enumerate() {
-            assignment.write_bytes(bytes, preserve_source_parens);
+            assignment.write_bytes(bytes, preserve_source_wording);
             if i < self.assignments.len() - 1 {
                 bytes.push(b',');
             }

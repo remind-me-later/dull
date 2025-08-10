@@ -12,9 +12,9 @@ impl Program {
         }
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         for line in self.lines.values() {
-            line.write_bytes(bytes, preserve_source_parens);
+            line.write_bytes(bytes, preserve_source_wording);
             // Carriage return at the end of every line
             bytes.push(b'\r');
         }

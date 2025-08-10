@@ -33,7 +33,7 @@ pub enum StatementInner {
         using_clause: UsingClause,
     },
     Input {
-        input_exprs: Vec<(Option<String>, LValue)>,
+        input_exprs: Vec<(Option<Expr>, LValue)>,
     },
     End,
     Remark {
@@ -138,7 +138,7 @@ pub enum StatementInner {
 }
 
 impl StatementInner {
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         use crate::lex::keyword::Keyword;
 
         match self {
@@ -146,11 +146,11 @@ impl StatementInner {
                 inner,
                 is_let_kw_present_in_source,
             } => {
-                if preserve_source_parens && *is_let_kw_present_in_source {
+                if preserve_source_wording && *is_let_kw_present_in_source {
                     bytes.extend_from_slice(Keyword::Let.internal_code().to_be_bytes().as_slice());
                 }
 
-                inner.write_bytes(bytes, preserve_source_parens);
+                inner.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::If {
                 condition,
@@ -159,8 +159,8 @@ impl StatementInner {
                 is_goto_kw_present_in_source,
             } => {
                 bytes.extend_from_slice(Keyword::If.internal_code().to_be_bytes().as_slice());
-                condition.write_bytes(bytes, preserve_source_parens);
-                if preserve_source_parens && *is_then_kw_present_in_source {
+                condition.write_bytes(bytes, preserve_source_wording);
+                if preserve_source_wording && *is_then_kw_present_in_source {
                     bytes.extend_from_slice(Keyword::Then.internal_code().to_be_bytes().as_slice());
                 }
                 match &then_stmt.inner {
@@ -169,52 +169,52 @@ impl StatementInner {
                         bytes.extend_from_slice(
                             Keyword::Let.internal_code().to_be_bytes().as_slice(),
                         );
-                        inner.write_bytes(bytes, preserve_source_parens);
+                        inner.write_bytes(bytes, preserve_source_wording);
                     }
                     StatementInner::Goto { target } => {
-                        if preserve_source_parens && *is_goto_kw_present_in_source {
+                        if preserve_source_wording && *is_goto_kw_present_in_source {
                             bytes.extend_from_slice(
                                 Keyword::Goto.internal_code().to_be_bytes().as_slice(),
                             );
                         }
-                        target.write_bytes(bytes, preserve_source_parens);
+                        target.write_bytes(bytes, preserve_source_wording);
                     }
                     _ => {
-                        then_stmt.write_bytes(bytes, preserve_source_parens);
+                        then_stmt.write_bytes(bytes, preserve_source_wording);
                     }
                 }
             }
             StatementInner::Print { inner } => {
                 bytes.extend_from_slice(Keyword::Print.internal_code().to_be_bytes().as_slice());
                 for (printable, sep) in &inner.exprs {
-                    printable.write_bytes(bytes, preserve_source_parens);
+                    printable.write_bytes(bytes, preserve_source_wording);
                     sep.write_bytes(bytes);
                 }
             }
             StatementInner::Pause { inner } => {
                 bytes.extend_from_slice(Keyword::Pause.internal_code().to_be_bytes().as_slice());
                 for (printable, sep) in &inner.exprs {
-                    printable.write_bytes(bytes, preserve_source_parens);
+                    printable.write_bytes(bytes, preserve_source_wording);
                     sep.write_bytes(bytes);
                 }
             }
             StatementInner::LPrint { inner } => {
                 bytes.extend_from_slice(Keyword::Lprint.internal_code().to_be_bytes().as_slice());
-                inner.write_bytes_with_context(true, bytes, preserve_source_parens);
+                inner.write_bytes_with_context(true, bytes, preserve_source_wording);
             }
             StatementInner::Using { using_clause } => {
-                using_clause.write_bytes(bytes);
+                using_clause.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Input { input_exprs } => {
                 bytes.extend_from_slice(Keyword::Input.internal_code().to_be_bytes().as_slice());
                 for (i, (prompt, lvalue)) in input_exprs.iter().enumerate() {
                     if let Some(prompt) = prompt {
                         bytes.push(b'"');
-                        bytes.extend_from_slice(prompt.as_bytes());
+                        prompt.write_bytes(bytes, preserve_source_wording);
                         bytes.push(b'"');
                         bytes.push(b';');
                     }
-                    lvalue.write_bytes(bytes, preserve_source_parens);
+                    lvalue.write_bytes(bytes, preserve_source_wording);
                     if i < input_exprs.len() - 1 {
                         bytes.push(b',');
                     }
@@ -234,35 +234,35 @@ impl StatementInner {
                 step_expr,
             } => {
                 bytes.extend_from_slice(Keyword::For.internal_code().to_be_bytes().as_slice());
-                assignment.write_bytes(bytes, preserve_source_parens);
+                assignment.write_bytes(bytes, preserve_source_wording);
                 bytes.extend_from_slice(Keyword::To.internal_code().to_be_bytes().as_slice());
-                to_expr.write_bytes(bytes, preserve_source_parens);
+                to_expr.write_bytes(bytes, preserve_source_wording);
                 if let Some(step) = step_expr {
                     bytes.extend_from_slice(Keyword::Step.internal_code().to_be_bytes().as_slice());
-                    step.write_bytes(bytes, preserve_source_parens);
+                    step.write_bytes(bytes, preserve_source_wording);
                 }
             }
             StatementInner::Next { lvalue } => {
                 bytes.extend_from_slice(Keyword::Next.internal_code().to_be_bytes().as_slice());
-                lvalue.write_bytes(bytes, preserve_source_parens);
+                lvalue.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Clear => {
                 bytes.extend_from_slice(Keyword::Clear.internal_code().to_be_bytes().as_slice());
             }
             StatementInner::Goto { target } => {
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_be_bytes().as_slice());
-                target.write_bytes(bytes, preserve_source_parens);
+                target.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Gosub { target } => {
                 bytes.extend_from_slice(Keyword::Gosub.internal_code().to_be_bytes().as_slice());
-                target.write_bytes(bytes, preserve_source_parens);
+                target.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::OnGoto { expr, targets } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_be_bytes().as_slice());
                 for (i, target) in targets.iter().enumerate() {
-                    target.write_bytes(bytes, preserve_source_parens);
+                    target.write_bytes(bytes, preserve_source_wording);
                     if i < targets.len() - 1 {
                         bytes.push(b',');
                     }
@@ -270,10 +270,10 @@ impl StatementInner {
             }
             StatementInner::OnGosub { expr, targets } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
                 bytes.extend_from_slice(Keyword::Gosub.internal_code().to_be_bytes().as_slice());
                 for (i, target) in targets.iter().enumerate() {
-                    target.write_bytes(bytes, preserve_source_parens);
+                    target.write_bytes(bytes, preserve_source_wording);
                     if i < targets.len() - 1 {
                         bytes.push(b',');
                     }
@@ -283,12 +283,12 @@ impl StatementInner {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_be_bytes().as_slice());
                 bytes.extend_from_slice(Keyword::Error.internal_code().to_be_bytes().as_slice());
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_be_bytes().as_slice());
-                target.write_bytes(bytes, preserve_source_parens);
+                target.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Wait { expr } => {
                 bytes.extend_from_slice(Keyword::Wait.internal_code().to_be_bytes().as_slice());
                 if let Some(expr) = expr {
-                    expr.write_bytes(bytes, preserve_source_parens);
+                    expr.write_bytes(bytes, preserve_source_wording);
                 }
             }
             StatementInner::Cls => {
@@ -300,30 +300,30 @@ impl StatementInner {
             StatementInner::Gprint { exprs } => {
                 bytes.extend_from_slice(Keyword::Gprint.internal_code().to_be_bytes().as_slice());
                 for (expr, sep) in exprs {
-                    expr.write_bytes(bytes, preserve_source_parens);
+                    expr.write_bytes(bytes, preserve_source_wording);
                     sep.write_bytes(bytes);
                 }
             }
             StatementInner::GCursor { expr } => {
                 bytes.extend_from_slice(Keyword::Gcursor.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Cursor { expr } => {
                 bytes.extend_from_slice(Keyword::Cursor.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Beep {
                 repetitions_expr,
                 optional_params,
             } => {
                 bytes.extend_from_slice(Keyword::Beep.internal_code().to_be_bytes().as_slice());
-                repetitions_expr.write_bytes(bytes, preserve_source_parens);
+                repetitions_expr.write_bytes(bytes, preserve_source_wording);
                 if let Some(params) = optional_params {
                     bytes.push(b',');
-                    params.frequency.write_bytes(bytes, preserve_source_parens);
+                    params.frequency.write_bytes(bytes, preserve_source_wording);
                     if let Some(duration) = &params.duration {
                         bytes.push(b',');
-                        duration.write_bytes(bytes, preserve_source_parens);
+                        duration.write_bytes(bytes, preserve_source_wording);
                     }
                 }
             }
@@ -348,7 +348,7 @@ impl StatementInner {
                     ),
                 }
                 for (i, expr) in exprs.iter().enumerate() {
-                    expr.write_bytes(bytes, preserve_source_parens);
+                    expr.write_bytes(bytes, preserve_source_wording);
                     if i < exprs.len() - 1 {
                         bytes.push(b',');
                     }
@@ -366,11 +366,11 @@ impl StatementInner {
                         } => {
                             identifier.write_bytes(bytes);
                             bytes.push(b'(');
-                            size.write_bytes(bytes, preserve_source_parens);
+                            size.write_bytes(bytes, preserve_source_wording);
                             bytes.push(b')');
                             if let Some(len) = string_length {
                                 bytes.push(b'*');
-                                len.write_bytes(bytes, preserve_source_parens);
+                                len.write_bytes(bytes, preserve_source_wording);
                             }
                         }
                         DimInner::DimInner2D {
@@ -382,13 +382,13 @@ impl StatementInner {
                         } => {
                             identifier.write_bytes(bytes);
                             bytes.push(b'(');
-                            rows.write_bytes(bytes, preserve_source_parens);
+                            rows.write_bytes(bytes, preserve_source_wording);
                             bytes.push(b',');
-                            cols.write_bytes(bytes, preserve_source_parens);
+                            cols.write_bytes(bytes, preserve_source_wording);
                             bytes.push(b')');
                             if let Some(len) = string_length {
                                 bytes.push(b'*');
-                                len.write_bytes(bytes, preserve_source_parens);
+                                len.write_bytes(bytes, preserve_source_wording);
                             }
                         }
                     }
@@ -401,7 +401,7 @@ impl StatementInner {
             StatementInner::Read { destinations } => {
                 bytes.extend_from_slice(Keyword::Read.internal_code().to_be_bytes().as_slice());
                 for (i, dest) in destinations.iter().enumerate() {
-                    dest.write_bytes(bytes, preserve_source_parens);
+                    dest.write_bytes(bytes, preserve_source_wording);
                     if i < destinations.len() - 1 {
                         bytes.push(b',');
                     }
@@ -410,7 +410,7 @@ impl StatementInner {
             StatementInner::Data(exprs) => {
                 bytes.extend_from_slice(Keyword::Data.internal_code().to_be_bytes().as_slice());
                 for (i, expr) in exprs.iter().enumerate() {
-                    expr.write_bytes(bytes, preserve_source_parens);
+                    expr.write_bytes(bytes, preserve_source_wording);
                     if i < exprs.len() - 1 {
                         bytes.push(b',');
                     }
@@ -419,7 +419,7 @@ impl StatementInner {
             StatementInner::Restore { expr } => {
                 bytes.extend_from_slice(Keyword::Restore.internal_code().to_be_bytes().as_slice());
                 if let Some(expr) = expr {
-                    expr.write_bytes(bytes, preserve_source_parens);
+                    expr.write_bytes(bytes, preserve_source_wording);
                 }
             }
             StatementInner::Arun => {
@@ -433,10 +433,10 @@ impl StatementInner {
             }
             StatementInner::Call { expr, variable } => {
                 bytes.extend_from_slice(Keyword::Call.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
                 if let Some(var) = variable {
                     bytes.push(b',');
-                    var.write_bytes(bytes, preserve_source_parens);
+                    var.write_bytes(bytes, preserve_source_wording);
                 }
             }
             StatementInner::Radian => {
@@ -450,41 +450,41 @@ impl StatementInner {
             }
             StatementInner::Color { expr } => {
                 bytes.extend_from_slice(Keyword::Color.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::CSize { expr } => {
                 bytes.extend_from_slice(Keyword::Csize.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Lf { expr } => {
                 bytes.extend_from_slice(Keyword::Lf.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::LCursor(l_cursor_clause) => {
-                l_cursor_clause.write_bytes_with_context(false, bytes, preserve_source_parens);
+                l_cursor_clause.write_bytes_with_context(false, bytes, preserve_source_wording);
             }
             StatementInner::GlCursor { x_expr, y_expr } => {
                 bytes.extend_from_slice(Keyword::Glcursor.internal_code().to_be_bytes().as_slice());
                 bytes.push(b'(');
-                x_expr.write_bytes(bytes, preserve_source_parens);
+                x_expr.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b',');
-                y_expr.write_bytes(bytes, preserve_source_parens);
+                y_expr.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
             StatementInner::Line { inner } => {
                 bytes.extend_from_slice(Keyword::Line.internal_code().to_be_bytes().as_slice());
-                inner.write_bytes(bytes, preserve_source_parens);
+                inner.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::RLine { inner } => {
                 bytes.extend_from_slice(Keyword::Rline.internal_code().to_be_bytes().as_slice());
-                inner.write_bytes(bytes, preserve_source_parens);
+                inner.write_bytes(bytes, preserve_source_wording);
             }
             StatementInner::Sorgn => {
                 bytes.extend_from_slice(Keyword::Sorgn.internal_code().to_be_bytes().as_slice());
             }
             StatementInner::Rotate { expr } => {
                 bytes.extend_from_slice(Keyword::Rotate.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
         }
     }

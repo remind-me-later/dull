@@ -22,8 +22,21 @@ impl DecimalNumber {
     }
 
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        let formatted = format!("{}", self.double);
-        bytes.extend_from_slice(formatted.as_bytes());
+        if self.double == 0.0 {
+            bytes.push(b'0');
+            return;
+        }
+
+        let double_str = self.double.to_string();
+
+        if self.double.abs() < 1.0 {
+            // dont add 0 before .
+            let trimmed = double_str.trim_start_matches('0');
+            bytes.extend_from_slice(trimmed.as_bytes());
+            return;
+        }
+
+        bytes.extend_from_slice(double_str.as_bytes());
     }
 }
 

@@ -314,8 +314,26 @@ impl SemanticAnalyzer {
             StatementInner::LPrint { .. } => {} // LPrint can handle any type
             StatementInner::Gprint { .. } => {} // GPrint can handle any type
             StatementInner::Pause { .. } => {} // Pause can handle any type
-            StatementInner::Input { .. } => {} // Input determines types at runtime
-            StatementInner::Using { .. } => {} // Using is a formatting directive
+            StatementInner::Input { input_exprs } => {
+                for (prompt, lvalue) in input_exprs {
+                    if let Some(prompt) = prompt {
+                        let prompt_type = self.analyze_expression(prompt)?;
+                        if prompt_type != BasicType::String {
+                            return Err(SemanticError::TypeMismatch {
+                                expected: BasicType::String,
+                                found: prompt_type,
+                                span: prompt.span(),
+                            });
+                        }
+                    }
+                    self.analyze_lvalue(lvalue)?;
+                }
+            }
+            StatementInner::Using { using_clause } => {
+                if let Some(format) = using_clause.format() {
+                    self.analyze_expression(format)?;
+                }
+            }
             StatementInner::End => {}
             StatementInner::Clear => {}
             StatementInner::Cls => {}
@@ -687,7 +705,7 @@ impl SemanticAnalyzer {
             ExprInner::Parentheses(expr) => self.analyze_expression(expr),
             ExprInner::DecimalNumber(_) => Ok(BasicType::Numeric),
             ExprInner::BinaryNumber(_) => Ok(BasicType::Numeric),
-            ExprInner::StringLiteral(_) => Ok(BasicType::String),
+            ExprInner::StringLiteral { .. } => Ok(BasicType::String),
             ExprInner::LValue(lvalue) => {
                 let lvalue_type = self.analyze_lvalue(lvalue)?;
                 Ok(lvalue_type)

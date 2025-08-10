@@ -379,15 +379,26 @@ where
         }
     }
 
-    fn parse_string_literal(&mut self) -> Option<(String, Span)> {
-        match self.tokens.peek() {
-            Some(spanned_token) if matches!(spanned_token.token(), Token::StringLiteral(_)) => {
-                let spanned_token = self.tokens.next()?;
-                if let Token::StringLiteral(string_literal) = spanned_token.token() {
-                    Some((string_literal.clone(), *spanned_token.span()))
-                } else {
-                    unreachable!()
-                }
+    fn parse_string_literal(&mut self) -> Option<Expr> {
+        let peek = self.tokens.peek_mut()?;
+
+        match peek.token_mut() {
+            Token::StringLiteral {
+                literal,
+                is_quote_closed_in_source,
+            } => {
+                let literal = mem::take(literal);
+                let is_quote_closed_in_source = *is_quote_closed_in_source;
+                let span = *peek.span();
+                self.tokens.next(); // Consume the string literal token
+
+                Some(Expr::new(
+                    ExprInner::StringLiteral {
+                        value: literal,
+                        is_quote_closed_in_source,
+                    },
+                    span,
+                ))
             }
             _ => None,
         }
@@ -423,11 +434,8 @@ where
             )));
         }
 
-        if let Some((string_literal, span)) = self.parse_string_literal() {
-            return Ok(Some(Expr::new(
-                ExprInner::StringLiteral(string_literal),
-                span,
-            )));
+        if let Some(expr) = self.parse_string_literal() {
+            return Ok(Some(expr));
         }
 
         if let Some(lvalue) = self.parse_lvalue()? {
@@ -970,16 +978,19 @@ where
         }
     }
 
-    fn parse_using_clause(&mut self) -> Option<UsingClause> {
-        let start_token = self.next_if_token_eq(&Token::Keyword(Keyword::Using))?;
-        let start_span = *start_token.span();
-        let (format, end_span) = if let Some((s, span)) = self.parse_string_literal() {
-            (Some(s), span)
+    fn parse_using_clause(&mut self) -> ParseResult<Option<UsingClause>> {
+        if let Some(start_token) = self.next_if_token_eq(&Token::Keyword(Keyword::Using)) {
+            let start_span = *start_token.span();
+            let format = self.parse_expression()?;
+            if let Some(format) = format {
+                let full_span = start_span.extend(format.span());
+                Ok(Some(UsingClause::new(Some(format), full_span)))
+            } else {
+                Ok(Some(UsingClause::new(None, start_span)))
+            }
         } else {
-            (None, start_span)
-        };
-        let full_span = start_span.extend(end_span);
-        Some(UsingClause::new(format, full_span))
+            Ok(None)
+        }
     }
 
     fn parse_print_separator(&mut self) -> PrintSeparator {
@@ -1003,7 +1014,7 @@ where
             if let Some(expr) = self.parse_expression()? {
                 let print_separator = self.parse_print_separator();
                 exprs.push((Printable::Expr(expr), print_separator));
-            } else if let Some(using_clause) = self.parse_using_clause() {
+            } else if let Some(using_clause) = self.parse_using_clause()? {
                 let print_separator = self.parse_print_separator();
                 exprs.push((Printable::UsingClause(using_clause), print_separator));
             } else {
@@ -1170,11 +1181,11 @@ where
             return Ok(Some(stmt));
         }
 
-        if let Some(stmt) = self.parse_using_clause() {
-            let start_span = self.current_span();
+        if let Some(stmt) = self.parse_using_clause()? {
+            let span = stmt.span();
             return Ok(Some(Statement::new(
                 StatementInner::Using { using_clause: stmt },
-                start_span,
+                span,
             )));
         }
 
@@ -1401,7 +1412,7 @@ where
 
             loop {
                 // Check for prompt string
-                let prompt = if let Some((s, _span)) = self.parse_string_literal() {
+                let prompt = if let Some(s) = self.parse_expression()? {
                     self.expect_token(
                         &Token::Symbol(Symbol::Semicolon),
                         "Expected semicolon after input prompt",
@@ -2372,11 +2383,16 @@ where
                 self.tokens.next(); // Consume line number
 
                 // Try to parse a line label: a string literal optionally followed by ':'
-                let label = if let Some(Token::StringLiteral(label)) = self.peek_mut_token() {
-                    let label = mem::take(label);
+                let label = if let Some(Token::StringLiteral {
+                    literal,
+                    is_quote_closed_in_source,
+                }) = self.peek_mut_token()
+                {
+                    let label = mem::take(literal);
+                    let is_quote_closed_in_source = *is_quote_closed_in_source;
                     self.tokens.next(); // Consume label
                     self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
-                    Some(label)
+                    Some((label, is_quote_closed_in_source))
                 } else {
                     None
                 };

@@ -96,7 +96,7 @@ impl Function {
     pub fn write_bytes_preserving_source_parens(
         &self,
         bytes: &mut Vec<u8>,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
         match &self.inner {
             FunctionInner::Mid {
@@ -107,11 +107,11 @@ impl Function {
                 bytes
                     .extend_from_slice(Keyword::MidDollar.internal_code().to_be_bytes().as_slice());
                 bytes.push(b'(');
-                string.write_bytes(bytes, preserve_source_parens);
+                string.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b',');
-                start.write_bytes(bytes, preserve_source_parens);
+                start.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b',');
-                length.write_bytes(bytes, preserve_source_parens);
+                length.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
             FunctionInner::Left { string, length } => {
@@ -119,9 +119,9 @@ impl Function {
                     Keyword::LeftDollar.internal_code().to_be_bytes().as_slice(),
                 );
                 bytes.push(b'(');
-                string.write_bytes(bytes, preserve_source_parens);
+                string.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b',');
-                length.write_bytes(bytes, preserve_source_parens);
+                length.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
             FunctionInner::Right { string, length } => {
@@ -132,56 +132,56 @@ impl Function {
                         .as_slice(),
                 );
                 bytes.push(b'(');
-                string.write_bytes(bytes, preserve_source_parens);
+                string.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b',');
-                length.write_bytes(bytes, preserve_source_parens);
+                length.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
             FunctionInner::Asc { expr } => {
                 bytes.extend_from_slice(Keyword::Asc.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Point { position } => {
                 bytes.extend_from_slice(Keyword::Point.internal_code().to_be_bytes().as_slice());
-                position.write_bytes(bytes, preserve_source_parens);
+                position.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Rnd { range_end } => {
                 bytes.extend_from_slice(Keyword::Rnd.internal_code().to_be_bytes().as_slice());
-                range_end.write_bytes(bytes, preserve_source_parens);
+                range_end.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Int { expr } => {
                 bytes.extend_from_slice(Keyword::Int.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Sgn { expr } => {
                 bytes.extend_from_slice(Keyword::Sgn.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Status { arg } => {
                 bytes.extend_from_slice(Keyword::Status.internal_code().to_be_bytes().as_slice());
-                arg.write_bytes(bytes, preserve_source_parens);
+                arg.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Val { expr } => {
                 bytes.extend_from_slice(Keyword::Val.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Str { expr } => {
                 bytes
                     .extend_from_slice(Keyword::StrDollar.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Chr { expr } => {
                 bytes
                     .extend_from_slice(Keyword::ChrDollar.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Abs { expr } => {
                 bytes.extend_from_slice(Keyword::Abs.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Len { expr } => {
                 bytes.extend_from_slice(Keyword::Len.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Peek {
                 memory_area,
@@ -195,39 +195,39 @@ impl Function {
                         Keyword::PeekMem1.internal_code().to_be_bytes().as_slice(),
                     ),
                 }
-                address.write_bytes(bytes, preserve_source_parens);
+                address.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Ln { expr } => {
                 bytes.extend_from_slice(Keyword::Ln.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Log { expr } => {
                 bytes.extend_from_slice(Keyword::Log.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Dms { expr } => {
                 bytes.extend_from_slice(Keyword::Dms.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Deg { expr } => {
                 bytes.extend_from_slice(Keyword::Deg.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Tan { expr } => {
                 bytes.extend_from_slice(Keyword::Tan.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Cos { expr } => {
                 bytes.extend_from_slice(Keyword::Cos.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Sin { expr } => {
                 bytes.extend_from_slice(Keyword::Sin.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
             FunctionInner::Sqr { expr } => {
                 bytes.extend_from_slice(Keyword::Sqr.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_parens);
+                expr.write_bytes(bytes, preserve_source_wording);
             }
         }
     }

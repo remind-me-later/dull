@@ -29,33 +29,33 @@ impl LineInner {
         }
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         // Handle start point - if None, start with '-'
         if let Some((x, y)) = &self.start_point {
             bytes.push(b'(');
-            x.write_bytes(bytes, preserve_source_parens);
+            x.write_bytes(bytes, preserve_source_wording);
             bytes.push(b',');
-            y.write_bytes(bytes, preserve_source_parens);
+            y.write_bytes(bytes, preserve_source_wording);
             bytes.push(b')');
         }
 
         for (x, y) in &self.end_points {
             bytes.push(b'-');
             bytes.push(b'(');
-            x.write_bytes(bytes, preserve_source_parens);
+            x.write_bytes(bytes, preserve_source_wording);
             bytes.push(b',');
-            y.write_bytes(bytes, preserve_source_parens);
+            y.write_bytes(bytes, preserve_source_wording);
             bytes.push(b')');
         }
 
         if let Some(line_type) = &self.line_type {
             bytes.push(b',');
-            line_type.write_bytes(bytes, preserve_source_parens);
+            line_type.write_bytes(bytes, preserve_source_wording);
         }
 
         if let Some(color) = &self.color {
             bytes.push(b',');
-            color.write_bytes(bytes, preserve_source_parens);
+            color.write_bytes(bytes, preserve_source_wording);
         }
 
         if self.is_box {

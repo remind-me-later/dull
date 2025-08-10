@@ -26,10 +26,10 @@ impl Expr {
         &self,
         parent_prec: u8,
         is_right_side: bool,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) -> String {
         self.inner
-            .show_with_context_and_parens(parent_prec, is_right_side, preserve_source_parens)
+            .show_with_context_and_parens(parent_prec, is_right_side, preserve_source_wording)
     }
 
     pub fn show_preserving_source_parens(&self) -> String {
@@ -41,23 +41,23 @@ impl Expr {
         bytes: &mut Vec<u8>,
         parent_prec: u8,
         is_right_side: bool,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
         self.inner.write_bytes_with_context_and_parens(
             bytes,
             parent_prec,
             is_right_side,
-            preserve_source_parens,
+            preserve_source_wording,
         );
     }
 
     pub fn write_bytes(
         &self,
         bytes: &mut Vec<u8>,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
         self.inner
-            .write_bytes_preserving_source_parens(bytes, preserve_source_parens);
+            .write_bytes_preserving_source_parens(bytes, preserve_source_wording);
     }
 
     pub fn span(&self) -> Span {

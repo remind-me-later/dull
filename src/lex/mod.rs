@@ -19,7 +19,10 @@ pub enum Token {
     Identifier(Identifier),
     DecimalNumber(DecimalNumber),
     BinaryNumber(BinaryNumber),
-    StringLiteral(String),
+    StringLiteral {
+        literal: String,
+        is_quote_closed_in_source: bool,
+    },
     Remark(String), // For BASIC comments
 }
 
@@ -62,7 +65,7 @@ impl std::fmt::Display for Token {
             Token::Identifier(identifier) => write!(f, "{identifier}"),
             Token::DecimalNumber(decimal_number) => write!(f, "{decimal_number}"),
             Token::BinaryNumber(binary_number) => write!(f, "{binary_number}"),
-            Token::StringLiteral(string_literal) => write!(f, "\"{string_literal}\""),
+            Token::StringLiteral { literal, .. } => write!(f, "\"{literal}\""),
             Token::Remark(remark) => write!(f, "REM {remark}"),
         }
     }
@@ -240,6 +243,7 @@ impl Iterator for Lexer<'_> {
             '"' => {
                 let mut string_content = String::new();
                 let mut found_closing_quote = false;
+                let mut found_closing_newline = false;
 
                 while let Some(&ch) = self.peek() {
                     if ch == '"' {
@@ -254,7 +258,7 @@ impl Iterator for Lexer<'_> {
                     }
 
                     if ch == '\n' {
-                        found_closing_quote = true; // Treat newline as end of string
+                        found_closing_newline = true; // Treat newline as end of string
                         break;
                     }
 
@@ -262,13 +266,16 @@ impl Iterator for Lexer<'_> {
                     self.advance();
                 }
 
-                if !found_closing_quote {
+                if !found_closing_quote && !found_closing_newline {
                     Some(Err(LexError::UnterminatedStringLiteral {
                         span: self.span_from(start_pos),
                     }))
                 } else {
                     Some(Ok(SpannedToken::new(
-                        Token::StringLiteral(string_content),
+                        Token::StringLiteral {
+                            literal: string_content,
+                            is_quote_closed_in_source: found_closing_quote,
+                        },
                         self.span_from(start_pos),
                     )))
                 }

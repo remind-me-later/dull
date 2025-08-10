@@ -12,7 +12,10 @@ pub enum ExprInner {
     DecimalNumber(DecimalNumber),
     BinaryNumber(BinaryNumber),
     LValue(LValue),
-    StringLiteral(String),
+    StringLiteral {
+        value: String,
+        is_quote_closed_in_source: bool,
+    },
     FunctionCall(Function),
     Parentheses(Box<Expr>),
 }
@@ -26,23 +29,23 @@ impl ExprInner {
         &self,
         parent_prec: u8,
         is_right_side: bool,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) -> String {
         match self {
             ExprInner::Unary(op, expr) => {
                 format!(
                     "{}{}",
                     op,
-                    expr.show_with_context_and_parens(7, false, preserve_source_parens)
+                    expr.show_with_context_and_parens(7, false, preserve_source_wording)
                 ) // Unary has highest precedence
             }
             ExprInner::Binary(left, op, right) => {
                 let my_prec = op.precedence();
 
                 let left_str =
-                    left.show_with_context_and_parens(my_prec, false, preserve_source_parens);
+                    left.show_with_context_and_parens(my_prec, false, preserve_source_wording);
                 let right_str =
-                    right.show_with_context_and_parens(my_prec, true, preserve_source_parens);
+                    right.show_with_context_and_parens(my_prec, true, preserve_source_wording);
 
                 let result = match op {
                     BinaryOp::Or => format!("{left_str} OR {right_str}"),
@@ -51,7 +54,7 @@ impl ExprInner {
                 };
 
                 // Everything is left associative
-                let needs_parens = !preserve_source_parens
+                let needs_parens = !preserve_source_wording
                     && (my_prec < parent_prec || (my_prec == parent_prec && is_right_side));
 
                 if needs_parens {
@@ -63,16 +66,16 @@ impl ExprInner {
             ExprInner::DecimalNumber(n) => n.to_string(),
             ExprInner::BinaryNumber(h) => h.to_string(),
             ExprInner::LValue(lval) => lval.to_string(),
-            ExprInner::StringLiteral(s) => format!("\"{s}\""),
+            ExprInner::StringLiteral { value, .. } => format!("\"{value}\""),
             ExprInner::FunctionCall(f) => f.to_string(),
             ExprInner::Parentheses(expr) => {
-                if preserve_source_parens {
+                if preserve_source_wording {
                     format!(
                         "({})",
-                        expr.show_with_context_and_parens(0, false, preserve_source_parens)
+                        expr.show_with_context_and_parens(0, false, preserve_source_wording)
                     )
                 } else {
-                    expr.show_with_context_and_parens(0, false, preserve_source_parens)
+                    expr.show_with_context_and_parens(0, false, preserve_source_wording)
                 }
             }
         }
@@ -87,16 +90,16 @@ impl ExprInner {
         bytes: &mut Vec<u8>,
         parent_prec: u8,
         is_right_side: bool,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
         match self {
             ExprInner::Unary(op, expr) => {
                 op.write_bytes(bytes);
-                expr.write_bytes_with_context_and_parens(bytes, 7, false, preserve_source_parens);
+                expr.write_bytes_with_context_and_parens(bytes, 7, false, preserve_source_wording);
             }
             ExprInner::Binary(left, op, right) => {
                 let my_prec = op.precedence();
-                let needs_parens = !preserve_source_parens
+                let needs_parens = !preserve_source_wording
                     && (my_prec < parent_prec || (my_prec == parent_prec && is_right_side));
                 if needs_parens {
                     bytes.push(b'(');
@@ -105,14 +108,14 @@ impl ExprInner {
                     bytes,
                     my_prec,
                     false,
-                    preserve_source_parens,
+                    preserve_source_wording,
                 );
                 op.write_bytes(bytes);
                 right.write_bytes_with_context_and_parens(
                     bytes,
                     my_prec,
                     true,
-                    preserve_source_parens,
+                    preserve_source_wording,
                 );
                 if needs_parens {
                     bytes.push(b')');
@@ -120,19 +123,25 @@ impl ExprInner {
             }
             ExprInner::DecimalNumber(n) => n.write_bytes(bytes),
             ExprInner::BinaryNumber(h) => h.write_bytes(bytes),
-            ExprInner::LValue(lval) => lval.write_bytes(bytes, preserve_source_parens),
-            ExprInner::StringLiteral(s) => {
-                bytes.extend_from_slice(format!("\"{s}\"").as_bytes());
+            ExprInner::LValue(lval) => lval.write_bytes(bytes, preserve_source_wording),
+            ExprInner::StringLiteral {
+                value,
+                is_quote_closed_in_source,
+            } => {
+                bytes.extend_from_slice(format!("\"{value}").as_bytes());
+                if *is_quote_closed_in_source {
+                    bytes.push(b'"');
+                }
             }
             ExprInner::FunctionCall(f) => {
-                f.write_bytes_preserving_source_parens(bytes, preserve_source_parens)
+                f.write_bytes_preserving_source_parens(bytes, preserve_source_wording)
             }
             ExprInner::Parentheses(expr) => {
-                if preserve_source_parens {
+                if preserve_source_wording {
                     bytes.push(b'(');
                 }
-                expr.write_bytes_with_context_and_parens(bytes, 0, false, preserve_source_parens);
-                if preserve_source_parens {
+                expr.write_bytes_with_context_and_parens(bytes, 0, false, preserve_source_wording);
+                if preserve_source_wording {
                     bytes.push(b')');
                 }
             }
@@ -142,9 +151,9 @@ impl ExprInner {
     pub fn write_bytes_preserving_source_parens(
         &self,
         bytes: &mut Vec<u8>,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
-        self.write_bytes_with_context_and_parens(bytes, 0, false, preserve_source_parens);
+        self.write_bytes_with_context_and_parens(bytes, 0, false, preserve_source_wording);
     }
 }
 
@@ -158,7 +167,7 @@ impl std::fmt::Display for ExprInner {
             ExprInner::DecimalNumber(n) => write!(f, "{n}"),
             ExprInner::BinaryNumber(h) => write!(f, "{h}"),
             ExprInner::LValue(lval) => write!(f, "{lval}"),
-            ExprInner::StringLiteral(s) => write!(f, "\"{s}\""),
+            ExprInner::StringLiteral { value, .. } => write!(f, "\"{value}\""),
             ExprInner::FunctionCall(function) => write!(f, "{function}"),
             ExprInner::Parentheses(expr) => write!(f, "{}", expr.show_with_context(0, false)),
         }

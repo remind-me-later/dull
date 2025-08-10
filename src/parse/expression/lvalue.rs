@@ -42,7 +42,7 @@ impl LValue {
     pub fn write_bytes(
         &self,
         bytes: &mut Vec<u8>,
-        preserve_source_parens: bool,
+        preserve_source_wording: bool,
     ) {
         match &self.inner {
             LValueInner::Identifier(id) => id.write_bytes(bytes),
@@ -52,7 +52,7 @@ impl LValue {
             LValueInner::Array1DAccess { identifier, index } => {
                 identifier.write_bytes(bytes);
                 bytes.push(b'(');
-                index.write_bytes(bytes, preserve_source_parens);
+                index.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
             LValueInner::Array2DAccess {
@@ -62,9 +62,9 @@ impl LValue {
             } => {
                 identifier.write_bytes(bytes);
                 bytes.push(b'(');
-                row_index.write_bytes(bytes, preserve_source_parens);
+                row_index.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b',');
-                col_index.write_bytes(bytes, preserve_source_parens);
+                col_index.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
             LValueInner::FixedMemoryAreaAccess { index, has_dollar } => {
@@ -73,7 +73,7 @@ impl LValue {
                     bytes.push(b'$');
                 }
                 bytes.push(b'(');
-                index.write_bytes(bytes, preserve_source_parens);
+                index.write_bytes(bytes, preserve_source_wording);
                 bytes.push(b')');
             }
         }

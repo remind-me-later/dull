@@ -41,8 +41,8 @@ struct Args {
     output: Option<PathBuf>,
 
     /// Preserve source parentheses in output (default for compilation)
-    #[arg(long)]
-    preserve_parens: bool,
+    #[arg(short = 'p', long)]
+    preserve_source_wording: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -148,8 +148,7 @@ fn main() {
 
         // Generate program bytes
         let mut program_bytes = Vec::new();
-        let preserve_parens = args.preserve_parens || args.compile; // Default to true for compilation
-        program.write_bytes(&mut program_bytes, preserve_parens);
+        program.write_bytes(&mut program_bytes, args.preserve_source_wording);
 
         // Create output bytes - with or without header
         let output_bytes = if args.no_header {

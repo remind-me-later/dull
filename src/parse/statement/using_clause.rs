@@ -1,14 +1,13 @@
-use crate::{error::Span, lex::keyword::Keyword};
+use crate::{error::Span, lex::keyword::Keyword, parse::expression::Expr};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UsingClause {
-    // -- FIXME: maybe this should allow also variables as format strings?
-    format: Option<String>,
+    format: Option<Expr>,
     span: Span,
 }
 
 impl UsingClause {
-    pub fn new(format: Option<String>, span: Span) -> Self {
+    pub fn new(format: Option<Expr>, span: Span) -> Self {
         Self { format, span }
     }
 
@@ -16,11 +15,15 @@ impl UsingClause {
         self.span
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+    pub fn format(&self) -> &Option<Expr> {
+        &self.format
+    }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         bytes.extend_from_slice(Keyword::Using.internal_code().to_be_bytes().as_slice());
         if let Some(format) = &self.format {
             bytes.push(b'"');
-            bytes.extend_from_slice(format.as_bytes());
+            format.write_bytes(bytes, preserve_source_wording);
             bytes.push(b'"');
         }
     }
