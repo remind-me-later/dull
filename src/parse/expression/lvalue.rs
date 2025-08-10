@@ -1,7 +1,7 @@
 use crate::{
+    error::Span,
     lex::{identifier::Identifier, keyword::Keyword},
     parse::expression::Expr,
-    error::Span,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,7 +39,11 @@ impl LValue {
         Self { inner, span }
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+    pub fn write_bytes(
+        &self,
+        bytes: &mut Vec<u8>,
+        preserve_source_parens: bool,
+    ) {
         match &self.inner {
             LValueInner::Identifier(id) => id.write_bytes(bytes),
             LValueInner::BuiltInIdentifier(bi) => {
@@ -48,7 +52,7 @@ impl LValue {
             LValueInner::Array1DAccess { identifier, index } => {
                 identifier.write_bytes(bytes);
                 bytes.push(b'(');
-                index.write_bytes(bytes);
+                index.write_bytes(bytes, preserve_source_parens);
                 bytes.push(b')');
             }
             LValueInner::Array2DAccess {
@@ -58,9 +62,9 @@ impl LValue {
             } => {
                 identifier.write_bytes(bytes);
                 bytes.push(b'(');
-                row_index.write_bytes(bytes);
+                row_index.write_bytes(bytes, preserve_source_parens);
                 bytes.push(b',');
-                col_index.write_bytes(bytes);
+                col_index.write_bytes(bytes, preserve_source_parens);
                 bytes.push(b')');
             }
             LValueInner::FixedMemoryAreaAccess { index, has_dollar } => {
@@ -69,7 +73,7 @@ impl LValue {
                     bytes.push(b'$');
                 }
                 bytes.push(b'(');
-                index.write_bytes(bytes);
+                index.write_bytes(bytes, preserve_source_parens);
                 bytes.push(b')');
             }
         }

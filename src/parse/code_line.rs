@@ -2,10 +2,10 @@ use crate::error::Span;
 use crate::parse::statement::Statement;
 
 pub struct CodeLine {
-    pub number: u16,
-    pub label: Option<String>,
-    pub statements: Vec<Statement>,
-    pub span: Span,
+    number: u16,
+    label: Option<String>,
+    statements: Vec<Statement>,
+    span: Span,
 }
 
 impl CodeLine {
@@ -22,7 +22,19 @@ impl CodeLine {
         self.span
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+    pub fn statements(&self) -> &Vec<Statement> {
+        &self.statements
+    }
+
+    pub fn number(&self) -> u16 {
+        self.number
+    }
+
+    pub fn label(&self) -> &Option<String> {
+        &self.label
+    }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
         bytes.extend_from_slice(self.number.to_le_bytes().as_slice());
         if let Some(label) = &self.label {
             bytes.push(b'"');
@@ -30,7 +42,7 @@ impl CodeLine {
             bytes.push(b'"');
         }
         for (i, statement) in self.statements.iter().enumerate() {
-            statement.write_bytes(bytes);
+            statement.write_bytes(bytes, preserve_source_parens);
             if i < self.statements.len() - 1 {
                 bytes.push(b':');
             }

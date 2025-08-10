@@ -5,12 +5,12 @@ pub mod lvalue;
 pub mod memory_area;
 pub mod unary_op;
 
-use crate::{parse::expression::expr_inner::ExprInner, error::Span};
+use crate::{error::Span, parse::expression::expr_inner::ExprInner};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
-    pub inner: ExprInner,
-    pub span: Span,
+    inner: ExprInner,
+    span: Span,
 }
 
 impl Expr {
@@ -22,18 +22,50 @@ impl Expr {
         self.inner.show_with_context(parent_prec, is_right_side)
     }
 
-    pub fn write_bytes_with_context(
+    pub fn show_with_context_and_parens(
+        &self,
+        parent_prec: u8,
+        is_right_side: bool,
+        preserve_source_parens: bool,
+    ) -> String {
+        self.inner
+            .show_with_context_and_parens(parent_prec, is_right_side, preserve_source_parens)
+    }
+
+    pub fn show_preserving_source_parens(&self) -> String {
+        self.show_with_context_and_parens(0, false, true)
+    }
+
+    pub fn write_bytes_with_context_and_parens(
         &self,
         bytes: &mut Vec<u8>,
         parent_prec: u8,
         is_right_side: bool,
+        preserve_source_parens: bool,
     ) {
-        self.inner
-            .write_bytes_with_context(bytes, parent_prec, is_right_side);
+        self.inner.write_bytes_with_context_and_parens(
+            bytes,
+            parent_prec,
+            is_right_side,
+            preserve_source_parens,
+        );
     }
 
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        self.inner.write_bytes(bytes);
+    pub fn write_bytes(
+        &self,
+        bytes: &mut Vec<u8>,
+        preserve_source_parens: bool,
+    ) {
+        self.inner
+            .write_bytes_preserving_source_parens(bytes, preserve_source_parens);
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    pub fn inner(&self) -> &ExprInner {
+        &self.inner
     }
 }
 

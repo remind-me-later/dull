@@ -35,6 +35,10 @@ struct Args {
     /// Output file for compiled bytes (only used with --compile)
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
+
+    /// Preserve source parentheses in output (default for compilation)
+    #[arg(long)]
+    preserve_parens: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -101,7 +105,7 @@ fn main() {
             eprintln!(
                 "\nWarning: {} parse error(s) occurred. Continuing with {} successfully parsed line(s).",
                 parse_errors.len(),
-                program.lines.len()
+                program.num_lines()
             );
             std::process::exit(1);
         }
@@ -133,14 +137,15 @@ fn main() {
             eprintln!(
                 "\nWarning: {} parse error(s) occurred. Continuing with {} successfully parsed line(s).",
                 parse_errors.len(),
-                program.lines.len()
+                program.num_lines()
             );
             std::process::exit(1);
         }
 
         // Generate program bytes
         let mut program_bytes = Vec::new();
-        program.write_bytes(&mut program_bytes);
+        let preserve_parens = args.preserve_parens || args.compile; // Default to true for compilation
+        program.write_bytes(&mut program_bytes, preserve_parens);
 
         // Create header with program length
         let header = Header::new(&program_name, program_bytes.len() as u16);
@@ -181,7 +186,7 @@ fn main() {
             eprintln!(
                 "\nWarning: {} parse error(s) occurred. Continuing with {} successfully parsed line(s).",
                 parse_errors.len(),
-                program.lines.len()
+                program.num_lines()
             );
             std::process::exit(1);
         }

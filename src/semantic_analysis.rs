@@ -1,6 +1,9 @@
 use crate::error::{SemanticError, SemanticResult};
 use crate::lex::{identifier::Identifier, keyword::Keyword};
-use crate::parse::statement::StatementInner;
+use crate::parse::statement::assignment::Assignment;
+use crate::parse::statement::beep_params::BeepParams;
+use crate::parse::statement::dim_inner::DimInner;
+use crate::parse::statement::statement_inner::StatementInner;
 use crate::parse::{
     code_line::CodeLine,
     expression::{
@@ -12,7 +15,7 @@ use crate::parse::{
         unary_op::UnaryOp,
     },
     program::Program,
-    statement::{Assignment, BeepOptionalParams, DimInner, LCursorClause, LineInner, Statement},
+    statement::{Statement, lcursor_clause::LCursorClause, line_inner::LineInner},
 };
 use std::collections::HashMap;
 
@@ -93,14 +96,14 @@ impl SemanticAnalyzer {
     /// Analyze a complete program
     pub fn analyze_program(&mut self, program: &Program) -> SemanticResult<()> {
         // First pass: collect all labels
-        for line in program.lines.values() {
-            if let Some(ref label) = line.label {
-                self.state.insert_label(label.clone(), line.number);
+        for line in program.lines() {
+            if let Some(label) = line.label() {
+                self.state.insert_label(label.clone(), line.number());
             }
         }
 
         // Second pass: analyze statements
-        for line in program.lines.values() {
+        for line in program.lines() {
             self.analyze_line(line)?;
         }
 
@@ -114,7 +117,7 @@ impl SemanticAnalyzer {
         //     println!("  Statement {}: {}", i + 1, statement);
         // }
 
-        for statement in &line.statements {
+        for statement in line.statements() {
             self.analyze_statement(statement)?;
         }
         Ok(())
@@ -124,7 +127,7 @@ impl SemanticAnalyzer {
     fn analyze_statement(&mut self, statement: &Statement) -> SemanticResult<()> {
         match &statement.inner {
             StatementInner::Let { inner } => {
-                for assignment in &inner.assignments {
+                for assignment in inner.assignments() {
                     self.analyze_assignment(assignment)?;
                 }
             }
@@ -147,7 +150,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: to_type,
-                        span: to_expr.span,
+                        span: to_expr.span(),
                     });
                 }
                 if let Some(step) = step_expr {
@@ -156,7 +159,7 @@ impl SemanticAnalyzer {
                         return Err(SemanticError::TypeMismatch {
                             expected: BasicType::Numeric,
                             found: step_type,
-                            span: step.span,
+                            span: step.span(),
                         });
                     }
                 }
@@ -204,7 +207,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
                 for target in targets {
@@ -217,7 +220,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
                 for target in targets {
@@ -231,7 +234,7 @@ impl SemanticAnalyzer {
                         return Err(SemanticError::TypeMismatch {
                             expected: BasicType::Numeric,
                             found: expr_type,
-                            span: expr.span,
+                            span: expr.span(),
                         });
                     }
                 }
@@ -245,7 +248,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: rep_type,
-                        span: repetitions_expr.span,
+                        span: repetitions_expr.span(),
                     });
                 }
                 if let Some(params) = optional_params {
@@ -258,7 +261,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
             }
@@ -268,7 +271,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
             }
@@ -281,7 +284,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
             }
@@ -291,7 +294,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
             }
@@ -301,7 +304,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
             }
@@ -340,9 +343,9 @@ impl SemanticAnalyzer {
                             y_type
                         },
                         span: if x_type != BasicType::Numeric {
-                            x_expr.span
+                            x_expr.span()
                         } else {
-                            y_expr.span
+                            y_expr.span()
                         },
                     });
                 }
@@ -360,7 +363,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: expr_type,
-                        span: expr.span,
+                        span: expr.span(),
                     });
                 }
             }
@@ -370,14 +373,14 @@ impl SemanticAnalyzer {
 
     /// Analyze an assignment statement
     fn analyze_assignment(&mut self, assignment: &Assignment) -> SemanticResult<()> {
-        let lvalue_type = self.analyze_lvalue(&assignment.lvalue)?;
-        let expr_type = self.analyze_expression(&assignment.expr)?;
+        let lvalue_type = self.analyze_lvalue(assignment.lvalue())?;
+        let expr_type = self.analyze_expression(assignment.expr())?;
 
         if lvalue_type != expr_type {
             return Err(SemanticError::TypeMismatch {
                 expected: lvalue_type,
                 found: expr_type,
-                span: assignment.expr.span,
+                span: assignment.expr().span(),
             });
         }
 
@@ -413,7 +416,7 @@ impl SemanticAnalyzer {
                 let index_type = self.analyze_expression(index)?;
                 if index_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidArrayIndex {
-                        span: index.span,
+                        span: index.span(),
                         message: "Array index must be numeric".to_string(),
                     });
                 }
@@ -441,9 +444,9 @@ impl SemanticAnalyzer {
                 if row_type != BasicType::Numeric || col_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidArrayIndex {
                         span: if row_type != BasicType::Numeric {
-                            row_index.span
+                            row_index.span()
                         } else {
-                            col_index.span
+                            col_index.span()
                         },
                         message: "2D array indices must be numeric".to_string(),
                     });
@@ -466,7 +469,7 @@ impl SemanticAnalyzer {
                 let index_type = self.analyze_expression(index)?;
                 if index_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidArrayIndex {
-                        span: index.span,
+                        span: index.span(),
                         message: "Memory area index must be numeric".to_string(),
                     });
                 }
@@ -494,7 +497,7 @@ impl SemanticAnalyzer {
                     return Err(SemanticError::TypeMismatch {
                         expected: BasicType::Numeric,
                         found: size_type,
-                        span: size.span,
+                        span: size.span(),
                     });
                 }
 
@@ -504,7 +507,7 @@ impl SemanticAnalyzer {
                         return Err(SemanticError::TypeMismatch {
                             expected: BasicType::Numeric,
                             found: str_len_type,
-                            span: str_len.span,
+                            span: str_len.span(),
                         });
                     }
                 }
@@ -534,9 +537,9 @@ impl SemanticAnalyzer {
                             cols_type
                         },
                         span: if rows_type != BasicType::Numeric {
-                            rows.span
+                            rows.span()
                         } else {
-                            cols.span
+                            cols.span()
                         },
                     });
                 }
@@ -547,7 +550,7 @@ impl SemanticAnalyzer {
                         return Err(SemanticError::TypeMismatch {
                             expected: BasicType::Numeric,
                             found: str_len_type,
-                            span: str_len.span,
+                            span: str_len.span(),
                         });
                     }
                 }
@@ -564,13 +567,13 @@ impl SemanticAnalyzer {
     }
 
     /// Analyze BEEP optional parameters
-    fn analyze_beep_params(&mut self, params: &BeepOptionalParams) -> SemanticResult<()> {
+    fn analyze_beep_params(&mut self, params: &BeepParams) -> SemanticResult<()> {
         let freq_type = self.analyze_expression(&params.frequency)?;
         if freq_type != BasicType::Numeric {
             return Err(SemanticError::TypeMismatch {
                 expected: BasicType::Numeric,
                 found: freq_type,
-                span: params.frequency.span,
+                span: params.frequency.span(),
             });
         }
 
@@ -580,7 +583,7 @@ impl SemanticAnalyzer {
                 return Err(SemanticError::TypeMismatch {
                     expected: BasicType::Numeric,
                     found: dur_type,
-                    span: duration.span,
+                    span: duration.span(),
                 });
             }
         }
@@ -595,7 +598,7 @@ impl SemanticAnalyzer {
             return Err(SemanticError::TypeMismatch {
                 expected: BasicType::Numeric,
                 found: expr_type,
-                span: clause.expr.span,
+                span: clause.expr.span(),
             });
         }
         Ok(())
@@ -616,9 +619,9 @@ impl SemanticAnalyzer {
                         y_type
                     },
                     span: if x_type != BasicType::Numeric {
-                        x_expr.span
+                        x_expr.span()
                     } else {
-                        y_expr.span
+                        y_expr.span()
                     },
                 });
             }
@@ -637,9 +640,9 @@ impl SemanticAnalyzer {
                         y_type
                     },
                     span: if x_type != BasicType::Numeric {
-                        x_expr.span
+                        x_expr.span()
                     } else {
-                        y_expr.span
+                        y_expr.span()
                     },
                 });
             }
@@ -652,7 +655,7 @@ impl SemanticAnalyzer {
                 return Err(SemanticError::TypeMismatch {
                     expected: BasicType::Numeric,
                     found: line_type_t,
-                    span: line_type_expr.span,
+                    span: line_type_expr.span(),
                 });
             }
         }
@@ -664,7 +667,7 @@ impl SemanticAnalyzer {
                 return Err(SemanticError::TypeMismatch {
                     expected: BasicType::Numeric,
                     found: color_t,
-                    span: color_expr.span,
+                    span: color_expr.span(),
                 });
             }
         }
@@ -674,12 +677,13 @@ impl SemanticAnalyzer {
 
     /// Analyze an expression and return its type
     fn analyze_expression(&mut self, expr: &Expr) -> SemanticResult<BasicType> {
-        self.analyze_expr_inner(&expr.inner)
+        self.analyze_expr_inner(expr.inner())
     }
 
     /// Analyze expression inner and return its type
     fn analyze_expr_inner(&mut self, expr_inner: &ExprInner) -> SemanticResult<BasicType> {
         match expr_inner {
+            ExprInner::Parentheses(expr) => self.analyze_expression(expr),
             ExprInner::DecimalNumber(_) => Ok(BasicType::Numeric),
             ExprInner::BinaryNumber(_) => Ok(BasicType::Numeric),
             ExprInner::StringLiteral(_) => Ok(BasicType::String),
@@ -695,7 +699,7 @@ impl SemanticAnalyzer {
                             return Err(SemanticError::TypeMismatch {
                                 expected: BasicType::Numeric,
                                 found: expr_type,
-                                span: expr.span,
+                                span: expr.span(),
                             });
                         }
                         Ok(BasicType::Numeric)
@@ -705,7 +709,7 @@ impl SemanticAnalyzer {
                             return Err(SemanticError::TypeMismatch {
                                 expected: BasicType::Numeric,
                                 found: expr_type,
-                                span: expr.span,
+                                span: expr.span(),
                             });
                         }
                         Ok(BasicType::Numeric)
@@ -723,7 +727,7 @@ impl SemanticAnalyzer {
                             return Err(SemanticError::TypeMismatch {
                                 expected: left_type,
                                 found: right_type,
-                                span: right.span,
+                                span: right.span(),
                             });
                         }
                         Ok(left_type)
@@ -738,9 +742,9 @@ impl SemanticAnalyzer {
                                     right_type
                                 },
                                 span: if left_type != BasicType::Numeric {
-                                    left.span
+                                    left.span()
                                 } else {
-                                    right.span
+                                    right.span()
                                 },
                             });
                         }
@@ -757,7 +761,7 @@ impl SemanticAnalyzer {
                             return Err(SemanticError::TypeMismatch {
                                 expected: left_type,
                                 found: right_type,
-                                span: right.span,
+                                span: right.span(),
                             });
                         }
                         Ok(BasicType::Numeric) // Comparisons return boolean (represented as numeric)
@@ -773,9 +777,9 @@ impl SemanticAnalyzer {
                                     right_type
                                 },
                                 span: if left_type != BasicType::Numeric {
-                                    left.span
+                                    left.span()
                                 } else {
-                                    right.span
+                                    right.span()
                                 },
                             });
                         }
@@ -801,21 +805,21 @@ impl SemanticAnalyzer {
 
                 if string_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: string.span,
+                        span: string.span(),
                         function_name: "MID$".to_string(),
                         message: "first argument must be string".to_string(),
                     });
                 }
                 if start_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: start.span,
+                        span: start.span(),
                         function_name: "MID$".to_string(),
                         message: "start position must be numeric".to_string(),
                     });
                 }
                 if length_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: length.span,
+                        span: length.span(),
                         function_name: "MID$".to_string(),
                         message: "length must be numeric".to_string(),
                     });
@@ -828,14 +832,14 @@ impl SemanticAnalyzer {
 
                 if string_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: string.span,
+                        span: string.span(),
                         function_name: "LEFT$".to_string(),
                         message: "first argument must be string".to_string(),
                     });
                 }
                 if length_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: length.span,
+                        span: length.span(),
                         function_name: "LEFT$".to_string(),
                         message: "length must be numeric".to_string(),
                     });
@@ -848,14 +852,14 @@ impl SemanticAnalyzer {
 
                 if string_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: string.span,
+                        span: string.span(),
                         function_name: "RIGHT$".to_string(),
                         message: "first argument must be string".to_string(),
                     });
                 }
                 if length_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: length.span,
+                        span: length.span(),
                         function_name: "RIGHT$".to_string(),
                         message: "length must be numeric".to_string(),
                     });
@@ -866,7 +870,7 @@ impl SemanticAnalyzer {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: expr.span,
+                        span: expr.span(),
                         function_name: "ASC".to_string(),
                         message: "argument must be string".to_string(),
                     });
@@ -877,7 +881,7 @@ impl SemanticAnalyzer {
                 let pos_type = self.analyze_expression(position)?;
                 if pos_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: position.span,
+                        span: position.span(),
                         function_name: "POINT".to_string(),
                         message: "position must be numeric".to_string(),
                     });
@@ -888,7 +892,7 @@ impl SemanticAnalyzer {
                 let range_type = self.analyze_expression(range_end)?;
                 if range_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: range_end.span,
+                        span: range_end.span(),
                         function_name: "RND".to_string(),
                         message: "range must be numeric".to_string(),
                     });
@@ -909,7 +913,7 @@ impl SemanticAnalyzer {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: expr.span,
+                        span: expr.span(),
                         function_name: format!("{function:?}"),
                         message: "argument must be numeric".to_string(),
                     });
@@ -920,7 +924,7 @@ impl SemanticAnalyzer {
                 let arg_type = self.analyze_expression(arg)?;
                 if arg_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: arg.span,
+                        span: arg.span(),
                         function_name: "STATUS".to_string(),
                         message: "argument must be numeric".to_string(),
                     });
@@ -931,7 +935,7 @@ impl SemanticAnalyzer {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: expr.span,
+                        span: expr.span(),
                         function_name: "VAL".to_string(),
                         message: "argument must be string".to_string(),
                     });
@@ -942,7 +946,7 @@ impl SemanticAnalyzer {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: expr.span,
+                        span: expr.span(),
                         function_name: "STR$".to_string(),
                         message: "argument must be numeric".to_string(),
                     });
@@ -953,7 +957,7 @@ impl SemanticAnalyzer {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: expr.span,
+                        span: expr.span(),
                         function_name: "CHR$".to_string(),
                         message: "argument must be numeric".to_string(),
                     });
@@ -964,7 +968,7 @@ impl SemanticAnalyzer {
                 let expr_type = self.analyze_expression(expr)?;
                 if expr_type != BasicType::String {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: expr.span,
+                        span: expr.span(),
                         function_name: "LEN".to_string(),
                         message: "argument must be string".to_string(),
                     });
@@ -975,7 +979,7 @@ impl SemanticAnalyzer {
                 let addr_type = self.analyze_expression(address)?;
                 if addr_type != BasicType::Numeric {
                     return Err(SemanticError::InvalidFunctionArgument {
-                        span: address.span,
+                        span: address.span(),
                         function_name: "PEEK".to_string(),
                         message: "address must be numeric".to_string(),
                     });

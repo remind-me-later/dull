@@ -17,10 +17,13 @@ use crate::{
             memory_area::MemoryArea,
             unary_op::UnaryOp,
         },
+        program::Program,
         statement::{
-            Assignment, BeepOptionalParams, DimInner, LCursorClause, LPrintInner, LPrintable,
-            LetInner, LineInner, PrintInner, PrintSeparator, Printable, Statement, StatementInner,
-            UsingClause,
+            Statement, assignment::Assignment, beep_params::BeepParams, dim_inner::DimInner,
+            lcursor_clause::LCursorClause, let_inner::LetInner, line_inner::LineInner,
+            lprint_inner::LPrintInner, lprint_printable::LPrintPrintable, print_inner::PrintInner,
+            print_separator::PrintSeparator, printable::Printable, statement_inner::StatementInner,
+            using_clause::UsingClause,
         },
     },
 };
@@ -129,7 +132,7 @@ where
             while self.peek_token() == &Token::Symbol(Symbol::Exp) {
                 self.next_spanned();
                 let right = self.expect_expression_factor()?;
-                let span = left.span.extend(right.span);
+                let span = left.span().extend(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), BinaryOp::Exp, Box::new(right)),
                     span,
@@ -153,7 +156,7 @@ where
             Some(Token::Symbol(Symbol::Add)) => {
                 let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
-                let span = op_span.extend(right.span);
+                let span = op_span.extend(right.span());
                 Ok(Some(Expr::new(
                     ExprInner::Unary(UnaryOp::Plus, Box::new(right)),
                     span,
@@ -162,7 +165,7 @@ where
             Some(Token::Symbol(Symbol::Sub)) => {
                 let op_span = *maybe_op.as_ref().unwrap().span();
                 let right = self.expect_unary_op_expr()?;
-                let span = op_span.extend(right.span);
+                let span = op_span.extend(right.span());
                 Ok(Some(Expr::new(
                     ExprInner::Unary(UnaryOp::Minus, Box::new(right)),
                     span,
@@ -195,7 +198,7 @@ where
                     Token::Symbol(Symbol::Div) => BinaryOp::Div,
                     _ => unreachable!(),
                 };
-                let span = left.span.extend(right.span);
+                let span = left.span().extend(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
                     span,
@@ -231,7 +234,7 @@ where
                     Token::Symbol(Symbol::Sub) => BinaryOp::Sub,
                     _ => unreachable!(),
                 };
-                let span = left.span.extend(right.span);
+                let span = left.span().extend(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
                     span,
@@ -276,7 +279,7 @@ where
                     Token::Symbol(Symbol::Geq) => BinaryOp::Geq,
                     _ => unreachable!(),
                 };
-                let span = left.span.extend(right.span);
+                let span = left.span().extend(right.span());
                 left = Expr::new(
                     ExprInner::Binary(Box::new(left), binary_op, Box::new(right)),
                     span,
@@ -295,7 +298,7 @@ where
             Some(op_token) => {
                 let op_span = *op_token.span();
                 let right = self.expect_unary_logical_expr()?;
-                let span = op_span.extend(right.span);
+                let span = op_span.extend(right.span());
                 Ok(Some(Expr::new(
                     ExprInner::Unary(UnaryOp::Not, Box::new(right)),
                     span,
@@ -323,7 +326,7 @@ where
                 )
             }) {
                 let right = self.expect_unary_logical_expr()?;
-                let span = left.span.extend(right.span);
+                let span = left.span().extend(right.span());
                 left = Expr::new(
                     ExprInner::Binary(
                         Box::new(left),
@@ -400,7 +403,10 @@ where
                 "Expected closing parenthesis",
             )?;
             let span = start_span.extend(*end_token.span());
-            return Ok(Some(Expr::new(expr.inner, span)));
+            return Ok(Some(Expr::new(
+                ExprInner::Parentheses(Box::new(expr)),
+                span,
+            )));
         }
 
         if let Some((binary_number, span)) = self.parse_binary_number() {
@@ -444,7 +450,7 @@ where
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
                 // Create a span that extends from start to the end of the expression
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Int {
                         expr: Box::new(expr),
@@ -456,7 +462,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Sgn {
                         expr: Box::new(expr),
@@ -468,7 +474,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let arg = self.expect_expression_factor()?;
-                let span = start_span.extend(arg.span);
+                let span = start_span.extend(arg.span());
                 Ok(Some(Function::new(
                     FunctionInner::Status { arg: Box::new(arg) },
                     span,
@@ -478,7 +484,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Val {
                         expr: Box::new(expr),
@@ -490,7 +496,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Str {
                         expr: Box::new(expr),
@@ -502,7 +508,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Chr {
                         expr: Box::new(expr),
@@ -514,7 +520,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Abs {
                         expr: Box::new(expr),
@@ -526,7 +532,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Len {
                         expr: Box::new(expr),
@@ -538,7 +544,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
-                let span = start_span.extend(address.span);
+                let span = start_span.extend(address.span());
                 Ok(Some(Function::new(
                     FunctionInner::Peek {
                         memory_area: MemoryArea::Me0,
@@ -551,7 +557,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
-                let span = start_span.extend(address.span);
+                let span = start_span.extend(address.span());
                 Ok(Some(Function::new(
                     FunctionInner::Peek {
                         memory_area: MemoryArea::Me1,
@@ -564,7 +570,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Ln {
                         expr: Box::new(expr),
@@ -576,7 +582,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Log {
                         expr: Box::new(expr),
@@ -588,7 +594,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Dms {
                         expr: Box::new(expr),
@@ -600,7 +606,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Deg {
                         expr: Box::new(expr),
@@ -612,7 +618,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Tan {
                         expr: Box::new(expr),
@@ -624,7 +630,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Cos {
                         expr: Box::new(expr),
@@ -636,7 +642,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Sin {
                         expr: Box::new(expr),
@@ -648,7 +654,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Sqr {
                         expr: Box::new(expr),
@@ -742,7 +748,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let expr = self.expect_expression_factor()?;
-                let span = start_span.extend(expr.span);
+                let span = start_span.extend(expr.span());
                 Ok(Some(Function::new(
                     FunctionInner::Asc {
                         expr: Box::new(expr),
@@ -754,7 +760,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let position = self.expect_expression_factor()?;
-                let span = start_span.extend(position.span);
+                let span = start_span.extend(position.span());
                 Ok(Some(Function::new(
                     FunctionInner::Point {
                         position: Box::new(position),
@@ -766,7 +772,7 @@ where
                 let start_span = self.current_span();
                 self.tokens.next();
                 let range_end = self.expect_expression_factor()?;
-                let span = start_span.extend(range_end.span);
+                let span = start_span.extend(range_end.span());
                 Ok(Some(Function::new(
                     FunctionInner::Rnd {
                         range_end: Box::new(range_end),
@@ -885,7 +891,7 @@ where
             let start_span = lhs.span;
             self.expect_token(&Token::Symbol(Symbol::Eq), "Expected '=' in assignment")?;
             let rhs = self.expect_expression()?;
-            let end_span = rhs.span;
+            let end_span = rhs.span();
             let full_span = start_span.extend(end_span);
             Ok(Some(Assignment::new(lhs, Box::new(rhs), full_span)))
         } else {
@@ -924,11 +930,11 @@ where
                 }
             }
 
-            let end_span = assignments.last().map(|a| a.span).unwrap_or(start_span);
+            let end_span = assignments.last().map(|a| a.span()).unwrap_or(start_span);
             let full_span = start_span.extend(end_span);
             Ok(Some(LetInner::new(assignments, full_span)))
         } else if let Some(first_assignment) = self.parse_assignment()? {
-            let start_span = first_assignment.span;
+            let start_span = first_assignment.span();
             let mut assignments = vec![first_assignment];
 
             if self.peek_token() == &Token::Symbol(Symbol::Comma) {
@@ -944,7 +950,7 @@ where
                 }
             }
 
-            let end_span = assignments.last().map(|a| a.span).unwrap_or(start_span);
+            let end_span = assignments.last().map(|a| a.span()).unwrap_or(start_span);
             let full_span = start_span.extend(end_span);
             Ok(Some(LetInner::new(assignments, full_span)))
         } else {
@@ -974,7 +980,7 @@ where
                 self.tokens.next();
                 PrintSeparator::Semicolon
             }
-            _ => PrintSeparator::Empty,
+            _ => PrintSeparator::None,
         }
     }
 
@@ -1065,7 +1071,7 @@ where
 
                 let end_span = string_length
                     .as_ref()
-                    .map(|e| e.span)
+                    .map(|e| e.span())
                     .unwrap_or_else(|| self.current_span());
                 let full_span = start_span.extend(end_span);
 
@@ -1355,7 +1361,7 @@ where
                 )))
             } else {
                 let goto_expr = self.expect_expression()?;
-                let full_span = start_span.extend(goto_expr.span);
+                let full_span = start_span.extend(goto_expr.span());
                 let goto_stmt =
                     Statement::new(StatementInner::Goto { target: goto_expr }, full_span);
                 Ok(Some(Statement::new(
@@ -1451,7 +1457,10 @@ where
                 None
             };
 
-            let end_span = step_expr.as_ref().map(|e| e.span).unwrap_or(to_expr.span);
+            let end_span = step_expr
+                .as_ref()
+                .map(|e| e.span())
+                .unwrap_or(to_expr.span());
             let full_span = start_span.extend(end_span);
             Ok(Some(Statement::new(
                 StatementInner::For {
@@ -1495,7 +1504,7 @@ where
         {
             let start_span = self.current_span();
             let target = self.expect_expression()?;
-            let full_span = start_span.extend(target.span);
+            let full_span = start_span.extend(target.span());
             Ok(Some(Statement::new(
                 StatementInner::Goto { target },
                 full_span,
@@ -1512,7 +1521,7 @@ where
         {
             let start_span = self.current_span();
             let target = self.expect_expression()?;
-            let full_span = start_span.extend(target.span);
+            let full_span = start_span.extend(target.span());
             Ok(Some(Statement::new(
                 StatementInner::Gosub { target },
                 full_span,
@@ -1538,7 +1547,7 @@ where
                 )?;
 
                 let expr = self.expect_expression()?;
-                let full_span = start_span.extend(expr.span);
+                let full_span = start_span.extend(expr.span());
                 return Ok(Some(Statement::new(
                     StatementInner::OnErrorGoto { target: expr },
                     full_span,
@@ -1558,7 +1567,7 @@ where
                 {
                     targets.push(self.expect_expression()?);
                 }
-                let end_span = targets.last().unwrap().span;
+                let end_span = targets.last().unwrap().span();
                 let full_span = start_span.extend(end_span);
                 Ok(Some(Statement::new(
                     StatementInner::OnGoto { expr, targets },
@@ -1575,7 +1584,7 @@ where
                 {
                     targets.push(self.expect_expression()?);
                 }
-                let end_span = targets.last().unwrap().span;
+                let end_span = targets.last().unwrap().span();
                 let full_span = start_span.extend(end_span);
                 Ok(Some(Statement::new(
                     StatementInner::OnGosub { expr, targets },
@@ -1598,7 +1607,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.parse_expression()?;
-            let end_span = expr.as_ref().map(|e| e.span).unwrap_or(start_span);
+            let end_span = expr.as_ref().map(|e| e.span()).unwrap_or(start_span);
             let full_span = start_span.extend(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Wait { expr },
@@ -1649,7 +1658,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span);
+            let full_span = start_span.extend(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::GCursor { expr },
                 full_span,
@@ -1665,7 +1674,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span);
+            let full_span = start_span.extend(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::Cursor { expr },
                 full_span,
@@ -1718,14 +1727,13 @@ where
                 } else {
                     None
                 };
-                let param_start_span = frequency.span;
-                let param_end_span = duration.as_ref().map(|d| d.span).unwrap_or(frequency.span);
+                let param_start_span = frequency.span();
+                let param_end_span = duration
+                    .as_ref()
+                    .map(|d| d.span())
+                    .unwrap_or(frequency.span());
                 let param_full_span = param_start_span.extend(param_end_span);
-                Some(BeepOptionalParams::new(
-                    frequency,
-                    duration,
-                    param_full_span,
-                ))
+                Some(BeepParams::new(frequency, duration, param_full_span))
             } else {
                 None
             };
@@ -1733,9 +1741,9 @@ where
             let end_span = optional_params
                 .as_ref()
                 .and_then(|p| p.duration.as_ref())
-                .map(|d| d.span)
-                .or_else(|| optional_params.as_ref().map(|p| p.frequency.span))
-                .unwrap_or(repetitions_expr.span);
+                .map(|d| d.span())
+                .or_else(|| optional_params.as_ref().map(|p| p.frequency.span()))
+                .unwrap_or(repetitions_expr.span());
             let full_span = start_span.extend(end_span);
             Ok(Some(Statement::new(
                 StatementInner::Beep {
@@ -1776,7 +1784,7 @@ where
             exprs.push(self.expect_expression()?);
         }
 
-        let end_span = exprs.last().unwrap().span;
+        let end_span = exprs.last().unwrap().span();
         let full_span = start_span.extend(end_span);
         Ok(Some(Statement::new(
             StatementInner::Poke { memory_area, exprs },
@@ -1820,7 +1828,7 @@ where
             {
                 exprs.push(self.expect_expression()?);
             }
-            let end_span = exprs.last().unwrap().span;
+            let end_span = exprs.last().unwrap().span();
             let full_span = start_span.extend(end_span);
             return Ok(Some(Statement::new(StatementInner::Data(exprs), full_span)));
         }
@@ -1834,7 +1842,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.parse_expression()?;
-            let end_span = expr.as_ref().map(|e| e.span).unwrap_or(start_span);
+            let end_span = expr.as_ref().map(|e| e.span()).unwrap_or(start_span);
             let full_span = start_span.extend(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Restore { expr },
@@ -1874,7 +1882,7 @@ where
             } else {
                 None
             };
-            let end_span = variable.as_ref().map(|v| v.span).unwrap_or(expr.span);
+            let end_span = variable.as_ref().map(|v| v.span).unwrap_or(expr.span());
             let full_span = start_span.extend(end_span);
             return Ok(Some(Statement::new(
                 StatementInner::Call { expr, variable },
@@ -2145,7 +2153,7 @@ where
         {
             let start_span = self.current_span();
             let color = self.expect_expression()?;
-            let full_span = start_span.extend(color.span);
+            let full_span = start_span.extend(color.span());
             return Ok(Some(Statement::new(
                 StatementInner::Color { expr: color },
                 full_span,
@@ -2161,7 +2169,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span);
+            let full_span = start_span.extend(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::CSize { expr },
                 full_span,
@@ -2177,7 +2185,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span);
+            let full_span = start_span.extend(expr.span());
             return Ok(Some(Statement::new(StatementInner::Lf { expr }, full_span)));
         }
         Ok(None)
@@ -2195,7 +2203,7 @@ where
         {
             let start_span = self.current_span();
             let expr = self.expect_expression()?;
-            let full_span = start_span.extend(expr.span);
+            let full_span = start_span.extend(expr.span());
             return Ok(Some(Statement::new(
                 StatementInner::LCursor(LCursorClause::new(expr, full_span)),
                 full_span,
@@ -2229,16 +2237,16 @@ where
                 let start_token = self.tokens.next().unwrap();
                 let start_span = *start_token.span();
                 let expr = self.expect_expression()?;
-                let full_span = start_span.extend(expr.span);
-                LPrintable::LCursorClause(LCursorClause::new(expr, full_span))
+                let full_span = start_span.extend(expr.span());
+                LPrintPrintable::LCursorClause(LCursorClause::new(expr, full_span))
             } else if let Some(expr) = self.parse_expression()? {
-                LPrintable::Expr(expr)
+                LPrintPrintable::Expr(expr)
             } else {
                 break;
             };
 
             let print_separator = self.parse_print_separator();
-            let is_empty = matches!(print_separator, PrintSeparator::Empty);
+            let is_empty = matches!(print_separator, PrintSeparator::None);
             exprs.push((printable, print_separator));
 
             if is_empty {
@@ -2281,14 +2289,14 @@ where
     }
 
     /// Parse with error collection - collects all parsing errors instead of stopping at first
-    pub fn parse_with_error_recovery(&mut self) -> (program::Program, Vec<ParseError>) {
-        let mut lines = std::collections::BTreeMap::new();
+    pub fn parse_with_error_recovery(&mut self) -> (Program, Vec<ParseError>) {
         let mut errors = Vec::new();
+        let mut program = Program::new();
 
         while self.tokens.peek().is_some() {
             match self.parse_code_line_with_recovery() {
                 Ok(Some(line)) => {
-                    lines.insert(line.number, line);
+                    program.add_line(line);
                 }
                 Ok(None) => {
                     // Skip to next line on parse failure
@@ -2302,7 +2310,7 @@ where
             }
         }
 
-        (program::Program { lines }, errors)
+        (program, errors)
     }
 
     /// Skip tokens until we reach a newline or EOF
@@ -2453,16 +2461,16 @@ mod tests {
         let expr = parse_expression_from_str("2 + 3 * 4").unwrap();
 
         // Should parse as 2 + (3 * 4), not (2 + 3) * 4
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Add, right) => {
-                match (&left.inner, &right.inner) {
+                match (left.inner(), right.inner()) {
                     (
                         ExprInner::DecimalNumber(_),
                         ExprInner::Binary(mul_left, BinaryOp::Mul, mul_right),
                     ) => {
                         // This is the expected structure
-                        assert!(matches!(mul_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(mul_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(mul_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(mul_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected 2 + (3 * 4) structure, got {expr:?}"),
                 }
@@ -2476,16 +2484,16 @@ mod tests {
         // Test that addition is left associative: 1 + 2 + 3 should parse as (1 + 2) + 3
         let expr = parse_expression_from_str("1 + 2 + 3").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Add, right) => {
                 // Right operand should be 3
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
 
                 // Left operand should be (1 + 2)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Add, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
@@ -2499,16 +2507,16 @@ mod tests {
         // Test that subtraction is left associative: 10 - 5 - 2 should parse as (10 - 5) - 2
         let expr = parse_expression_from_str("10 - 5 - 2").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Sub, right) => {
                 // Right operand should be 2
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
 
                 // Left operand should be (10 - 5)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Sub, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
@@ -2522,16 +2530,16 @@ mod tests {
         // Test that multiplication is left associative: 2 * 3 * 4 should parse as (2 * 3) * 4
         let expr = parse_expression_from_str("2 * 3 * 4").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Mul, right) => {
                 // Right operand should be 4
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
 
                 // Left operand should be (2 * 3)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Mul, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
@@ -2545,16 +2553,16 @@ mod tests {
         // Test that division is left associative: 12 / 3 / 2 should parse as (12 / 3) / 2
         let expr = parse_expression_from_str("12 / 3 / 2").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Div, right) => {
                 // Right operand should be 2
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
 
                 // Left operand should be (12 / 3)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Div, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
@@ -2568,16 +2576,16 @@ mod tests {
         // Test that comparison operators are left associative: 1 < 2 < 3 should parse as (1 < 2) < 3
         let expr = parse_expression_from_str("1 < 2 < 3").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Lt, right) => {
                 // Right operand should be 3
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
 
                 // Left operand should be (1 < 2)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Lt, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
@@ -2591,19 +2599,19 @@ mod tests {
         // Test that exponentiation is left associative: 2 ^ 3 ^ 4 should parse as (2 ^ 3) ^ 4
         let expr = parse_expression_from_str("2 ^ 3 ^ 4").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Exp, right) => {
                 // Left operand should be (2 ^ 3)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Exp, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
 
                 // Right operand should be 4
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
             }
             _ => panic!("Expected exponentiation at top level, got {expr:?}"),
         }
@@ -2614,19 +2622,19 @@ mod tests {
         // Test that AND is left associative: A AND B AND C should parse as (A AND B) AND C
         let expr = parse_expression_from_str("A AND B AND C").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::And, right) => {
                 // Left operand should be (A AND B)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::And, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::LValue(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::LValue(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::LValue(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::LValue(_)));
                     }
                     _ => panic!("Expected binary operation on left side, got {left:?}"),
                 }
 
                 // Right operand should be C
-                assert!(matches!(right.inner, ExprInner::LValue(_)));
+                assert!(matches!(right.inner(), ExprInner::LValue(_)));
             }
             _ => panic!("Expected AND at top level, got {expr:?}"),
         }
@@ -2637,16 +2645,16 @@ mod tests {
         // Test that OR is left associative: A OR B OR C should parse as (A OR B) OR C
         let expr = parse_expression_from_str("A OR B OR C").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Or, right) => {
                 // Left operand should be (A OR B)
-                assert!(matches!(right.inner, ExprInner::LValue(_)));
+                assert!(matches!(right.inner(), ExprInner::LValue(_)));
 
                 // Right operand should be (B OR C)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(inner_left, BinaryOp::Or, inner_right) => {
-                        assert!(matches!(inner_left.inner, ExprInner::LValue(_)));
-                        assert!(matches!(inner_right.inner, ExprInner::LValue(_)));
+                        assert!(matches!(inner_left.inner(), ExprInner::LValue(_)));
+                        assert!(matches!(inner_right.inner(), ExprInner::LValue(_)));
                     }
                     _ => panic!("Expected binary operation on right side, got {right:?}"),
                 }
@@ -2660,22 +2668,22 @@ mod tests {
         // Test complex precedence: 1 + 2 * 3 ^ 4 should parse as 1 + (2 * (3 ^ 4))
         let expr = parse_expression_from_str("1 + 2 * 3 ^ 4").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Add, right) => {
                 // Left should be 1
-                assert!(matches!(left.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(left.inner(), ExprInner::DecimalNumber(_)));
 
                 // Right should be (2 * (3 ^ 4))
-                match &right.inner {
+                match right.inner() {
                     ExprInner::Binary(mul_left, BinaryOp::Mul, mul_right) => {
                         // mul_left should be 2
-                        assert!(matches!(mul_left.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(mul_left.inner(), ExprInner::DecimalNumber(_)));
 
                         // mul_right should be (3 ^ 4)
-                        match &mul_right.inner {
+                        match mul_right.inner() {
                             ExprInner::Binary(exp_left, BinaryOp::Exp, exp_right) => {
-                                assert!(matches!(exp_left.inner, ExprInner::DecimalNumber(_)));
-                                assert!(matches!(exp_right.inner, ExprInner::DecimalNumber(_)));
+                                assert!(matches!(exp_left.inner(), ExprInner::DecimalNumber(_)));
+                                assert!(matches!(exp_right.inner(), ExprInner::DecimalNumber(_)));
                             }
                             _ => panic!(
                                 "Expected exponentiation on right of multiplication, got {mul_right:?}"
@@ -2694,16 +2702,16 @@ mod tests {
         // Test that parentheses override precedence: (1 + 2) * 3 should parse as (1 + 2) * 3
         let expr = parse_expression_from_str("(1 + 2) * 3").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Mul, right) => {
                 // Right should be 3
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
 
                 // Left should be (1 + 2)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Binary(add_left, BinaryOp::Add, add_right) => {
-                        assert!(matches!(add_left.inner, ExprInner::DecimalNumber(_)));
-                        assert!(matches!(add_right.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(add_left.inner(), ExprInner::DecimalNumber(_)));
+                        assert!(matches!(add_right.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected addition in parentheses, got {left:?}"),
                 }
@@ -2717,9 +2725,9 @@ mod tests {
         // Test that unary minus has low precedence: -2 ^ 3 should parse as -(2 ^ 3)
         let expr = parse_expression_from_str("-2 ^ 3").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Unary(UnaryOp::Minus, unary_operand) => {
-                let inner_expr = &unary_operand.inner;
+                let inner_expr = &unary_operand.inner();
                 assert!(
                     matches!(inner_expr, ExprInner::Binary(_, BinaryOp::Exp, _)),
                     "Expected exponentiation on right of unary minus, got {inner_expr:?}"
@@ -2734,18 +2742,18 @@ mod tests {
         // Test that unary plus has high precedence: +2 * 3 should parse as (+2) * 3
         let expr = parse_expression_from_str("+2 * 3").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::Mul, right) => {
                 // Left should be (+2)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Unary(UnaryOp::Plus, unary_operand) => {
-                        assert!(matches!(unary_operand.inner, ExprInner::DecimalNumber(_)));
+                        assert!(matches!(unary_operand.inner(), ExprInner::DecimalNumber(_)));
                     }
                     _ => panic!("Expected unary plus, got {left:?}"),
                 }
 
                 // Right should be 3
-                assert!(matches!(right.inner, ExprInner::DecimalNumber(_)));
+                assert!(matches!(right.inner(), ExprInner::DecimalNumber(_)));
             }
             _ => panic!("Expected multiplication at top level, got {expr:?}"),
         }
@@ -2756,18 +2764,18 @@ mod tests {
         // Test that NOT has high precedence: NOT A AND B should parse as (NOT A) AND B
         let expr = parse_expression_from_str("NOT A AND B").unwrap();
 
-        match &expr.inner {
+        match expr.inner() {
             ExprInner::Binary(left, BinaryOp::And, right) => {
                 // Left should be (NOT A)
-                match &left.inner {
+                match left.inner() {
                     ExprInner::Unary(UnaryOp::Not, unary_operand) => {
-                        assert!(matches!(unary_operand.inner, ExprInner::LValue(_)));
+                        assert!(matches!(unary_operand.inner(), ExprInner::LValue(_)));
                     }
                     _ => panic!("Expected NOT operation, got {left:?}"),
                 }
 
                 // Right should be B
-                assert!(matches!(right.inner, ExprInner::LValue(_)));
+                assert!(matches!(right.inner(), ExprInner::LValue(_)));
             }
             _ => panic!("Expected AND at top level, got {expr:?}"),
         }

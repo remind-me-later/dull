@@ -1,424 +1,12 @@
-use crate::{
-    error::Span,
-    lex::{identifier::Identifier, keyword::Keyword},
-    parse::expression::{Expr, lvalue::LValue, memory_area::MemoryArea},
+use crate::parse::{
+    expression::{Expr, lvalue::LValue, memory_area::MemoryArea},
+    statement::{
+        Statement, assignment::Assignment, beep_params::BeepParams, dim_inner::DimInner,
+        lcursor_clause::LCursorClause, let_inner::LetInner, line_inner::LineInner,
+        lprint_inner::LPrintInner, print_inner::PrintInner, print_separator::PrintSeparator,
+        using_clause::UsingClause,
+    },
 };
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct UsingClause {
-    // -- FIXME: maybe this should allow also variables as format strings?
-    pub format: Option<String>,
-    pub span: Span,
-}
-
-impl UsingClause {
-    pub fn new(format: Option<String>, span: Span) -> Self {
-        Self { format, span }
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-
-    fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(Keyword::Using.internal_code().to_le_bytes().as_slice());
-        if let Some(format) = &self.format {
-            bytes.push(b'"');
-            bytes.extend_from_slice(format.as_bytes());
-            bytes.push(b'"');
-        }
-    }
-}
-
-impl std::fmt::Display for UsingClause {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ref format) = self.format {
-            write!(f, "USING \"{format}\"")
-        } else {
-            write!(f, "USING")
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Assignment {
-    pub lvalue: LValue,
-    pub expr: Box<Expr>,
-    pub span: Span,
-}
-
-impl Assignment {
-    pub fn new(lvalue: LValue, expr: Box<Expr>, span: Span) -> Self {
-        Self { lvalue, expr, span }
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        self.lvalue.write_bytes(bytes);
-        bytes.push(b'=');
-        self.expr.write_bytes(bytes);
-    }
-}
-
-impl std::fmt::Display for Assignment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}", self.lvalue, self.expr)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DimInner {
-    DimInner1D {
-        identifier: Identifier,
-        size: Expr,
-        string_length: Option<Expr>,
-        span: Span,
-    },
-    DimInner2D {
-        identifier: Identifier,
-        rows: Expr,
-        cols: Expr,
-        string_length: Option<Expr>,
-        span: Span,
-    },
-}
-
-impl std::fmt::Display for DimInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DimInner::DimInner1D {
-                identifier,
-                size,
-                string_length,
-                span: _,
-            } => {
-                write!(f, "{identifier}({size})")?;
-                if let Some(len) = string_length {
-                    write!(f, "*{len}")?;
-                }
-            }
-            DimInner::DimInner2D {
-                identifier,
-                rows,
-                cols,
-                string_length,
-                span: _,
-            } => {
-                write!(f, "{identifier}({rows},{cols})")?;
-                if let Some(len) = string_length {
-                    write!(f, "*{len}")?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct BeepOptionalParams {
-    pub frequency: Expr,
-    pub duration: Option<Expr>,
-    pub span: Span,
-}
-
-impl BeepOptionalParams {
-    pub fn new(frequency: Expr, duration: Option<Expr>, span: Span) -> Self {
-        Self {
-            frequency,
-            duration,
-            span,
-        }
-    }
-}
-
-impl std::fmt::Display for BeepOptionalParams {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, ",{}", self.frequency)?;
-        if let Some(duration) = &self.duration {
-            write!(f, ",{duration}")?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrintSeparator {
-    Comma,
-    Semicolon,
-    Empty, // used for the last expression in a PRINT statement
-}
-
-impl PrintSeparator {
-    fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        match self {
-            PrintSeparator::Comma => bytes.push(b','),
-            PrintSeparator::Semicolon => bytes.push(b';'),
-            PrintSeparator::Empty => {}
-        }
-    }
-}
-
-impl std::fmt::Display for PrintSeparator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PrintSeparator::Comma => write!(f, ","),
-            PrintSeparator::Semicolon => write!(f, ";"),
-            PrintSeparator::Empty => Ok(()), // No output for empty separator
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Printable {
-    Expr(Expr),
-    UsingClause(UsingClause),
-}
-
-impl Printable {
-    fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Printable::Expr(expr) => expr.write_bytes(bytes),
-            Printable::UsingClause(using) => using.write_bytes(bytes),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PrintInner {
-    pub exprs: Vec<(Printable, PrintSeparator)>,
-    pub span: Span,
-}
-
-impl PrintInner {
-    pub fn new(exprs: Vec<(Printable, PrintSeparator)>, span: Span) -> Self {
-        Self { exprs, span }
-    }
-}
-
-impl std::fmt::Display for PrintInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (printable, sep) in self.exprs.iter() {
-            match printable {
-                Printable::Expr(expr) => write!(f, "{expr}{sep}")?,
-                Printable::UsingClause(using) => write!(f, "{using}{sep}")?,
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LCursorClause {
-    pub expr: Expr,
-    pub span: Span,
-}
-
-impl LCursorClause {
-    pub fn new(expr: Expr, span: Span) -> Self {
-        Self { expr, span }
-    }
-
-    pub fn to_string_with_context(&self, is_inside_lprint: bool) -> String {
-        if is_inside_lprint {
-            format!("LCURSOR {}", self.expr)
-        } else {
-            format!("TAB {}", self.expr)
-        }
-    }
-
-    pub fn write_bytes_with_context(&self, is_inside_lprint: bool, bytes: &mut Vec<u8>) {
-        if is_inside_lprint {
-            bytes.extend_from_slice(Keyword::Lcursor.internal_code().to_le_bytes().as_slice());
-        } else {
-            bytes.extend_from_slice(Keyword::Tab.internal_code().to_le_bytes().as_slice());
-        }
-        self.expr.write_bytes(bytes);
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum LPrintable {
-    Expr(Expr),
-    LCursorClause(LCursorClause),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LPrintInner {
-    pub exprs: Vec<(LPrintable, PrintSeparator)>,
-    pub span: Span,
-}
-
-impl LPrintInner {
-    pub fn new(exprs: Vec<(LPrintable, PrintSeparator)>, span: Span) -> Self {
-        Self { exprs, span }
-    }
-
-    pub fn to_string_with_context(&self, is_inside_lprint: bool) -> String {
-        let mut result = String::new();
-        for (printable, sep) in self.exprs.iter() {
-            match printable {
-                LPrintable::Expr(expr) => {
-                    result.push_str(&expr.to_string());
-                }
-                LPrintable::LCursorClause(cursor) => {
-                    result.push_str(&cursor.to_string_with_context(is_inside_lprint));
-                }
-            }
-            result.push_str(&sep.to_string());
-        }
-        result
-    }
-
-    pub fn write_bytes_with_context(&self, is_inside_lprint: bool, bytes: &mut Vec<u8>) {
-        for (printable, sep) in self.exprs.iter() {
-            match printable {
-                LPrintable::Expr(expr) => expr.write_bytes(bytes),
-                LPrintable::LCursorClause(cursor) => {
-                    cursor.write_bytes_with_context(is_inside_lprint, bytes)
-                }
-            }
-            sep.write_bytes(bytes);
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LetInner {
-    pub assignments: Vec<Assignment>,
-    pub span: Span,
-}
-
-impl LetInner {
-    pub fn new(assignments: Vec<Assignment>, span: Span) -> Self {
-        Self { assignments, span }
-    }
-
-    pub fn show_with_context(&self, is_mandatory_let: bool) -> String {
-        if is_mandatory_let {
-            format!(
-                "LET {}",
-                self.assignments
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )
-        } else {
-            self.assignments
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LineInner {
-    pub start_point: Option<(Expr, Expr)>, // None means use current pen position
-    pub end_points: Vec<(Expr, Expr)>,
-    pub line_type: Option<Expr>,
-    pub color: Option<Expr>,
-    pub is_box: bool,
-    pub span: Span,
-}
-
-impl LineInner {
-    pub fn new(
-        start_point: Option<(Expr, Expr)>,
-        end_points: Vec<(Expr, Expr)>,
-        line_type: Option<Expr>,
-        color: Option<Expr>,
-        is_box: bool,
-        span: Span,
-    ) -> Self {
-        Self {
-            start_point,
-            end_points,
-            line_type,
-            color,
-            is_box,
-            span,
-        }
-    }
-
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        // Handle start point - if None, start with '-'
-        if let Some((x, y)) = &self.start_point {
-            bytes.push(b'(');
-            x.write_bytes(bytes);
-            bytes.push(b',');
-            y.write_bytes(bytes);
-            bytes.push(b')');
-        }
-
-        for (x, y) in &self.end_points {
-            bytes.push(b'-');
-            bytes.push(b'(');
-            x.write_bytes(bytes);
-            bytes.push(b',');
-            y.write_bytes(bytes);
-            bytes.push(b')');
-        }
-
-        if let Some(line_type) = &self.line_type {
-            bytes.push(b',');
-            line_type.write_bytes(bytes);
-        }
-
-        if let Some(color) = &self.color {
-            bytes.push(b',');
-            color.write_bytes(bytes);
-        }
-
-        if self.is_box {
-            bytes.push(b',');
-            bytes.push(b'B');
-        }
-    }
-
-    pub fn to_string_with_prefix(&self, prefix: &str) -> String {
-        let mut result = format!("{prefix} ");
-
-        // Handle start point - if None, start with '-'
-        if let Some((x, y)) = &self.start_point {
-            result.push_str(&format!("({x},{y})"));
-        }
-
-        for (x, y) in &self.end_points {
-            result.push_str(&format!("-({x},{y})"));
-        }
-
-        if let Some(line_type) = &self.line_type {
-            result.push_str(&format!(",{line_type}"));
-        }
-
-        if let Some(color) = &self.color {
-            result.push_str(&format!(",{color}"));
-        }
-
-        if self.is_box {
-            result.push_str(",B");
-        }
-
-        result
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Statement {
-    pub inner: StatementInner,
-    pub span: Span,
-}
-
-impl Statement {
-    pub fn new(inner: StatementInner, span: Span) -> Self {
-        Self { inner, span }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatementInner {
@@ -490,7 +78,7 @@ pub enum StatementInner {
     },
     Beep {
         repetitions_expr: Expr,
-        optional_params: Option<BeepOptionalParams>,
+        optional_params: Option<BeepParams>,
     },
     BeepOnOff {
         switch_beep_on: bool, // true for BEEP ON, false for BEEP OFF
@@ -546,19 +134,17 @@ pub enum StatementInner {
     },
 }
 
-impl Statement {
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+impl StatementInner {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
         use crate::lex::keyword::Keyword;
 
-        match &self.inner {
+        match self {
             StatementInner::Let { inner } => {
-                for (i, assignment) in inner.assignments.iter().enumerate() {
-                    if i > 0 {
+                for (i, assignment) in inner.assignments().iter().enumerate() {
+                    assignment.write_bytes(bytes, preserve_source_parens);
+                    if i < inner.assignments().len() - 1 {
                         bytes.push(b',');
                     }
-                    assignment.lvalue.write_bytes(bytes);
-                    bytes.push(b'=');
-                    assignment.expr.write_bytes(bytes);
                 }
             }
             StatementInner::If {
@@ -566,7 +152,7 @@ impl Statement {
                 then_stmt,
             } => {
                 bytes.extend_from_slice(Keyword::If.internal_code().to_le_bytes().as_slice());
-                condition.write_bytes(bytes);
+                condition.write_bytes(bytes, preserve_source_parens);
                 match &then_stmt.inner {
                     StatementInner::Let { inner } => {
                         bytes.extend_from_slice(
@@ -575,30 +161,30 @@ impl Statement {
                         bytes.extend_from_slice(inner.show_with_context(true).as_bytes());
                     }
                     StatementInner::Goto { target } => {
-                        target.write_bytes(bytes);
+                        target.write_bytes(bytes, preserve_source_parens);
                     }
                     _ => {
-                        then_stmt.write_bytes(bytes);
+                        then_stmt.write_bytes(bytes, preserve_source_parens);
                     }
                 }
             }
             StatementInner::Print { inner } => {
                 bytes.extend_from_slice(Keyword::Print.internal_code().to_le_bytes().as_slice());
                 for (printable, sep) in &inner.exprs {
-                    printable.write_bytes(bytes);
+                    printable.write_bytes(bytes, preserve_source_parens);
                     sep.write_bytes(bytes);
                 }
             }
             StatementInner::Pause { inner } => {
                 bytes.extend_from_slice(Keyword::Pause.internal_code().to_le_bytes().as_slice());
                 for (printable, sep) in &inner.exprs {
-                    printable.write_bytes(bytes);
+                    printable.write_bytes(bytes, preserve_source_parens);
                     sep.write_bytes(bytes);
                 }
             }
             StatementInner::LPrint { inner } => {
                 bytes.extend_from_slice(Keyword::Lprint.internal_code().to_le_bytes().as_slice());
-                inner.write_bytes_with_context(true, bytes);
+                inner.write_bytes_with_context(true, bytes, preserve_source_parens);
             }
             StatementInner::Using { using_clause } => {
                 using_clause.write_bytes(bytes);
@@ -612,7 +198,7 @@ impl Statement {
                         bytes.push(b'"');
                         bytes.push(b';');
                     }
-                    lvalue.write_bytes(bytes);
+                    lvalue.write_bytes(bytes, preserve_source_parens);
                     if i < input_exprs.len() - 1 {
                         bytes.push(b',');
                     }
@@ -631,35 +217,35 @@ impl Statement {
                 step_expr,
             } => {
                 bytes.extend_from_slice(Keyword::For.internal_code().to_le_bytes().as_slice());
-                assignment.write_bytes(bytes);
+                assignment.write_bytes(bytes, preserve_source_parens);
                 bytes.extend_from_slice(Keyword::To.internal_code().to_le_bytes().as_slice());
-                to_expr.write_bytes(bytes);
+                to_expr.write_bytes(bytes, preserve_source_parens);
                 if let Some(step) = step_expr {
                     bytes.extend_from_slice(Keyword::Step.internal_code().to_le_bytes().as_slice());
-                    step.write_bytes(bytes);
+                    step.write_bytes(bytes, preserve_source_parens);
                 }
             }
             StatementInner::Next { lvalue } => {
                 bytes.extend_from_slice(Keyword::Next.internal_code().to_le_bytes().as_slice());
-                lvalue.write_bytes(bytes);
+                lvalue.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Clear => {
                 bytes.extend_from_slice(Keyword::Clear.internal_code().to_le_bytes().as_slice());
             }
             StatementInner::Goto { target } => {
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_le_bytes().as_slice());
-                target.write_bytes(bytes);
+                target.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Gosub { target } => {
                 bytes.extend_from_slice(Keyword::Gosub.internal_code().to_le_bytes().as_slice());
-                target.write_bytes(bytes);
+                target.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::OnGoto { expr, targets } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_le_bytes().as_slice());
                 for (i, target) in targets.iter().enumerate() {
-                    target.write_bytes(bytes);
+                    target.write_bytes(bytes, preserve_source_parens);
                     if i < targets.len() - 1 {
                         bytes.push(b',');
                     }
@@ -667,10 +253,10 @@ impl Statement {
             }
             StatementInner::OnGosub { expr, targets } => {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
                 bytes.extend_from_slice(Keyword::Gosub.internal_code().to_le_bytes().as_slice());
                 for (i, target) in targets.iter().enumerate() {
-                    target.write_bytes(bytes);
+                    target.write_bytes(bytes, preserve_source_parens);
                     if i < targets.len() - 1 {
                         bytes.push(b',');
                     }
@@ -680,12 +266,12 @@ impl Statement {
                 bytes.extend_from_slice(Keyword::On.internal_code().to_le_bytes().as_slice());
                 bytes.extend_from_slice(Keyword::Error.internal_code().to_le_bytes().as_slice());
                 bytes.extend_from_slice(Keyword::Goto.internal_code().to_le_bytes().as_slice());
-                target.write_bytes(bytes);
+                target.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Wait { expr } => {
                 bytes.extend_from_slice(Keyword::Wait.internal_code().to_le_bytes().as_slice());
                 if let Some(expr) = expr {
-                    expr.write_bytes(bytes);
+                    expr.write_bytes(bytes, preserve_source_parens);
                 }
             }
             StatementInner::Cls => {
@@ -697,30 +283,30 @@ impl Statement {
             StatementInner::Gprint { exprs } => {
                 bytes.extend_from_slice(Keyword::Gprint.internal_code().to_le_bytes().as_slice());
                 for (expr, sep) in exprs {
-                    expr.write_bytes(bytes);
+                    expr.write_bytes(bytes, preserve_source_parens);
                     sep.write_bytes(bytes);
                 }
             }
             StatementInner::GCursor { expr } => {
                 bytes.extend_from_slice(Keyword::Gcursor.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Cursor { expr } => {
                 bytes.extend_from_slice(Keyword::Cursor.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Beep {
                 repetitions_expr,
                 optional_params,
             } => {
                 bytes.extend_from_slice(Keyword::Beep.internal_code().to_le_bytes().as_slice());
-                repetitions_expr.write_bytes(bytes);
+                repetitions_expr.write_bytes(bytes, preserve_source_parens);
                 if let Some(params) = optional_params {
                     bytes.push(b',');
-                    params.frequency.write_bytes(bytes);
+                    params.frequency.write_bytes(bytes, preserve_source_parens);
                     if let Some(duration) = &params.duration {
                         bytes.push(b',');
-                        duration.write_bytes(bytes);
+                        duration.write_bytes(bytes, preserve_source_parens);
                     }
                 }
             }
@@ -745,7 +331,7 @@ impl Statement {
                     ),
                 }
                 for (i, expr) in exprs.iter().enumerate() {
-                    expr.write_bytes(bytes);
+                    expr.write_bytes(bytes, preserve_source_parens);
                     if i < exprs.len() - 1 {
                         bytes.push(b',');
                     }
@@ -763,11 +349,11 @@ impl Statement {
                         } => {
                             identifier.write_bytes(bytes);
                             bytes.push(b'(');
-                            size.write_bytes(bytes);
+                            size.write_bytes(bytes, preserve_source_parens);
                             bytes.push(b')');
                             if let Some(len) = string_length {
                                 bytes.push(b'*');
-                                len.write_bytes(bytes);
+                                len.write_bytes(bytes, preserve_source_parens);
                             }
                         }
                         DimInner::DimInner2D {
@@ -779,13 +365,13 @@ impl Statement {
                         } => {
                             identifier.write_bytes(bytes);
                             bytes.push(b'(');
-                            rows.write_bytes(bytes);
+                            rows.write_bytes(bytes, preserve_source_parens);
                             bytes.push(b',');
-                            cols.write_bytes(bytes);
+                            cols.write_bytes(bytes, preserve_source_parens);
                             bytes.push(b')');
                             if let Some(len) = string_length {
                                 bytes.push(b'*');
-                                len.write_bytes(bytes);
+                                len.write_bytes(bytes, preserve_source_parens);
                             }
                         }
                     }
@@ -798,7 +384,7 @@ impl Statement {
             StatementInner::Read { destinations } => {
                 bytes.extend_from_slice(Keyword::Read.internal_code().to_le_bytes().as_slice());
                 for (i, dest) in destinations.iter().enumerate() {
-                    dest.write_bytes(bytes);
+                    dest.write_bytes(bytes, preserve_source_parens);
                     if i < destinations.len() - 1 {
                         bytes.push(b',');
                     }
@@ -807,7 +393,7 @@ impl Statement {
             StatementInner::Data(exprs) => {
                 bytes.extend_from_slice(Keyword::Data.internal_code().to_le_bytes().as_slice());
                 for (i, expr) in exprs.iter().enumerate() {
-                    expr.write_bytes(bytes);
+                    expr.write_bytes(bytes, preserve_source_parens);
                     if i < exprs.len() - 1 {
                         bytes.push(b',');
                     }
@@ -816,7 +402,7 @@ impl Statement {
             StatementInner::Restore { expr } => {
                 bytes.extend_from_slice(Keyword::Restore.internal_code().to_le_bytes().as_slice());
                 if let Some(expr) = expr {
-                    expr.write_bytes(bytes);
+                    expr.write_bytes(bytes, preserve_source_parens);
                 }
             }
             StatementInner::Arun => {
@@ -830,10 +416,10 @@ impl Statement {
             }
             StatementInner::Call { expr, variable } => {
                 bytes.extend_from_slice(Keyword::Call.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
                 if let Some(var) = variable {
                     bytes.push(b',');
-                    var.write_bytes(bytes);
+                    var.write_bytes(bytes, preserve_source_parens);
                 }
             }
             StatementInner::Radian => {
@@ -847,49 +433,49 @@ impl Statement {
             }
             StatementInner::Color { expr } => {
                 bytes.extend_from_slice(Keyword::Color.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::CSize { expr } => {
                 bytes.extend_from_slice(Keyword::Csize.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Lf { expr } => {
                 bytes.extend_from_slice(Keyword::Lf.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::LCursor(l_cursor_clause) => {
-                l_cursor_clause.write_bytes_with_context(false, bytes);
+                l_cursor_clause.write_bytes_with_context(false, bytes, preserve_source_parens);
             }
             StatementInner::GlCursor { x_expr, y_expr } => {
                 bytes.extend_from_slice(Keyword::Glcursor.internal_code().to_le_bytes().as_slice());
                 bytes.push(b'(');
-                x_expr.write_bytes(bytes);
+                x_expr.write_bytes(bytes, preserve_source_parens);
                 bytes.push(b',');
-                y_expr.write_bytes(bytes);
+                y_expr.write_bytes(bytes, preserve_source_parens);
                 bytes.push(b')');
             }
             StatementInner::Line { inner } => {
                 bytes.extend_from_slice(Keyword::Line.internal_code().to_le_bytes().as_slice());
-                inner.write_bytes(bytes);
+                inner.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::RLine { inner } => {
                 bytes.extend_from_slice(Keyword::Rline.internal_code().to_le_bytes().as_slice());
-                inner.write_bytes(bytes);
+                inner.write_bytes(bytes, preserve_source_parens);
             }
             StatementInner::Sorgn => {
                 bytes.extend_from_slice(Keyword::Sorgn.internal_code().to_le_bytes().as_slice());
             }
             StatementInner::Rotate { expr } => {
                 bytes.extend_from_slice(Keyword::Rotate.internal_code().to_le_bytes().as_slice());
-                expr.write_bytes(bytes);
+                expr.write_bytes(bytes, preserve_source_parens);
             }
         }
     }
 }
 
-impl std::fmt::Display for Statement {
+impl std::fmt::Display for StatementInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
+        match self {
             StatementInner::Let { inner } => write!(f, "{}", inner.show_with_context(false)),
             StatementInner::If {
                 condition,

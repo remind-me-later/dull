@@ -1,17 +1,38 @@
+use crate::parse::code_line::CodeLine;
+use std::collections::BTreeMap;
+
 pub struct Program {
-    pub lines: std::collections::BTreeMap<u16, crate::parse::code_line::CodeLine>,
+    lines: BTreeMap<u16, CodeLine>,
 }
 
 impl Program {
-    pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
+    pub fn new() -> Self {
+        Self {
+            lines: BTreeMap::new(),
+        }
+    }
+
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
         for line in self.lines.values() {
-            line.write_bytes(bytes);
+            line.write_bytes(bytes, preserve_source_parens);
             // Carriage return at the end of every line
             bytes.push(b'\r');
         }
 
         // 0xFF at the end of the program
         bytes.push(0xFF);
+    }
+
+    pub fn add_line(&mut self, line: CodeLine) {
+        self.lines.insert(line.number(), line);
+    }
+
+    pub fn lines(&self) -> impl Iterator<Item = &CodeLine> {
+        self.lines.values()
+    }
+
+    pub fn num_lines(&self) -> usize {
+        self.lines.len()
     }
 }
 
