@@ -203,7 +203,7 @@ impl Keyword {
             Keyword::List => 0xF090,
             Keyword::Llist => 0xF088,
             Keyword::Ln => 0xF176,
-            Keyword::Lock => 0xF185,
+            Keyword::Lock => 0xF1B5,
             Keyword::Log => 0xF177,
             Keyword::Lprint => 0xF089,
             Keyword::Mem => 0xF158,

@@ -26,9 +26,9 @@ impl LCursorClause {
         preserve_source_parens: bool,
     ) {
         if is_inside_lprint {
-            bytes.extend_from_slice(Keyword::Lcursor.internal_code().to_le_bytes().as_slice());
+            bytes.extend_from_slice(Keyword::Lcursor.internal_code().to_be_bytes().as_slice());
         } else {
-            bytes.extend_from_slice(Keyword::Tab.internal_code().to_le_bytes().as_slice());
+            bytes.extend_from_slice(Keyword::Tab.internal_code().to_be_bytes().as_slice());
         }
         self.expr.write_bytes(bytes, preserve_source_parens);
     }

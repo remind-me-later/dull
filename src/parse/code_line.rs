@@ -35,7 +35,11 @@ impl CodeLine {
     }
 
     pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_parens: bool) {
-        bytes.extend_from_slice(self.number.to_le_bytes().as_slice());
+        bytes.extend_from_slice(self.number.to_be_bytes().as_slice());
+        // Add placeholder bytes for line size
+        let line_size_pos = bytes.len();
+        bytes.push(0);
+
         if let Some(label) = &self.label {
             bytes.push(b'"');
             bytes.extend_from_slice(label.as_bytes());
@@ -47,6 +51,9 @@ impl CodeLine {
                 bytes.push(b':');
             }
         }
+        // Update the line size placeholder
+        let line_size = (bytes.len() - line_size_pos) as u8;
+        bytes[line_size_pos] = line_size;
     }
 }
 

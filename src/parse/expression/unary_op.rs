@@ -13,7 +13,7 @@ impl UnaryOp {
             UnaryOp::Minus => bytes.push(b'-'),
             UnaryOp::Plus => bytes.push(b'+'),
             UnaryOp::Not => {
-                bytes.extend_from_slice(Keyword::Not.internal_code().to_le_bytes().as_slice())
+                bytes.extend_from_slice(Keyword::Not.internal_code().to_be_bytes().as_slice())
             }
         }
     }

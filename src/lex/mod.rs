@@ -242,7 +242,6 @@ impl Iterator for Lexer<'_> {
                 let mut found_closing_quote = false;
 
                 while let Some(&ch) = self.peek() {
-                    println!("Current char: {}", ch);
                     if ch == '"' {
                         self.advance();
                         found_closing_quote = true;
@@ -262,8 +261,6 @@ impl Iterator for Lexer<'_> {
                     string_content.push(ch);
                     self.advance();
                 }
-
-                println!("String content: {:?}", string_content);
 
                 if !found_closing_quote {
                     Some(Err(LexError::UnterminatedStringLiteral {
@@ -418,6 +415,11 @@ impl Iterator for Lexer<'_> {
 
                                 let mut comment = String::new();
                                 while let Some(&next_ch) = self.peek() {
+                                    if next_ch == '\r' {
+                                        self.advance(); // Skip carriage return
+                                        continue; // Continue to next character
+                                    }
+
                                     if next_ch == '\n' {
                                         break; // End of comment
                                     }

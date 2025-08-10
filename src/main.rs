@@ -32,6 +32,10 @@ struct Args {
     #[arg(long)]
     compile: bool,
 
+    /// Compile without header (only program bytes)
+    #[arg(long)]
+    no_header: bool,
+
     /// Output file for compiled bytes (only used with --compile)
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
@@ -121,8 +125,8 @@ fn main() {
                 std::process::exit(1);
             }
         }
-    } else if args.compile {
-        // Parse the tokens into an AST and compile to bytes with header
+    } else if args.compile || args.no_header {
+        // Parse the tokens into an AST and compile to bytes
         let mut parser = Parser::new(tokens.into_iter());
 
         let (program, parse_errors) = parser.parse_with_error_recovery();
@@ -147,10 +151,17 @@ fn main() {
         let preserve_parens = args.preserve_parens || args.compile; // Default to true for compilation
         program.write_bytes(&mut program_bytes, preserve_parens);
 
-        // Create header with program length
-        let header = Header::new(&program_name, program_bytes.len() as u16);
-        let mut output_bytes = header.to_bytes();
-        output_bytes.extend(program_bytes);
+        // Create output bytes - with or without header
+        let output_bytes = if args.no_header {
+            // Just the program bytes without header
+            program_bytes
+        } else {
+            // Create header with program length and prepend it
+            let header = Header::new(&program_name, program_bytes.len() as u16);
+            let mut output_bytes = header.to_bytes();
+            output_bytes.extend(program_bytes);
+            output_bytes
+        };
 
         // Write to output file or stdout
         match args.output {
@@ -159,7 +170,16 @@ fn main() {
                     eprintln!("Error writing output file {}: {}", output_path.display(), e);
                     std::process::exit(1);
                 }
-                println!("Compiled program written to {}", output_path.display());
+                let header_info = if args.no_header {
+                    " (no header)"
+                } else {
+                    " (with header)"
+                };
+                println!(
+                    "Compiled program written to {}{}",
+                    output_path.display(),
+                    header_info
+                );
             }
             None => {
                 // Output to stdout as binary

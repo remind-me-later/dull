@@ -47,7 +47,7 @@ impl LValue {
         match &self.inner {
             LValueInner::Identifier(id) => id.write_bytes(bytes),
             LValueInner::BuiltInIdentifier(bi) => {
-                bytes.extend_from_slice(bi.internal_code().to_le_bytes().as_slice());
+                bytes.extend_from_slice(bi.internal_code().to_be_bytes().as_slice());
             }
             LValueInner::Array1DAccess { identifier, index } => {
                 identifier.write_bytes(bytes);

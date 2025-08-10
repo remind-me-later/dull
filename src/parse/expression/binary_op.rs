@@ -46,10 +46,10 @@ impl BinaryOp {
             BinaryOp::Leq => bytes.extend_from_slice(b"<="),
             BinaryOp::Geq => bytes.extend_from_slice(b">="),
             BinaryOp::And => {
-                bytes.extend_from_slice(Keyword::And.internal_code().to_le_bytes().as_slice())
+                bytes.extend_from_slice(Keyword::And.internal_code().to_be_bytes().as_slice())
             }
             BinaryOp::Or => {
-                bytes.extend_from_slice(Keyword::Or.internal_code().to_le_bytes().as_slice())
+                bytes.extend_from_slice(Keyword::Or.internal_code().to_be_bytes().as_slice())
             }
         }
     }

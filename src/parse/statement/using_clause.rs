@@ -17,7 +17,7 @@ impl UsingClause {
     }
 
     pub fn write_bytes(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(Keyword::Using.internal_code().to_le_bytes().as_slice());
+        bytes.extend_from_slice(Keyword::Using.internal_code().to_be_bytes().as_slice());
         if let Some(format) = &self.format {
             bytes.push(b'"');
             bytes.extend_from_slice(format.as_bytes());
