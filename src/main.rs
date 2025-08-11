@@ -6,11 +6,26 @@ mod semantic_analysis;
 
 use crate::error::{CompileError, print_error};
 use crate::header::Header;
-use crate::lex::{Lexer, SpannedToken};
+use crate::lex::{Lexer, RemarkLexOption, SpannedToken};
 use crate::parse::Parser;
 use crate::semantic_analysis::analyze_program;
 use clap::Parser as ClapParser;
 use std::{fs, path::PathBuf};
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum RemarkMode {
+    TrimWhitespace,
+    KeepWhole,
+}
+
+impl From<RemarkMode> for RemarkLexOption {
+    fn from(mode: RemarkMode) -> Self {
+        match mode {
+            RemarkMode::TrimWhitespace => RemarkLexOption::TrimWhitespace,
+            RemarkMode::KeepWhole => RemarkLexOption::KeepWhole,
+        }
+    }
+}
 
 /// A BASIC lexer and parser
 #[derive(ClapParser, Debug)]
@@ -43,11 +58,10 @@ struct Args {
     /// Preserve source parentheses in output
     #[arg(short = 'w', long)]
     preserve_source_wording: bool,
-}
 
-#[derive(clap::ValueEnum, Clone, Debug)]
-enum OutputFormat {
-    Pretty,
+    /// Remark handling mode: trim-whitespace or keep-whole
+    #[arg(long, value_enum, default_value_t = RemarkMode::TrimWhitespace)]
+    remark_mode: RemarkMode,
 }
 
 fn main() {
@@ -79,7 +93,7 @@ fn main() {
     };
 
     // Create lexer and tokenize
-    let lexer = Lexer::new(&input);
+    let lexer = Lexer::new(&input, args.remark_mode.into());
     let mut tokens: Vec<SpannedToken> = Vec::new();
 
     for token_result in lexer {

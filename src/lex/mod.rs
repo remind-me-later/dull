@@ -73,18 +73,25 @@ impl std::fmt::Display for Token {
     }
 }
 
+pub enum RemarkLexOption {
+    TrimWhitespace, // DungeonQuest.bas option
+    KeepWhole,      // course.bas option
+}
+
 pub struct Lexer<'a> {
     input: Peekable<std::str::Chars<'a>>,
     position: ByteIndex,
     is_done: bool,
+    remark_opt: RemarkLexOption,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str, remark_opt: RemarkLexOption) -> Self {
         Lexer {
             input: input.chars().peekable(),
             position: ByteIndex::from(0),
             is_done: false,
+            remark_opt,
         }
     }
 
@@ -423,12 +430,17 @@ impl Iterator for Lexer<'_> {
                                         span: self.span_from(start_pos),
                                     }));
                                 }
-
                                 comment.push(' ');
 
-                                // Skip the rest of the whitespace
-                                while self.peek().map_or(false, |&c| c == ' ' || c == '\t') {
-                                    self.advance();
+                                match self.remark_opt {
+                                    RemarkLexOption::TrimWhitespace => {
+                                        // Skip the rest of the whitespace
+                                        while self.peek().map_or(false, |&c| c == ' ' || c == '\t')
+                                        {
+                                            self.advance();
+                                        }
+                                    }
+                                    RemarkLexOption::KeepWhole => {}
                                 }
 
                                 while let Some(&next_ch) = self.peek() {
@@ -444,8 +456,14 @@ impl Iterator for Lexer<'_> {
                                     self.advance();
                                 }
 
-                                if comment.len() == 1 {
-                                    comment.pop();
+                                match self.remark_opt {
+                                    RemarkLexOption::TrimWhitespace => {
+                                        // BLACKJACK behavior:
+                                        if comment.len() == 1 {
+                                            comment.pop();
+                                        }
+                                    }
+                                    RemarkLexOption::KeepWhole => {}
                                 }
 
                                 return Some(Ok(SpannedToken::new(

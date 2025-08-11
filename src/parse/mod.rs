@@ -2483,9 +2483,10 @@ where
 mod tests {
     use super::*;
     use crate::lex::Lexer;
+    use crate::lex::RemarkLexOption;
 
     fn parse_expression_from_str(input: &str) -> Option<Expr> {
-        let lexer = Lexer::new(input);
+        let lexer = Lexer::new(input, RemarkLexOption::TrimWhitespace);
         let tokens: Vec<SpannedToken> = lexer.filter_map(|result| result.ok()).collect();
         let mut parser = Parser::new(tokens.into_iter());
         parser.parse_expression().ok().flatten()
