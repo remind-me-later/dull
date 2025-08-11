@@ -21,7 +21,7 @@ All original files are encoded in ISO-8859 and found in [Sharp PC-1500 (TRS-80 P
 | donkey-kong            | [x]    |                                                 |
 | DungeonQuest           | [x]    |                                                 |
 | formula1               | [x]    |                                                 |
-| ghosthouse             | [x]    |                                                 |
+| ghosthouse             | [x]    | 'GRPINT' at line 771 corrected                  |
 | gloupman               | [ ]    | Extra ',' at end of DATA                        |
 | invader                | [x]    |                                                 |
 | force                  | [ ]    | Extra ',' at ON GOTO, Tape commands: PRINT#     |
