@@ -21,10 +21,6 @@ pub enum ExprInner {
 }
 
 impl ExprInner {
-    pub fn show_with_context(&self, parent_prec: u8, is_right_side: bool) -> String {
-        self.show_with_context_and_parens(parent_prec, is_right_side, false)
-    }
-
     pub fn show_with_context_and_parens(
         &self,
         parent_prec: u8,
@@ -79,10 +75,6 @@ impl ExprInner {
                 }
             }
         }
-    }
-
-    pub fn show_preserving_source_parens(&self) -> String {
-        self.show_with_context_and_parens(0, false, true)
     }
 
     pub fn write_bytes_with_context_and_parens(
@@ -147,29 +139,27 @@ impl ExprInner {
             }
         }
     }
-
-    pub fn write_bytes_preserving_source_parens(
-        &self,
-        bytes: &mut Vec<u8>,
-        preserve_source_wording: bool,
-    ) {
-        self.write_bytes_with_context_and_parens(bytes, 0, false, preserve_source_wording);
-    }
 }
 
 impl std::fmt::Display for ExprInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExprInner::Unary(op, expr) => write!(f, "{op}{}", expr.show_with_context(7, false)),
+            ExprInner::Unary(op, expr) => write!(
+                f,
+                "{op}{}",
+                expr.show_with_context_and_parens(7, false, false)
+            ),
             e @ ExprInner::Binary(..) => {
-                write!(f, "{}", e.show_with_context(0, false))
+                write!(f, "{}", e.show_with_context_and_parens(0, false, false))
             }
             ExprInner::DecimalNumber(n) => write!(f, "{n}"),
             ExprInner::BinaryNumber(h) => write!(f, "{h}"),
             ExprInner::LValue(lval) => write!(f, "{lval}"),
             ExprInner::StringLiteral { value, .. } => write!(f, "\"{value}\""),
             ExprInner::FunctionCall(function) => write!(f, "{function}"),
-            ExprInner::Parentheses(expr) => write!(f, "{}", expr.show_with_context(0, false)),
+            ExprInner::Parentheses(expr) => {
+                write!(f, "{}", expr.show_with_context_and_parens(0, false, false))
+            }
         }
     }
 }

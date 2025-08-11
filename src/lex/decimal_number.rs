@@ -27,16 +27,24 @@ impl DecimalNumber {
             return;
         }
 
-        let double_str = self.double.to_string();
+        let mut double_str = self.double.to_string();
 
         if self.double.abs() < 1.0 {
             // dont add 0 before .
             let trimmed = double_str.trim_start_matches('0');
-            bytes.extend_from_slice(trimmed.as_bytes());
-            return;
+            double_str = trimmed.to_string();
         }
 
-        bytes.extend_from_slice(double_str.as_bytes());
+        // If number is longer in normal format than in scientific len(1000000) > len(1E6)
+        // then use scientific notation
+        let scientific_str = format!("{:E}", self.double);
+
+        // Compare lengths and use the shorter representation
+        if double_str.len() > scientific_str.len() {
+            bytes.extend_from_slice(scientific_str.as_bytes());
+        } else {
+            bytes.extend_from_slice(double_str.as_bytes());
+        }
     }
 }
 
