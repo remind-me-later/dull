@@ -7,7 +7,7 @@ use crate::{
         keyword::Keyword, symbol::Symbol,
     },
     parse::{
-        code_line::CodeLine,
+        code_line::{CodeLine, CodeLineLabel},
         expression::{
             Expr,
             binary_op::BinaryOp,
@@ -2391,8 +2391,14 @@ where
                     let label = mem::take(literal);
                     let is_quote_closed_in_source = *is_quote_closed_in_source;
                     self.tokens.next(); // Consume label
-                    self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
-                    Some((label, is_quote_closed_in_source))
+                    let has_colon = self.next_if_token_eq(&Token::Symbol(Symbol::Colon)); // Consume ':'
+
+                    Some(CodeLineLabel::new(
+                        label,
+                        is_quote_closed_in_source,
+                        start_span,
+                        has_colon.is_some(),
+                    ))
                 } else {
                     None
                 };

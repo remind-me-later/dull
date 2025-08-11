@@ -415,6 +415,8 @@ impl Iterator for Lexer<'_> {
 
                             // We need to handle comments in a special way, consume until end of line
                             if kw == Keyword::Rem {
+                                let mut comment = String::new();
+
                                 // The space after REM is mandatory
                                 if self.advance() != Some(' ') {
                                     return Some(Err(LexError::InvalidRemark {
@@ -422,7 +424,13 @@ impl Iterator for Lexer<'_> {
                                     }));
                                 }
 
-                                let mut comment = String::new();
+                                comment.push(' ');
+
+                                // Skip the rest of the whitespace
+                                while self.peek().map_or(false, |&c| c == ' ' || c == '\t') {
+                                    self.advance();
+                                }
+
                                 while let Some(&next_ch) = self.peek() {
                                     if next_ch == '\r' {
                                         self.advance(); // Skip carriage return
@@ -435,6 +443,11 @@ impl Iterator for Lexer<'_> {
                                     comment.push(next_ch);
                                     self.advance();
                                 }
+
+                                if comment.len() == 1 {
+                                    comment.pop();
+                                }
+
                                 return Some(Ok(SpannedToken::new(
                                     Token::Remark(comment),
                                     self.span_from(start_pos),

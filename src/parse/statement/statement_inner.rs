@@ -209,9 +209,7 @@ impl StatementInner {
                 bytes.extend_from_slice(Keyword::Input.internal_code().to_be_bytes().as_slice());
                 for (i, (prompt, lvalue)) in input_exprs.iter().enumerate() {
                     if let Some(prompt) = prompt {
-                        bytes.push(b'"');
                         prompt.write_bytes(bytes, preserve_source_wording);
-                        bytes.push(b'"');
                         bytes.push(b';');
                     }
                     lvalue.write_bytes(bytes, preserve_source_wording);
@@ -514,13 +512,11 @@ impl std::fmt::Display for StatementInner {
                 let inputs = input_exprs
                     .iter()
                     .map(|(prompt, lval)| {
-                        format!(
-                            "{};{}",
-                            prompt
-                                .as_ref()
-                                .map_or(String::new(), |p| format!("\"{p}\" ")),
-                            lval
-                        )
+                        if let Some(prompt) = prompt {
+                            format!("{prompt};{lval}")
+                        } else {
+                            lval.to_string()
+                        }
                     })
                     .collect::<Vec<_>>()
                     .join(",");

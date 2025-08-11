@@ -1,9 +1,30 @@
 use crate::error::Span;
 use crate::parse::statement::Statement;
 
+pub struct CodeLineLabel {
+    name: String,
+    are_quotes_closed_in_source: bool,
+    has_colon_in_source: bool,
+}
+
+impl CodeLineLabel {
+    pub fn new(
+        name: String,
+        are_quotes_closed_in_source: bool,
+        span: Span,
+        has_colon_in_source: bool,
+    ) -> Self {
+        Self {
+            name,
+            are_quotes_closed_in_source,
+            has_colon_in_source,
+        }
+    }
+}
+
 pub struct CodeLine {
     number: u16,
-    label: Option<(String, bool)>, // The label and whether its quotes are closed
+    label: Option<CodeLineLabel>,
     statements: Vec<Statement>,
     span: Span,
 }
@@ -11,7 +32,7 @@ pub struct CodeLine {
 impl CodeLine {
     pub fn new(
         number: u16,
-        label: Option<(String, bool)>,
+        label: Option<CodeLineLabel>,
         statements: Vec<Statement>,
         span: Span,
     ) -> Self {
@@ -35,8 +56,8 @@ impl CodeLine {
         self.number
     }
 
-    pub fn label(&self) -> Option<&String> {
-        self.label.as_ref().map(|(label, _)| label)
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_ref().map(|label| label.name.as_str())
     }
 
     pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
@@ -45,11 +66,14 @@ impl CodeLine {
         let line_size_pos = bytes.len();
         bytes.push(0);
 
-        if let Some((label, is_label_closed_in_source)) = &self.label {
+        if let Some(label) = &self.label {
             bytes.push(b'"');
-            bytes.extend_from_slice(label.as_bytes());
-            if *is_label_closed_in_source {
+            bytes.extend_from_slice(label.name.as_bytes());
+            if label.are_quotes_closed_in_source {
                 bytes.push(b'"');
+            }
+            if label.has_colon_in_source {
+                bytes.push(b':');
             }
         }
         for (i, statement) in self.statements.iter().enumerate() {
@@ -66,8 +90,8 @@ impl CodeLine {
 
 impl std::fmt::Display for CodeLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some((label, _)) = &self.label {
-            write!(f, "{} \"{}\"", self.number, label)?;
+        if let Some(label) = &self.label {
+            write!(f, "{} \"{}\"", self.number, label.name)?;
         } else {
             write!(f, "{}", self.number)?;
         }

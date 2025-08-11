@@ -98,7 +98,7 @@ impl SemanticAnalyzer {
         // First pass: collect all labels
         for line in program.lines() {
             if let Some(label) = line.label() {
-                self.state.insert_label(label.clone(), line.number());
+                self.state.insert_label(label.to_owned(), line.number());
             }
         }
 
