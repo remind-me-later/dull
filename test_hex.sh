@@ -1,7 +1,5 @@
 #!/bin/bash
 
-
-
 usage() {
     echo "Usage: $0 [-t] [-h] [-n NAME] <BAS_FILE>"
     echo "  -t       Trim whitespace from remarks"

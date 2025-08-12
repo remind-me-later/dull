@@ -139,49 +139,59 @@ impl Function {
             }
             FunctionInner::Asc { expr } => {
                 bytes.extend_from_slice(Keyword::Asc.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Point { position } => {
                 bytes.extend_from_slice(Keyword::Point.internal_code().to_be_bytes().as_slice());
-                position.write_bytes(bytes, preserve_source_wording);
+                position.write_bytes_with_context_and_parens(
+                    bytes,
+                    8,
+                    false,
+                    preserve_source_wording,
+                );
             }
             FunctionInner::Rnd { range_end } => {
                 bytes.extend_from_slice(Keyword::Rnd.internal_code().to_be_bytes().as_slice());
-                range_end.write_bytes(bytes, preserve_source_wording);
+                range_end.write_bytes_with_context_and_parens(
+                    bytes,
+                    8,
+                    false,
+                    preserve_source_wording,
+                );
             }
             FunctionInner::Int { expr } => {
                 bytes.extend_from_slice(Keyword::Int.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Sgn { expr } => {
                 bytes.extend_from_slice(Keyword::Sgn.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Status { arg } => {
                 bytes.extend_from_slice(Keyword::Status.internal_code().to_be_bytes().as_slice());
-                arg.write_bytes(bytes, preserve_source_wording);
+                arg.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Val { expr } => {
                 bytes.extend_from_slice(Keyword::Val.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Str { expr } => {
                 bytes
                     .extend_from_slice(Keyword::StrDollar.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Chr { expr } => {
                 bytes
                     .extend_from_slice(Keyword::ChrDollar.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Abs { expr } => {
                 bytes.extend_from_slice(Keyword::Abs.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Len { expr } => {
                 bytes.extend_from_slice(Keyword::Len.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Peek {
                 memory_area,
@@ -195,23 +205,28 @@ impl Function {
                         Keyword::PeekMem1.internal_code().to_be_bytes().as_slice(),
                     ),
                 }
-                address.write_bytes(bytes, preserve_source_wording);
+                address.write_bytes_with_context_and_parens(
+                    bytes,
+                    8,
+                    false,
+                    preserve_source_wording,
+                );
             }
             FunctionInner::Ln { expr } => {
                 bytes.extend_from_slice(Keyword::Ln.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Log { expr } => {
                 bytes.extend_from_slice(Keyword::Log.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Dms { expr } => {
                 bytes.extend_from_slice(Keyword::Dms.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Deg { expr } => {
                 bytes.extend_from_slice(Keyword::Deg.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Tan { expr } => {
                 bytes.extend_from_slice(Keyword::Tan.internal_code().to_be_bytes().as_slice());
@@ -219,15 +234,15 @@ impl Function {
             }
             FunctionInner::Cos { expr } => {
                 bytes.extend_from_slice(Keyword::Cos.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Sin { expr } => {
                 bytes.extend_from_slice(Keyword::Sin.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
             FunctionInner::Sqr { expr } => {
                 bytes.extend_from_slice(Keyword::Sqr.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes(bytes, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
         }
     }
@@ -246,16 +261,56 @@ impl std::fmt::Display for Function {
             FunctionInner::Left { string, length } => write!(f, "LEFT({string}, {length})"),
             FunctionInner::Right { string, length } => write!(f, "RIGHT({string}, {length})"),
             FunctionInner::Asc { expr } => write!(f, "ASC({expr})"),
-            FunctionInner::Point { position } => write!(f, "POINT {position}"),
-            FunctionInner::Rnd { range_end } => write!(f, "RND {range_end}"),
-            FunctionInner::Int { expr } => write!(f, "INT {expr}"),
-            FunctionInner::Sgn { expr } => write!(f, "SGN {expr}"),
-            FunctionInner::Status { arg } => write!(f, "STATUS {arg}"),
-            FunctionInner::Val { expr } => write!(f, "VAL {expr}"),
-            FunctionInner::Str { expr } => write!(f, "STR$ {expr}"),
-            FunctionInner::Chr { expr } => write!(f, "CHR$ {expr}"),
-            FunctionInner::Abs { expr } => write!(f, "ABS {expr}"),
-            FunctionInner::Len { expr } => write!(f, "LEN {expr}"),
+            FunctionInner::Point { position } => write!(
+                f,
+                "POINT {}",
+                position.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Rnd { range_end } => write!(
+                f,
+                "RND {}",
+                range_end.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Int { expr } => write!(
+                f,
+                "INT {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Sgn { expr } => write!(
+                f,
+                "SGN {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Status { arg } => write!(
+                f,
+                "STATUS {}",
+                arg.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Val { expr } => write!(
+                f,
+                "VAL {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Str { expr } => write!(
+                f,
+                "STR$ {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Chr { expr } => write!(
+                f,
+                "CHR$ {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Abs { expr } => write!(
+                f,
+                "ABS {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Len { expr } => write!(
+                f,
+                "LEN {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
             FunctionInner::Peek {
                 memory_area,
                 address,
@@ -264,16 +319,52 @@ impl std::fmt::Display for Function {
                     MemoryArea::Me0 => "",
                     MemoryArea::Me1 => "#",
                 };
-                write!(f, "PEEK{area_str} {address}")
+                write!(
+                    f,
+                    "PEEK{area_str} {}",
+                    address.show_with_context_and_parens(20, false, false)
+                )
             }
-            FunctionInner::Ln { expr } => write!(f, "LN {expr}"),
-            FunctionInner::Log { expr } => write!(f, "LOG {expr}"),
-            FunctionInner::Dms { expr } => write!(f, "DMS {expr}"),
-            FunctionInner::Deg { expr } => write!(f, "DEG {expr}"),
-            FunctionInner::Tan { expr } => write!(f, "TAN {expr}"),
-            FunctionInner::Cos { expr } => write!(f, "COS {expr}"),
-            FunctionInner::Sin { expr } => write!(f, "SIN {expr}"),
-            FunctionInner::Sqr { expr } => write!(f, "√{expr}"),
+            FunctionInner::Ln { expr } => write!(
+                f,
+                "LN {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Log { expr } => write!(
+                f,
+                "LOG {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Dms { expr } => write!(
+                f,
+                "DMS {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Deg { expr } => write!(
+                f,
+                "DEG {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Tan { expr } => write!(
+                f,
+                "TAN {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Cos { expr } => write!(
+                f,
+                "COS {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Sin { expr } => write!(
+                f,
+                "SIN {}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
+            FunctionInner::Sqr { expr } => write!(
+                f,
+                "√{}",
+                expr.show_with_context_and_parens(20, false, false)
+            ),
         }
     }
 }

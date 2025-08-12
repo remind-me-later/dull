@@ -59,6 +59,25 @@ impl std::str::FromStr for DecimalNumber {
 
 impl std::fmt::Display for DecimalNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.double)
+        if self.double == 0.0 {
+            write!(f, "0")
+        } else {
+            let mut double_str = self.double.to_string();
+
+            if self.double.abs() < 1.0 {
+                // don't add 0 before .
+                let trimmed = double_str.trim_start_matches('0');
+                double_str = trimmed.to_string();
+            }
+
+            // If number is longer in normal format than in scientific len(1000000) > len(1E6)
+            // then use scientific notation
+            let scientific_str = format!("{:E}", self.double);
+            if double_str.len() > scientific_str.len() {
+                write!(f, "{}", scientific_str)
+            } else {
+                write!(f, "{}", double_str)
+            }
+        }
     }
 }

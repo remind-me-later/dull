@@ -71,7 +71,7 @@ impl ExprInner {
                         expr.show_with_context_and_parens(0, false, preserve_source_wording)
                     )
                 } else {
-                    expr.show_with_context_and_parens(0, false, preserve_source_wording)
+                    expr.show_with_context_and_parens(8, false, preserve_source_wording)
                 }
             }
         }
@@ -129,13 +129,7 @@ impl ExprInner {
                 f.write_bytes_preserving_source_parens(bytes, preserve_source_wording)
             }
             ExprInner::Parentheses(expr) => {
-                if preserve_source_wording {
-                    bytes.push(b'(');
-                }
-                expr.write_bytes_with_context_and_parens(bytes, 0, false, preserve_source_wording);
-                if preserve_source_wording {
-                    bytes.push(b')');
-                }
+                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
             }
         }
     }
