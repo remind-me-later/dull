@@ -59,6 +59,10 @@ struct Args {
     #[arg(short = 'w', long)]
     preserve_source_wording: bool,
 
+    /// Program name to use in header (defaults to input filename with extension)
+    #[arg(short = 'n', long, value_name = "NAME")]
+    program_name: Option<String>,
+
     /// Remark handling mode: trim-whitespace or keep-whole
     #[arg(long, value_enum, default_value_t = RemarkMode::TrimWhitespace)]
     remark_mode: RemarkMode,
@@ -73,11 +77,12 @@ fn main() {
             // Read from file
             match fs::read_to_string(&file_path) {
                 Ok(content) => {
-                    let prog_name = file_path
-                        .file_stem()
+                    let default_prog_name = file_path
+                        .file_name()
                         .and_then(|s| s.to_str())
                         .unwrap_or("PROGRAM")
                         .to_string();
+                    let prog_name = args.program_name.unwrap_or(default_prog_name);
                     (content, file_path.display().to_string(), prog_name)
                 }
                 Err(e) => {
