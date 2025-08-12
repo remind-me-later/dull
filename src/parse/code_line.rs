@@ -1,4 +1,3 @@
-use crate::error::Span;
 use crate::parse::statement::Statement;
 
 pub struct CodeLineLabel {
@@ -8,12 +7,7 @@ pub struct CodeLineLabel {
 }
 
 impl CodeLineLabel {
-    pub fn new(
-        name: String,
-        are_quotes_closed_in_source: bool,
-        span: Span,
-        has_colon_in_source: bool,
-    ) -> Self {
+    pub fn new(name: String, are_quotes_closed_in_source: bool, has_colon_in_source: bool) -> Self {
         Self {
             name,
             are_quotes_closed_in_source,
@@ -26,26 +20,15 @@ pub struct CodeLine {
     number: u16,
     label: Option<CodeLineLabel>,
     statements: Vec<Statement>,
-    span: Span,
 }
 
 impl CodeLine {
-    pub fn new(
-        number: u16,
-        label: Option<CodeLineLabel>,
-        statements: Vec<Statement>,
-        span: Span,
-    ) -> Self {
+    pub fn new(number: u16, label: Option<CodeLineLabel>, statements: Vec<Statement>) -> Self {
         Self {
             number,
             label,
             statements,
-            span,
         }
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
     }
 
     pub fn statements(&self) -> &Vec<Statement> {
@@ -101,14 +84,15 @@ impl CodeLine {
             }
         }
         if !self.statements.is_empty() {
-            result.push_str(&format!(
-                "{}",
-                self.statements
+            result.push_str(
+                &self
+                    .statements
                     .iter()
                     .map(|stmt| stmt.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(":")
-            ));
+                    .to_string(),
+            );
         }
         result
     }

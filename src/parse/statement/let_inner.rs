@@ -15,10 +15,6 @@ impl LetInner {
         &self.assignments
     }
 
-    pub fn span(&self) -> Span {
-        self.span
-    }
-
     pub fn show_with_context(
         &self,
         is_mandatory_let: bool,

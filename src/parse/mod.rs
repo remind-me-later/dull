@@ -2396,7 +2396,6 @@ where
                     Some(CodeLineLabel::new(
                         label,
                         is_quote_closed_in_source,
-                        start_span,
                         has_colon.is_some(),
                     ))
                 } else {
@@ -2448,18 +2447,13 @@ where
                 }
 
                 // Calculate the full line span from start to end of line
-                let end_span = newline
-                    .map(|t| *t.span())
-                    .or_else(|| eof.map(|t| *t.span()))
-                    .unwrap_or_else(|| self.current_span());
-                let line_span = start_span.merge(end_span);
+                // let end_span = newline
+                //     .map(|t| *t.span())
+                //     .or_else(|| eof.map(|t| *t.span()))
+                //     .unwrap_or_else(|| self.current_span());
+                // let line_span = start_span.merge(end_span);
 
-                Ok(Some(CodeLine::new(
-                    line_number,
-                    label,
-                    statements,
-                    line_span,
-                )))
+                Ok(Some(CodeLine::new(line_number, label, statements)))
             }
             _ => {
                 // Check if we're at EOF - this is not an error, just no more lines

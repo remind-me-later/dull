@@ -19,12 +19,6 @@ use crate::parse::{
 };
 use std::collections::HashMap;
 
-#[cfg(test)]
-// Helper function to create a placeholder span for tests
-fn placeholder_span() -> crate::error::Span {
-    crate::error::Span::new(0, 1)
-}
-
 /// Basic types in the BASIC language type system
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BasicType {
@@ -1022,6 +1016,12 @@ mod tests {
     use crate::lex::decimal_number::DecimalNumber;
     use crate::lex::identifier::Identifier;
     use crate::parse::expression::{Expr, expr_inner::ExprInner};
+
+    #[cfg(test)]
+    // Helper function to create a placeholder span for tests
+    fn placeholder_span() -> crate::error::Span {
+        crate::error::Span::new(0, 1)
+    }
 
     #[test]
     fn test_numeric_assignment() {
