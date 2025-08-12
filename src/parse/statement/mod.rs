@@ -30,10 +30,8 @@ impl Statement {
     pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         self.inner.write_bytes(bytes, preserve_source_wording);
     }
-}
 
-impl std::fmt::Display for Statement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        self.inner.show(preserve_source_wording)
     }
 }

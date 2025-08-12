@@ -28,6 +28,11 @@ impl Expr {
             .show_with_context_and_parens(parent_prec, is_right_side, preserve_source_wording)
     }
 
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        self.inner
+            .show_with_context_and_parens(0, false, preserve_source_wording)
+    }
+
     pub fn write_bytes_with_context_and_parens(
         &self,
         bytes: &mut Vec<u8>,
@@ -54,11 +59,5 @@ impl Expr {
 
     pub fn inner(&self) -> &ExprInner {
         &self.inner
-    }
-}
-
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
     }
 }

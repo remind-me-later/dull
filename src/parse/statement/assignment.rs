@@ -32,10 +32,12 @@ impl Assignment {
         bytes.push(b'=');
         self.expr.write_bytes(bytes, preserve_source_wording);
     }
-}
 
-impl std::fmt::Display for Assignment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}", self.lvalue, self.expr)
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        format!(
+            "{}={}",
+            self.lvalue.show(preserve_source_wording),
+            self.expr.show(preserve_source_wording)
+        )
     }
 }

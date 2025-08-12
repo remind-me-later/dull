@@ -13,16 +13,13 @@ impl PrintInner {
     pub fn new(exprs: Vec<(Printable, PrintSeparator)>, span: Span) -> Self {
         Self { exprs, span }
     }
-}
 
-impl std::fmt::Display for PrintInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        let mut result = String::new();
         for (printable, sep) in self.exprs.iter() {
-            match printable {
-                Printable::Expr(expr) => write!(f, "{expr}{sep}")?,
-                Printable::UsingClause(using) => write!(f, "{using}{sep}")?,
-            }
+            result.push_str(&printable.show(preserve_source_wording));
+            result.push_str(&sep.to_string());
         }
-        Ok(())
+        result
     }
 }

@@ -1,8 +1,8 @@
 const HEADER_MAGIC_BYTE: u8 = 0x01;
 const BASIC_MAGIC_STR: &[u8; 4] = b"@COM";
 // TODO: both of these parameters should be irrelevant for BASIC programs, check
-const STANDARD_ENTRY_POINT: u16 = 0xffff;
-const STANDARD_START_ADDRESS: u16 = 0x40C5;
+const STANDARD_ENTRY_POINT: u16 = 0x044f;
+const STANDARD_START_ADDRESS: u16 = 0x00c5;
 
 pub struct Header {
     magic_number: u8,

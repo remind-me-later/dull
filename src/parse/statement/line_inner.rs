@@ -64,24 +64,32 @@ impl LineInner {
         }
     }
 
-    pub fn to_string_with_prefix(&self, prefix: &str) -> String {
+    pub fn to_string_with_prefix(&self, prefix: &str, preserve_source_wording: bool) -> String {
         let mut result = format!("{prefix} ");
 
         // Handle start point - if None, start with '-'
         if let Some((x, y)) = &self.start_point {
-            result.push_str(&format!("({x},{y})"));
+            result.push_str(&format!(
+                "({},{})",
+                x.show(preserve_source_wording),
+                y.show(preserve_source_wording)
+            ));
         }
 
         for (x, y) in &self.end_points {
-            result.push_str(&format!("-({x},{y})"));
+            result.push_str(&format!(
+                "-({},{})",
+                x.show(preserve_source_wording),
+                y.show(preserve_source_wording)
+            ));
         }
 
         if let Some(line_type) = &self.line_type {
-            result.push_str(&format!(",{line_type}"));
+            result.push_str(&format!(",{}", line_type.show(preserve_source_wording)));
         }
 
         if let Some(color) = &self.color {
-            result.push_str(&format!(",{color}"));
+            result.push_str(&format!(",{}", color.show(preserve_source_wording)));
         }
 
         if self.is_box {

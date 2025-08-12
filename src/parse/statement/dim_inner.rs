@@ -17,8 +17,8 @@ pub enum DimInner {
     },
 }
 
-impl std::fmt::Display for DimInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl DimInner {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
         match self {
             DimInner::DimInner1D {
                 identifier,
@@ -26,10 +26,11 @@ impl std::fmt::Display for DimInner {
                 string_length,
                 span: _,
             } => {
-                write!(f, "{identifier}({size})")?;
+                let mut result = format!("{identifier}({})", size.show(preserve_source_wording));
                 if let Some(len) = string_length {
-                    write!(f, "*{len}")?;
+                    result.push_str(&format!("*{}", len.show(preserve_source_wording)));
                 }
+                result
             }
             DimInner::DimInner2D {
                 identifier,
@@ -38,12 +39,16 @@ impl std::fmt::Display for DimInner {
                 string_length,
                 span: _,
             } => {
-                write!(f, "{identifier}({rows},{cols})")?;
+                let mut result = format!(
+                    "{identifier}({},{})",
+                    rows.show(preserve_source_wording),
+                    cols.show(preserve_source_wording)
+                );
                 if let Some(len) = string_length {
-                    write!(f, "*{len}")?;
+                    result.push_str(&format!("*{}", len.show(preserve_source_wording)));
                 }
+                result
             }
         }
-        Ok(())
     }
 }

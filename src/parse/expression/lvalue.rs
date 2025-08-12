@@ -39,11 +39,7 @@ impl LValue {
         Self { inner, span }
     }
 
-    pub fn write_bytes(
-        &self,
-        bytes: &mut Vec<u8>,
-        preserve_source_wording: bool,
-    ) {
+    pub fn write_bytes(&self, bytes: &mut Vec<u8>, preserve_source_wording: bool) {
         match &self.inner {
             LValueInner::Identifier(id) => id.write_bytes(bytes),
             LValueInner::BuiltInIdentifier(bi) => {
@@ -78,24 +74,35 @@ impl LValue {
             }
         }
     }
-}
 
-impl std::fmt::Display for LValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
         match &self.inner {
-            LValueInner::Identifier(id) => write!(f, "{id}"),
-            LValueInner::BuiltInIdentifier(bi) => write!(f, "{bi}"),
-            LValueInner::Array1DAccess { identifier, index } => write!(f, "{identifier}({index})"),
+            LValueInner::Identifier(id) => format!("{}", id),
+            LValueInner::BuiltInIdentifier(bi) => format!("{}", bi),
+            LValueInner::Array1DAccess { identifier, index } => {
+                format!(
+                    "{}({})",
+                    format!("{}", identifier),
+                    index.show(preserve_source_wording)
+                )
+            }
             LValueInner::Array2DAccess {
                 identifier,
                 row_index,
                 col_index,
-            } => write!(f, "{identifier}({row_index},{col_index})"),
+            } => {
+                format!(
+                    "{}({},{})",
+                    format!("{}", identifier),
+                    row_index.show(preserve_source_wording),
+                    col_index.show(preserve_source_wording)
+                )
+            }
             LValueInner::FixedMemoryAreaAccess { index, has_dollar } => {
                 if *has_dollar {
-                    write!(f, "@$({index})")
+                    format!("@$({})", index.show(preserve_source_wording))
                 } else {
-                    write!(f, "@({index})")
+                    format!("@({})", index.show(preserve_source_wording))
                 }
             }
         }

@@ -25,14 +25,14 @@ impl UsingClause {
             format.write_bytes(bytes, preserve_source_wording);
         }
     }
-}
 
-impl std::fmt::Display for UsingClause {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        let mut result = String::new();
+        result.push_str("USING");
         if let Some(ref format) = self.format {
-            write!(f, "USING {format}")
-        } else {
-            write!(f, "USING")
+            result.push(' ');
+            result.push_str(&format.show(preserve_source_wording));
         }
+        result
     }
 }

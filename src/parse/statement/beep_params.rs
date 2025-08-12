@@ -15,14 +15,16 @@ impl BeepParams {
             span,
         }
     }
-}
 
-impl std::fmt::Display for BeepParams {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, ",{}", self.frequency)?;
+    pub fn show(&self, preserve_source_wording: bool) -> String {
         if let Some(duration) = &self.duration {
-            write!(f, ",{duration}")?;
+            format!(
+                ",{},{}",
+                self.frequency.show(preserve_source_wording),
+                duration.show(preserve_source_wording)
+            )
+        } else {
+            format!(",{}", self.frequency.show(preserve_source_wording))
         }
-        Ok(())
     }
 }

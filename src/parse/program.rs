@@ -34,13 +34,12 @@ impl Program {
     pub fn num_lines(&self) -> usize {
         self.lines.len()
     }
-}
 
-impl std::fmt::Display for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for line in self.lines.values() {
-            writeln!(f, "{line}")?;
-        }
-        Ok(())
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        self.lines
+            .values()
+            .map(|line| line.show(preserve_source_wording))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

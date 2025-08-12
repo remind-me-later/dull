@@ -488,177 +488,253 @@ impl StatementInner {
     }
 }
 
-impl std::fmt::Display for StatementInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl StatementInner {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
         match self {
-            StatementInner::Let { inner, .. } => write!(f, "{}", inner.show_with_context(false)),
+            StatementInner::Let { inner, .. } => {
+                inner.show_with_context(false, preserve_source_wording)
+            }
             StatementInner::If {
                 condition,
                 then_stmt,
-                ..
-            } => match &then_stmt.as_ref().inner {
-                StatementInner::Let { inner, .. } => {
-                    write!(f, "IF {condition} THEN {}", inner.show_with_context(true))
+                is_then_kw_present_in_source,
+                is_goto_kw_present_in_source,
+            } => {
+                let mut result = "IF ".to_owned();
+
+                result.push_str(&condition.show(preserve_source_wording));
+                result.push_str(" ");
+
+                if *is_then_kw_present_in_source {
+                    result.push_str("THEN ");
                 }
-                _ => write!(f, "IF {condition} THEN {then_stmt}"),
-            },
-            StatementInner::Print { inner } => write!(f, "PRINT {inner}"),
-            StatementInner::Pause { inner } => write!(f, "PAUSE {inner}"),
-            StatementInner::LPrint { inner } => {
-                write!(f, "LPRINT {}", inner.to_string_with_context(true))
+
+                match &then_stmt.as_ref().inner {
+                    StatementInner::Let { inner, .. } => {
+                        result.push_str(&inner.show_with_context(true, preserve_source_wording))
+                    }
+                    StatementInner::Goto { target } => {
+                        if *is_goto_kw_present_in_source {
+                            result.push_str("GOTO ");
+                        }
+                        result.push_str(&target.show(preserve_source_wording));
+                    }
+                    _ => result.push_str(&then_stmt.show(preserve_source_wording)),
+                }
+
+                result
             }
-            StatementInner::Using { using_clause } => write!(f, "{using_clause}"),
+            StatementInner::Print { inner } => {
+                format!("PRINT {}", inner.show(preserve_source_wording))
+            }
+            StatementInner::Pause { inner } => {
+                format!("PAUSE {}", inner.show(preserve_source_wording))
+            }
+            StatementInner::LPrint { inner } => {
+                format!(
+                    "LPRINT {}",
+                    inner.to_string_with_context(true, preserve_source_wording)
+                )
+            }
+            StatementInner::Using { using_clause } => {
+                format!("{}", using_clause.show(preserve_source_wording))
+            }
             StatementInner::Input { input_exprs } => {
                 let inputs = input_exprs
                     .iter()
                     .map(|(prompt, lval)| {
                         if let Some(prompt) = prompt {
-                            format!("{prompt};{lval}")
+                            format!(
+                                "{};{}",
+                                prompt.show(preserve_source_wording),
+                                lval.show(preserve_source_wording)
+                            )
                         } else {
-                            lval.to_string()
+                            lval.show(preserve_source_wording)
                         }
                     })
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "INPUT {inputs}")
+                format!("INPUT {inputs}")
             }
-            StatementInner::End => write!(f, "END"),
-            StatementInner::Remark { text } => write!(f, "REM {text}"),
+            StatementInner::End => "END".to_string(),
+            StatementInner::Remark { text } => format!("REM {text}"),
             StatementInner::For {
                 assignment,
                 to_expr,
                 step_expr,
             } => {
                 let step_str = if let Some(step) = step_expr {
-                    format!(" STEP {step}")
+                    format!(" STEP {}", step.show(preserve_source_wording))
                 } else {
                     String::new()
                 };
-                write!(f, "FOR {assignment} TO {to_expr}{step_str}")
+                format!(
+                    "FOR {} TO {}{}",
+                    assignment.show(preserve_source_wording),
+                    to_expr.show(preserve_source_wording),
+                    step_str
+                )
             }
-            StatementInner::Next { lvalue: ident } => write!(f, "NEXT {ident}"),
-            StatementInner::Clear => write!(f, "CLEAR"),
-            StatementInner::Goto { target } => write!(f, "GOTO {target}"),
-            StatementInner::Gosub { target } => write!(f, "GOSUB {target}"),
+            StatementInner::Next { lvalue: ident } => {
+                format!("NEXT {}", ident.show(preserve_source_wording))
+            }
+            StatementInner::Clear => "CLEAR".to_string(),
+            StatementInner::Goto { target } => {
+                format!("GOTO {}", target.show(preserve_source_wording))
+            }
+            StatementInner::Gosub { target } => {
+                format!("GOSUB {}", target.show(preserve_source_wording))
+            }
             StatementInner::OnGoto { expr, targets } => {
-                let targets_str = targets
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",");
-                write!(f, "ON {expr} GOTO {targets_str}")
+                format!(
+                    "ON {} GOTO {}",
+                    expr.show(preserve_source_wording),
+                    targets
+                        .iter()
+                        .map(|target| target.show(preserve_source_wording))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
             }
             StatementInner::OnGosub { expr, targets } => {
-                let targets_str = targets
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(",");
-                write!(f, "ON {expr} GOSUB {targets_str}")
+                format!(
+                    "ON {} GOSUB {}",
+                    expr.show(preserve_source_wording),
+                    targets
+                        .iter()
+                        .map(|target| target.show(preserve_source_wording))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
             }
-            StatementInner::OnErrorGoto { target } => write!(f, "ON ERROR GOTO {target}"),
-            StatementInner::Wait { expr } => write!(
-                f,
-                "WAIT {}",
-                expr.as_ref().map_or(String::new(), ToString::to_string)
-            ),
-            StatementInner::Cls => write!(f, "CLS"),
-            StatementInner::Random => write!(f, "RANDOM"),
+            StatementInner::OnErrorGoto { target } => {
+                format!("ON ERROR GOTO {}", target.show(preserve_source_wording))
+            }
+            StatementInner::Wait { expr } => {
+                if let Some(expr) = expr {
+                    format!("WAIT {}", expr.show(preserve_source_wording))
+                } else {
+                    "WAIT".to_string()
+                }
+            }
+            StatementInner::Cls => "CLS".to_string(),
+            StatementInner::Random => "RANDOM".to_string(),
             StatementInner::Gprint { exprs } => {
                 let exprs_str = exprs
                     .iter()
-                    .map(|(expr, sep)| format!("{expr}{sep}"))
+                    .map(|(expr, sep)| format!("{}{sep}", expr.show(preserve_source_wording)))
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "GPRINT {exprs_str}")
+                format!("GPRINT {exprs_str}")
             }
-            StatementInner::GCursor { expr } => write!(f, "GCURSOR {expr}"),
-            StatementInner::Cursor { expr } => write!(f, "CURSOR {expr}"),
+            StatementInner::GCursor { expr } => {
+                format!("GCURSOR {}", expr.show(preserve_source_wording))
+            }
+            StatementInner::Cursor { expr } => {
+                format!("CURSOR {}", expr.show(preserve_source_wording))
+            }
             StatementInner::Beep {
                 repetitions_expr,
                 optional_params,
             } => {
                 let params_str = optional_params
                     .as_ref()
-                    .map_or(String::new(), |params| params.to_string());
-                write!(f, "BEEP {repetitions_expr}{params_str}")
+                    .map_or(String::new(), |params| params.show(preserve_source_wording));
+                format!(
+                    "BEEP {}{}",
+                    repetitions_expr.show(preserve_source_wording),
+                    params_str
+                )
             }
             StatementInner::BeepOnOff { switch_beep_on } => {
-                write!(f, "BEEP {}", if *switch_beep_on { "ON" } else { "OFF" })
+                format!("BEEP {}", if *switch_beep_on { "ON" } else { "OFF" })
             }
-            StatementInner::Return => write!(f, "RETURN"),
+            StatementInner::Return => "RETURN".to_string(),
             StatementInner::Poke { memory_area, exprs } => {
                 let exprs_str = exprs
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|expr| expr.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "POKE")?;
                 match memory_area {
-                    MemoryArea::Me0 => write!(f, " {exprs_str}"),
-                    MemoryArea::Me1 => write!(f, "# {exprs_str}"),
+                    MemoryArea::Me0 => format!("POKE {exprs_str}"),
+                    MemoryArea::Me1 => format!("POKE# {exprs_str}"),
                 }
             }
             StatementInner::Dim { decls } => {
                 let decls_str = decls
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|decl| decl.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "DIM {decls_str}")
+                format!("DIM {decls_str}")
             }
             StatementInner::Read { destinations } => {
                 let destinations_str = destinations
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|dest| dest.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "READ {destinations_str}")
+                format!("READ {destinations_str}")
             }
             StatementInner::Data(exprs) => {
                 let exprs_str = exprs
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|expr| expr.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(",");
-                write!(f, "DATA {exprs_str}")
+                format!("DATA {exprs_str}")
             }
-            StatementInner::Restore { expr } => write!(
-                f,
-                "RESTORE {}",
-                expr.as_ref().map_or(String::new(), ToString::to_string)
-            ),
-            StatementInner::Arun => write!(f, "ARUN"),
-            StatementInner::Lock => write!(f, "LOCK"),
-            StatementInner::Unlock => write!(f, "UNLOCK"),
+            StatementInner::Restore { expr } => {
+                if let Some(expr) = expr {
+                    format!("RESTORE {}", expr.show(preserve_source_wording))
+                } else {
+                    "RESTORE".to_string()
+                }
+            }
+            StatementInner::Arun => "ARUN".to_string(),
+            StatementInner::Lock => "LOCK".to_string(),
+            StatementInner::Unlock => "UNLOCK".to_string(),
             StatementInner::Call { expr, variable } => {
-                let var_str = variable
-                    .as_ref()
-                    .map_or(String::new(), |v| format!(", {v}"));
-                write!(f, "CALL {expr}{var_str}")
+                let var_str = variable.as_ref().map_or(String::new(), |v| {
+                    format!(", {}", v.show(preserve_source_wording))
+                });
+                format!("CALL {}{var_str}", expr.show(preserve_source_wording))
             }
-            StatementInner::Radian => write!(f, "RADIAN"),
-            StatementInner::Text => write!(f, "TEXT"),
-            StatementInner::Graph => write!(f, "GRAPH"),
-            StatementInner::Color { expr } => write!(f, "COLOR {expr}"),
-            StatementInner::CSize { expr } => write!(f, "CSIZE {expr}"),
-            StatementInner::Lf { expr } => write!(f, "LF {expr}"),
-            StatementInner::LCursor(l_cursor_clause) => write!(
-                f,
-                "LCURSOR {}",
-                l_cursor_clause.to_string_with_context(false)
-            ),
+            StatementInner::Radian => "RADIAN".to_string(),
+            StatementInner::Text => "TEXT".to_string(),
+            StatementInner::Graph => "GRAPH".to_string(),
+            StatementInner::Color { expr } => {
+                format!("COLOR {}", expr.show(preserve_source_wording))
+            }
+            StatementInner::CSize { expr } => {
+                format!("CSIZE {}", expr.show(preserve_source_wording))
+            }
+            StatementInner::Lf { expr } => format!("LF {}", expr.show(preserve_source_wording)),
+            StatementInner::LCursor(l_cursor_clause) => {
+                format!(
+                    "LCURSOR {}",
+                    l_cursor_clause.to_string_with_context(false, preserve_source_wording)
+                )
+            }
             StatementInner::GlCursor { x_expr, y_expr } => {
-                write!(f, "GLCURSOR ({x_expr}, {y_expr})")
+                format!(
+                    "GLCURSOR ({}, {})",
+                    x_expr.show(preserve_source_wording),
+                    y_expr.show(preserve_source_wording)
+                )
             }
             StatementInner::Line { inner } => {
-                write!(f, "{}", inner.to_string_with_prefix("LINE"))
+                inner.to_string_with_prefix("LINE", preserve_source_wording)
             }
             StatementInner::RLine { inner } => {
-                write!(f, "{}", inner.to_string_with_prefix("RLINE"))
+                inner.to_string_with_prefix("RLINE", preserve_source_wording)
             }
-            StatementInner::Sorgn => write!(f, "SORGN"),
-            StatementInner::Rotate { expr } => write!(f, "ROTATE {expr}"),
+            StatementInner::Sorgn => "SORGN".to_string(),
+            StatementInner::Rotate { expr } => {
+                format!("ROTATE {}", expr.show(preserve_source_wording))
+            }
         }
     }
 }

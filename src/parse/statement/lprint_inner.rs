@@ -14,15 +14,21 @@ impl LPrintInner {
         Self { exprs, span }
     }
 
-    pub fn to_string_with_context(&self, is_inside_lprint: bool) -> String {
+    pub fn to_string_with_context(
+        &self,
+        is_inside_lprint: bool,
+        preserve_source_wording: bool,
+    ) -> String {
         let mut result = String::new();
         for (printable, sep) in self.exprs.iter() {
             match printable {
                 LPrintPrintable::Expr(expr) => {
-                    result.push_str(&expr.to_string());
+                    result.push_str(&expr.show(preserve_source_wording));
                 }
                 LPrintPrintable::LCursorClause(cursor) => {
-                    result.push_str(&cursor.to_string_with_context(is_inside_lprint));
+                    result.push_str(
+                        &cursor.to_string_with_context(is_inside_lprint, preserve_source_wording),
+                    );
                 }
             }
             result.push_str(&sep.to_string());
@@ -39,9 +45,11 @@ impl LPrintInner {
         for (printable, sep) in self.exprs.iter() {
             match printable {
                 LPrintPrintable::Expr(expr) => expr.write_bytes(bytes, preserve_source_wording),
-                LPrintPrintable::LCursorClause(cursor) => {
-                    cursor.write_bytes_with_context(is_inside_lprint, bytes, preserve_source_wording)
-                }
+                LPrintPrintable::LCursorClause(cursor) => cursor.write_bytes_with_context(
+                    is_inside_lprint,
+                    bytes,
+                    preserve_source_wording,
+                ),
             }
             sep.write_bytes(bytes);
         }

@@ -13,4 +13,11 @@ impl Printable {
             Printable::UsingClause(using) => using.write_bytes(bytes, preserve_source_wording),
         }
     }
+
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        match self {
+            Printable::Expr(expr) => expr.show(preserve_source_wording),
+            Printable::UsingClause(using) => using.show(preserve_source_wording),
+        }
+    }
 }

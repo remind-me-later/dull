@@ -11,11 +11,15 @@ impl LCursorClause {
         Self { expr, span }
     }
 
-    pub fn to_string_with_context(&self, is_inside_lprint: bool) -> String {
+    pub fn to_string_with_context(
+        &self,
+        is_inside_lprint: bool,
+        preserve_source_wording: bool,
+    ) -> String {
         if is_inside_lprint {
-            format!("LCURSOR {}", self.expr)
+            format!("LCURSOR {}", self.expr.show(preserve_source_wording))
         } else {
-            format!("TAB {}", self.expr)
+            format!("TAB {}", self.expr.show(preserve_source_wording))
         }
     }
 

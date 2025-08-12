@@ -61,9 +61,18 @@ impl ExprInner {
             }
             ExprInner::DecimalNumber(n) => n.to_string(),
             ExprInner::BinaryNumber(h) => h.to_string(),
-            ExprInner::LValue(lval) => lval.to_string(),
-            ExprInner::StringLiteral { value, .. } => format!("\"{value}\""),
-            ExprInner::FunctionCall(f) => f.to_string(),
+            ExprInner::LValue(lval) => lval.show(preserve_source_wording),
+            ExprInner::StringLiteral {
+                value,
+                is_quote_closed_in_source,
+            } => {
+                if *is_quote_closed_in_source {
+                    format!("\"{value}\"")
+                } else {
+                    format!("\"{value}")
+                }
+            }
+            ExprInner::FunctionCall(f) => f.show(preserve_source_wording),
             ExprInner::Parentheses(expr) => {
                 if preserve_source_wording {
                     format!(
@@ -129,30 +138,23 @@ impl ExprInner {
                 f.write_bytes_preserving_source_parens(bytes, preserve_source_wording)
             }
             ExprInner::Parentheses(expr) => {
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
-            }
-        }
-    }
-}
-
-impl std::fmt::Display for ExprInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExprInner::Unary(op, expr) => write!(
-                f,
-                "{op}{}",
-                expr.show_with_context_and_parens(7, false, false)
-            ),
-            e @ ExprInner::Binary(..) => {
-                write!(f, "{}", e.show_with_context_and_parens(0, false, false))
-            }
-            ExprInner::DecimalNumber(n) => write!(f, "{n}"),
-            ExprInner::BinaryNumber(h) => write!(f, "{h}"),
-            ExprInner::LValue(lval) => write!(f, "{lval}"),
-            ExprInner::StringLiteral { value, .. } => write!(f, "\"{value}\""),
-            ExprInner::FunctionCall(function) => write!(f, "{function}"),
-            ExprInner::Parentheses(expr) => {
-                write!(f, "{}", expr.show_with_context_and_parens(0, false, false))
+                if preserve_source_wording {
+                    bytes.push(b'(');
+                    expr.write_bytes_with_context_and_parens(
+                        bytes,
+                        0,
+                        false,
+                        preserve_source_wording,
+                    );
+                    bytes.push(b')');
+                } else {
+                    expr.write_bytes_with_context_and_parens(
+                        bytes,
+                        8,
+                        false,
+                        preserve_source_wording,
+                    );
+                }
             }
         }
     }

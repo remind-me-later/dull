@@ -145,7 +145,7 @@ impl Function {
                 bytes.extend_from_slice(Keyword::Point.internal_code().to_be_bytes().as_slice());
                 position.write_bytes_with_context_and_parens(
                     bytes,
-                    8,
+                    20,
                     false,
                     preserve_source_wording,
                 );
@@ -154,7 +154,7 @@ impl Function {
                 bytes.extend_from_slice(Keyword::Rnd.internal_code().to_be_bytes().as_slice());
                 range_end.write_bytes_with_context_and_parens(
                     bytes,
-                    8,
+                    20,
                     false,
                     preserve_source_wording,
                 );
@@ -207,7 +207,7 @@ impl Function {
                 }
                 address.write_bytes_with_context_and_parens(
                     bytes,
-                    8,
+                    20,
                     false,
                     preserve_source_wording,
                 );
@@ -246,70 +246,71 @@ impl Function {
             }
         }
     }
-}
 
-impl std::fmt::Display for Function {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
         match &self.inner {
             FunctionInner::Mid {
                 string,
                 start,
                 length,
             } => {
-                write!(f, "MID({string}, {start}, {length})")
+                format!(
+                    "MID({}, {}, {})",
+                    string.show(preserve_source_wording),
+                    start.show(preserve_source_wording),
+                    length.show(preserve_source_wording)
+                )
             }
-            FunctionInner::Left { string, length } => write!(f, "LEFT({string}, {length})"),
-            FunctionInner::Right { string, length } => write!(f, "RIGHT({string}, {length})"),
-            FunctionInner::Asc { expr } => write!(f, "ASC({expr})"),
-            FunctionInner::Point { position } => write!(
-                f,
+            FunctionInner::Left { string, length } => format!(
+                "LEFT({}, {})",
+                string.show(preserve_source_wording),
+                length.show(preserve_source_wording)
+            ),
+            FunctionInner::Right { string, length } => format!(
+                "RIGHT({}, {})",
+                string.show(preserve_source_wording),
+                length.show(preserve_source_wording)
+            ),
+            FunctionInner::Asc { expr } => format!("ASC {}", expr.show(preserve_source_wording)),
+            FunctionInner::Point { position } => format!(
                 "POINT {}",
-                position.show_with_context_and_parens(20, false, false)
+                position.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Rnd { range_end } => write!(
-                f,
+            FunctionInner::Rnd { range_end } => format!(
                 "RND {}",
-                range_end.show_with_context_and_parens(20, false, false)
+                range_end.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Int { expr } => write!(
-                f,
+            FunctionInner::Int { expr } => format!(
                 "INT {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Sgn { expr } => write!(
-                f,
+            FunctionInner::Sgn { expr } => format!(
                 "SGN {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Status { arg } => write!(
-                f,
+            FunctionInner::Status { arg } => format!(
                 "STATUS {}",
-                arg.show_with_context_and_parens(20, false, false)
+                arg.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Val { expr } => write!(
-                f,
+            FunctionInner::Val { expr } => format!(
                 "VAL {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Str { expr } => write!(
-                f,
+            FunctionInner::Str { expr } => format!(
                 "STR$ {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Chr { expr } => write!(
-                f,
+            FunctionInner::Chr { expr } => format!(
                 "CHR$ {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Abs { expr } => write!(
-                f,
+            FunctionInner::Abs { expr } => format!(
                 "ABS {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Len { expr } => write!(
-                f,
+            FunctionInner::Len { expr } => format!(
                 "LEN {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
             FunctionInner::Peek {
                 memory_area,
@@ -319,52 +320,47 @@ impl std::fmt::Display for Function {
                     MemoryArea::Me0 => "",
                     MemoryArea::Me1 => "#",
                 };
-                write!(
-                    f,
+                format!(
                     "PEEK{area_str} {}",
-                    address.show_with_context_and_parens(20, false, false)
+                    address.show_with_context_and_parens(20, false, preserve_source_wording)
                 )
             }
-            FunctionInner::Ln { expr } => write!(
-                f,
-                "LN {}",
-                expr.show_with_context_and_parens(20, false, false)
-            ),
-            FunctionInner::Log { expr } => write!(
-                f,
+            FunctionInner::Ln { expr } => {
+                format!(
+                    "LN {}",
+                    expr.show_with_context_and_parens(20, false, preserve_source_wording)
+                )
+            }
+            FunctionInner::Log { expr } => format!(
                 "LOG {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Dms { expr } => write!(
-                f,
+            FunctionInner::Dms { expr } => format!(
                 "DMS {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Deg { expr } => write!(
-                f,
+            FunctionInner::Deg { expr } => format!(
                 "DEG {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Tan { expr } => write!(
-                f,
+            FunctionInner::Tan { expr } => format!(
                 "TAN {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Cos { expr } => write!(
-                f,
+            FunctionInner::Cos { expr } => format!(
                 "COS {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Sin { expr } => write!(
-                f,
+            FunctionInner::Sin { expr } => format!(
                 "SIN {}",
-                expr.show_with_context_and_parens(20, false, false)
+                expr.show_with_context_and_parens(20, false, preserve_source_wording)
             ),
-            FunctionInner::Sqr { expr } => write!(
-                f,
-                "√{}",
-                expr.show_with_context_and_parens(20, false, false)
-            ),
+            FunctionInner::Sqr { expr } => {
+                format!(
+                    "√{}",
+                    expr.show_with_context_and_parens(20, false, preserve_source_wording)
+                )
+            }
         }
     }
 }

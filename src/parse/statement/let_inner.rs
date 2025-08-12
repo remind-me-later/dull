@@ -1,4 +1,4 @@
-use crate::{error::Span, lex::keyword::Keyword, parse::statement::assignment::Assignment};
+use crate::{error::Span, parse::statement::assignment::Assignment};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetInner {
@@ -19,20 +19,24 @@ impl LetInner {
         self.span
     }
 
-    pub fn show_with_context(&self, is_mandatory_let: bool) -> String {
+    pub fn show_with_context(
+        &self,
+        is_mandatory_let: bool,
+        preserve_source_wording: bool,
+    ) -> String {
         if is_mandatory_let {
             format!(
                 "LET {}",
                 self.assignments
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|a| a.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(",")
             )
         } else {
             self.assignments
                 .iter()
-                .map(ToString::to_string)
+                .map(|a| a.show(preserve_source_wording))
                 .collect::<Vec<_>>()
                 .join(",")
         }

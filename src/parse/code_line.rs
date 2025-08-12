@@ -86,26 +86,30 @@ impl CodeLine {
         let line_size = (bytes.len() - line_size_pos) as u8;
         bytes[line_size_pos] = line_size;
     }
-}
 
-impl std::fmt::Display for CodeLine {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn show(&self, preserve_source_wording: bool) -> String {
+        let mut result = format!("{} ", self.number);
         if let Some(label) = &self.label {
-            write!(f, "{} \"{}\"", self.number, label.name)?;
-        } else {
-            write!(f, "{}", self.number)?;
+            result.push_str(&format!("\"{}", label.name));
+
+            if label.are_quotes_closed_in_source {
+                result.push('\"');
+            }
+
+            if label.has_colon_in_source {
+                result.push(':');
+            }
         }
         if !self.statements.is_empty() {
-            write!(
-                f,
-                " {}",
+            result.push_str(&format!(
+                "{}",
                 self.statements
                     .iter()
-                    .map(ToString::to_string)
+                    .map(|stmt| stmt.show(preserve_source_wording))
                     .collect::<Vec<_>>()
                     .join(":")
-            )?;
+            ));
         }
-        Ok(())
+        result
     }
 }
