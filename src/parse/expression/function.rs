@@ -139,7 +139,7 @@ impl Function {
             }
             FunctionInner::Asc { expr } => {
                 bytes.extend_from_slice(Keyword::Asc.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Point { position } => {
                 bytes.extend_from_slice(Keyword::Point.internal_code().to_be_bytes().as_slice());
@@ -161,37 +161,37 @@ impl Function {
             }
             FunctionInner::Int { expr } => {
                 bytes.extend_from_slice(Keyword::Int.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Sgn { expr } => {
                 bytes.extend_from_slice(Keyword::Sgn.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Status { arg } => {
                 bytes.extend_from_slice(Keyword::Status.internal_code().to_be_bytes().as_slice());
-                arg.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                arg.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Val { expr } => {
                 bytes.extend_from_slice(Keyword::Val.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Str { expr } => {
                 bytes
                     .extend_from_slice(Keyword::StrDollar.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Chr { expr } => {
                 bytes
                     .extend_from_slice(Keyword::ChrDollar.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Abs { expr } => {
                 bytes.extend_from_slice(Keyword::Abs.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Len { expr } => {
                 bytes.extend_from_slice(Keyword::Len.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Peek {
                 memory_area,
@@ -214,19 +214,19 @@ impl Function {
             }
             FunctionInner::Ln { expr } => {
                 bytes.extend_from_slice(Keyword::Ln.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Log { expr } => {
                 bytes.extend_from_slice(Keyword::Log.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Dms { expr } => {
                 bytes.extend_from_slice(Keyword::Dms.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Deg { expr } => {
                 bytes.extend_from_slice(Keyword::Deg.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Tan { expr } => {
                 bytes.extend_from_slice(Keyword::Tan.internal_code().to_be_bytes().as_slice());
@@ -234,15 +234,15 @@ impl Function {
             }
             FunctionInner::Cos { expr } => {
                 bytes.extend_from_slice(Keyword::Cos.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Sin { expr } => {
                 bytes.extend_from_slice(Keyword::Sin.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
             FunctionInner::Sqr { expr } => {
                 bytes.extend_from_slice(Keyword::Sqr.internal_code().to_be_bytes().as_slice());
-                expr.write_bytes_with_context_and_parens(bytes, 8, false, preserve_source_wording);
+                expr.write_bytes_with_context_and_parens(bytes, 20, false, preserve_source_wording);
             }
         }
     }
