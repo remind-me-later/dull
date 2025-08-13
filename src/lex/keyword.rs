@@ -178,7 +178,7 @@ impl Keyword {
             Keyword::End => 0xF18E,
             Keyword::Erl => 0xF053,
             Keyword::Err => 0xF052,
-            Keyword::Error => 0xF184,
+            Keyword::Error => 0xF1B4,
             Keyword::Exp => 0xF178,
             Keyword::Feed => 0xF0B0,
             Keyword::For => 0xF1A5,

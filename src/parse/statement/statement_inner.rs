@@ -229,10 +229,7 @@ impl StatementInner {
             }
             StatementInner::Remark { text } => {
                 bytes.extend_from_slice(Keyword::Rem.internal_code().to_be_bytes().as_slice());
-                // FIXME: can we safely omit the text?
-                if preserve_source_wording {
-                    bytes.extend_from_slice(text.as_bytes());
-                }
+                bytes.extend_from_slice(text.as_bytes());
             }
             StatementInner::For {
                 assignment,
