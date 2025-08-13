@@ -165,7 +165,7 @@ fn main() {
             std::process::exit(1);
         }
 
-        print!("{}", program.show(args.preserve_source_wording));
+        println!("{}", program.show(args.preserve_source_wording));
     } else if args.lex {
         // Just output the tokens
         for (i, token) in tokens.iter().enumerate() {

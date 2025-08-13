@@ -247,6 +247,10 @@ impl Iterator for Lexer<'_> {
                 Token::Keyword(Keyword::Sqr),
                 self.span_from(start_pos),
             ))),
+            'π' => Some(Ok(SpannedToken::new(
+                Token::Keyword(Keyword::Pi),
+                self.span_from(start_pos),
+            ))),
 
             // String literals
             '"' => {
@@ -435,8 +439,7 @@ impl Iterator for Lexer<'_> {
                                 match self.remark_opt {
                                     RemarkLexOption::TrimWhitespace => {
                                         // Skip the rest of the whitespace
-                                        while self.peek().is_some_and(|&c| c == ' ' || c == '\t')
-                                        {
+                                        while self.peek().is_some_and(|&c| c == ' ' || c == '\t') {
                                             self.advance();
                                         }
                                     }

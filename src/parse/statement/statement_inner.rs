@@ -135,6 +135,7 @@ pub enum StatementInner {
     Rotate {
         expr: Expr,
     },
+    Degree,
 }
 
 impl StatementInner {
@@ -343,11 +344,13 @@ impl StatementInner {
             }
             StatementInner::Poke { memory_area, exprs } => {
                 match memory_area {
-                    MemoryArea::Me0 => bytes.extend_from_slice(
-                        Keyword::Poke.internal_code().to_be_bytes().as_slice(),
-                    ),
+                    MemoryArea::Me0 => bytes
+                        .extend_from_slice(Keyword::Poke.internal_code().to_be_bytes().as_slice()),
                     MemoryArea::Me1 => bytes.extend_from_slice(
-                        Keyword::PokeHashTag.internal_code().to_be_bytes().as_slice(),
+                        Keyword::PokeHashTag
+                            .internal_code()
+                            .to_be_bytes()
+                            .as_slice(),
                     ),
                 }
                 for (i, expr) in exprs.iter().enumerate() {
@@ -488,6 +491,9 @@ impl StatementInner {
             StatementInner::Rotate { expr } => {
                 bytes.extend_from_slice(Keyword::Rotate.internal_code().to_be_bytes().as_slice());
                 expr.write_bytes(bytes, preserve_source_wording);
+            }
+            StatementInner::Degree => {
+                bytes.extend_from_slice(Keyword::Degree.internal_code().to_be_bytes().as_slice());
             }
         }
     }
@@ -741,6 +747,9 @@ impl StatementInner {
             StatementInner::Sorgn => "SORGN".to_string(),
             StatementInner::Rotate { expr } => {
                 format!("ROTATE {}", expr.show(preserve_source_wording))
+            }
+            StatementInner::Degree => {
+                format!("DEGREE")
             }
         }
     }

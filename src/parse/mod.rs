@@ -881,6 +881,14 @@ where
                     start_span,
                 )))
             }
+            Token::Keyword(Keyword::Pi) => {
+                let start_span = self.current_span();
+                self.tokens.next();
+                Ok(Some(LValue::new(
+                    LValueInner::BuiltInIdentifier(Keyword::Pi),
+                    start_span,
+                )))
+            }
             _ => Ok(None),
         }
     }
@@ -1176,6 +1184,18 @@ where
         }
     }
 
+    fn parse_degree_stmt(&mut self) -> Option<Statement> {
+        if self
+            .next_if_token_eq(&Token::Keyword(Keyword::Degree))
+            .is_some()
+        {
+            let start_token = self.current_span();
+            Some(Statement::new(StatementInner::Degree, start_token))
+        } else {
+            None
+        }
+    }
+
     fn parse_statement(&mut self, is_let_mandatory: bool) -> ParseResult<Option<Statement>> {
         if let Some(stmt) = self.parse_print_pause_stmt()? {
             return Ok(Some(stmt));
@@ -1266,6 +1286,10 @@ where
         }
 
         if let Some(stmt) = self.parse_dim_stmt()? {
+            return Ok(Some(stmt));
+        }
+
+        if let Some(stmt) = self.parse_degree_stmt() {
             return Ok(Some(stmt));
         }
 
@@ -1384,9 +1408,7 @@ where
                 )))
             } else {
                 if then_kw.is_none() {
-                    return Err(ParseError::ExpectedThenClause {
-                        span: start_span,
-                    });
+                    return Err(ParseError::ExpectedThenClause { span: start_span });
                 }
 
                 let goto_expr = self.expect_expression()?;

@@ -70,7 +70,8 @@ impl SemanticAnalyzer {
         // First pass: collect all labels
         for line in program.lines() {
             if let Some(label) = line.label() {
-                self.symbol_table.insert_label(label.to_owned(), line.number());
+                self.symbol_table
+                    .insert_label(label.to_owned(), line.number());
             }
         }
 
@@ -358,6 +359,7 @@ impl SemanticAnalyzer {
                     });
                 }
             }
+            StatementInner::Degree => {}
         }
         Ok(())
     }

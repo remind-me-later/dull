@@ -14,7 +14,7 @@ pub struct LValue {
 pub enum LValueInner {
     // A, BB$, etc.
     Identifier(Identifier),
-    // TIME, INKEY$, etc.
+    // TIME, PI, INKEY$
     BuiltInIdentifier(Keyword),
     // A(2), B$(E), etc.
     Array1DAccess {
