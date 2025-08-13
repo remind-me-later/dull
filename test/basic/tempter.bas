@@ -1,3 +1,20 @@
+' "Tempter" for Sharp PC-1500 +4,8,16KB or PC-1500A.
+' © Sharpentiers.
+' Author : ?
+' Published in "La revue des sharpentiers" #8.
+' BASIC program - 2910 bytes.
+' 
+' CLOAD "TEMPTER"
+' RUN or DEF A
+' 
+' Game: Find (possibly) a treasure chest and the exit in a labyrinth within limited time. What you see in the labyrinth is represented in subjective (3D!) view on the left part of the tiny LCD screen... The display also tells you the distance (in steps) from the exit. An asterisk (*) warns you that the treasure is nearby. If you encounter a guard, shoot him before he gets you...
+' 
+' Keys:
+' 2/4/6/8 - move
+' SPACE - fire
+' G- dig wall (when you are at the exit or when you're stuck)
+' 
+' ----- BASIC program -----------------------------------------
 1 "TEMPTER"
 2 "Sharpentiers No 8
 3 "Deplacements: 2 4 6 8

@@ -1,3 +1,13 @@
+' "Jackpot" pour SHARP PC-1500
+' © Philippe PALLU, L'Ordinateur de poche, 1983.
+' 
+' Paru dans "L'Ordinateur de poche" n°13, mai 1983.
+' 
+' Programme BASIC de 1458 octets.
+' 
+' CLOAD "JACKPOT"
+' 
+' ----- BASIC program -----------------------------------------
 10 "A"REM  * JACKPOT*
 20 REM *AUTEUR Philippe PALLU*
 100 REM  * INITIALISATION *

@@ -1439,19 +1439,22 @@ where
             let mut input_exprs = vec![];
 
             loop {
-                // Check for prompt string
-                let prompt = if let Some(s) = self.parse_expression()? {
+                let lvalue = self.parse_lvalue()?;
+
+                if let Some(lvalue) = lvalue {
+                    input_exprs.push((None, lvalue)); // No prompt
+                } else {
+                    // Try to parse a prompt
+                    let prompt = self.expect_expression()?;
+                    // Expect ;
                     self.expect_token(
                         &Token::Symbol(Symbol::Semicolon),
-                        "Expected semicolon after input prompt",
+                        "Expected ';' after prompt",
                     )?;
-                    Some(s)
-                } else {
-                    None
-                };
 
-                let lvalue = self.expect_lvalue()?;
-                input_exprs.push((prompt, lvalue));
+                    let lvalue = self.expect_lvalue()?;
+                    input_exprs.push((Some(prompt), lvalue));
+                }
 
                 if self
                     .next_if_token_eq(&Token::Symbol(Symbol::Comma))

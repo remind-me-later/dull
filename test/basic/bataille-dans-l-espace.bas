@@ -1,3 +1,18 @@
+' "Bataille dans l'espace" pour SHARP PC-1500
+' © Jean-Luc BECHENNEC, L'Ordinateur de poche, 1983.
+' Paru dans "L'Ordinateur de poche" n°11, mars 1983.
+' Programme BASIC de 2047 octets.
+'
+' CLOAD "B. DANS L ESPACE"
+' RUN ou DEF G
+'
+' Commandes :
+' 7 8 9
+' 4 5 6
+' 1 2 3
+' SHIFT - Feu
+'
+' ----- BASIC program -----------------------------------------
 10 "G"CLS :WAIT 110:CURSOR 6:PRINT "*** COMBAT ***"
 20 CLEAR :DIM A$(2,2)*14,B$(2,2)*14,C$(2,2)*6,R(72),P(6)
 30 FOR A=0 TO 2:FOR B=0 TO 2:READ A$(A,B):NEXT B:NEXT A

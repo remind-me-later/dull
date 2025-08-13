@@ -1,3 +1,22 @@
+' "Micromur" for Sharp PC-1500
+' © Hebdogiciel, Shift editions.
+' Author : Jean-Marc Verniajou
+' Published in "Hebdogiciel"
+' BASIC program - 1990 bytes.
+' 
+' CLOAD "MICROMUR"
+' RUN
+' 
+' Game:
+' This is a little breakout game.
+' 
+' Keys:
+' I - start / pause (interrupt) / resume
+' I N - new game
+' Q - up
+' Z - down
+' 
+' ----- BASIC program -----------------------------------------
 1 "MICROMUR"GOTO 2999
 2000 CLS :WAIT 0:GCURSOR 35:GPRINT "022551423E0202010008080808002050403E0408043E42"
 2005 CURSOR 12:PRINT "Software"

@@ -1,3 +1,19 @@
+' "Slalom" for Sharp PC-1500 +4 KB
+' © Hebdogiciel, Shift editions.
+' Author : Frédéeric YARGUI
+' Published in Hebdogiciel #90, July 1985.
+' BASIC program - 2426 bytes.
+' 
+' CLOAD "SLALOM"
+' RUN or DEF A
+' 
+' Commands:
+' SHIFT   - up
+' .       - down
+' numbers - change speed
+' DEF Z   - see scores
+' 
+' ----- BASIC program -----------------------------------------
 1 "SLALOM"
 2 "Hebdogiciel No 90
 3 "Deplacement: SHIFT / .

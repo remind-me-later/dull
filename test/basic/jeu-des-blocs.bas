@@ -1,3 +1,13 @@
+' "Jeu des blocs" for Sharp PC-1500 + CE-150
+' © Hebdogiciel, Shift editions.
+' Author : Pierre Marcellin
+' Published in Hebdogiciel #27 (April 1984).
+' BASIC program - 2522 bytes.
+' 
+' CLOAD "JEU DES BLOCS"
+' RUN
+' 
+' ----- BASIC program -----------------------------------------
 1 "JEU DES BLOCS"
 2 "Hebdogiciel No 27"
 3 "C"CLEAR :INPUT "Damier Z*Z:Z=";Z,"Imprimante ?(O/N) ";A$

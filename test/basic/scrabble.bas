@@ -1,3 +1,13 @@
+' "Scrabble" for Sharp PC-1500 + CE150 + 8KB RAM
+' © Hebdogiciel, Shift editions.
+' Author : Wolfram Von Lunen
+' Published in Hebdogiciel #30-31, May 1984.
+' BASIC program - 8216 bytes.
+' 
+' CLOAD "SCRABBLE"
+' RUN
+' 
+' ----- BASIC program -----------------------------------------
 1 "SCRABBLE":REM Hebdo.30
 2 "S"CLEAR :RANDOM :BEEP 1,20,200:WAIT 0:PRINT " VOULEZ-VOUS LES REGLES ?":D$=INKEY$ :IF D$="O"THEN 5
 3 IF D$="N"THEN 6

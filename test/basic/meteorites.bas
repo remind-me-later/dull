@@ -1,3 +1,18 @@
+' "Meteorites" for Sharp PC-1500
+' © Hebdogiciel, Shift editions.
+' Author : Pierre LEFORT
+' Published in Hebdogiciel #58 (November 1984)
+' BASIC program - 1879 bytes
+' 
+' CLOAD "METEORITES"
+' RUN or DEF A
+' 
+' Keys:
+' A - fire
+' Q - shield
+' 2/4/6/8 - move 
+' 
+' ----- BASIC program -----------------------------------------
 1 "METEORITES - hebdo 58
 2 "Touches: A Q 2 4 6 8
 9 "A"CLEAR :T=4,Y=10,E$="0000000000":RANDOM 

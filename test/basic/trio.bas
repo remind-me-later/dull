@@ -1,3 +1,19 @@
+' "Trio" for Sharp PC-1500 +4,8,16 Ko or PC-1500A.
+' Adapted from an original program for Casio FX-702P published in "L'Ordinateur de Poche" #12, April 1983.
+' © Alain Ginsbach, L'Ordinateur de Poche, 1983; E. Beaurepaire, 2000.
+' BASIC program - 2017 bytes.
+' 
+' Game: an interesting little strategy game. The two players (you and the PC-1500) have three different pieces and play in successive turns. You must bring one of your pieces to the other end of the "board", or take all your opponent's pieces. One piece can take an ennemy by moving to the same location, but can not take its counterpart (symmetric piece). The small pieces can move one step forward or 3 steps back, the medium ones move 2 steps forward or 2 steps back, and the large ones move three steps forward or one step back. Game is won when one of the pieces has reached the other side, or when the opponent can't play its turn.
+' 
+' Running the program:
+' Type RUN or DEF A
+' Keys:
+' 1/2/3 : select piece
+' +/- : select move
+' SPACE : give up
+' 
+' BASIC program.
+'
 1 "TRIO"REM PC-1500+4Ko or PC-1500A
 10 "A"CLEAR :RANDOM :DIM A(22)
 20 A$="000008000000"

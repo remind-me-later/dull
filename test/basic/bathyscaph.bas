@@ -1,3 +1,17 @@
+' "Bathyscaph" for Sharp PC-1500 or PC-1500A.
+' © L'Ordinateur Individuel.
+' Author : Philippe Caïric
+' Published in "L'Ordinateur Individuel" #48 (May 1983).
+' BASIC program - 907 bytes.
+' 
+' CLOAD "BATHYSCAPH"
+' RUN or DEF Z
+' 
+' Game: Pilot your submarine through the cave and reach the exit as fast as possible. If you crash, you start again and your time adds up.
+' 
+' Keys:
+' cursor up - up
+' cursor down - down
 1 "BATHYSCAPH"
 2 "Move : up/down arrows
 8 "Z"CLS :WAIT 0:CLEAR :DIM A$(0)*20:GCURSOR 10

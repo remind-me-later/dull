@@ -1,3 +1,19 @@
+' "Simulateur de vol" for Sharp PC-1500 + CE-150
+' © Hebdogiciel, Shift editions.
+' Author : Charles CARON
+' Published in Hebdogiciel #37, June 1984.
+' BASIC program - 3949 bytes.
+' 
+' CLOAD "SIMULATEUR VOL"
+' RUN or DEF A
+' 
+' Commands:
+' .          turn on
+' 0          ?
+' 2/4/5/6/8  ?
+' -/+        ?
+' 
+' ----- BASIC program -----------------------------------------
 1 "SIMULATEUR VOL"
 2 "Hebdogiciel no.37"
 10 "A"CLEAR :RADIAN :A=90,B=π/180,X=170,Y=10,R=155,A$="*":WAIT 0: GOSUB 580: GOSUB 620:CLS : GOSUB 480

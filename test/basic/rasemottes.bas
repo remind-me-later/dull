@@ -1,3 +1,17 @@
+' "Rase-mottes" for Sharp PC-1500
+' © E. Beaurepaire.
+' Unpublished.
+' BASIC program - 855 bytes.
+' 
+' A very simple game : you pilot a small plane that crosses the screen from left to right, and you must fly as close to the ground as possible (without crashing). And don't miss the exit at the right !
+' 
+' Start the program with DEF S or RUN. 
+' Press any key to start the game. The plane goes from left to right automatically. 
+' "8" : move up 
+' "." : move down 
+' After the game is over, press "ON/Break" to exit the program, or any key to replay.
+' 
+' ----- BASIC program -----------------------------------------
 1 "RASE-MOTTES"
 2 "E.BEAUREPAIRE"
 10 "S" CLEAR :RANDOM :DIM A$(0)*40

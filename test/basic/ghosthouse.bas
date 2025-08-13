@@ -1,3 +1,32 @@
+' GHOST HOUSE 2003 game for SHARP PC-1500 +4KB
+' Author: Akihiko Hatakeda
+' 
+' Story:
+' You have just arrived at the famous ghost house. Rumors say that there are amazing treasures in the house.Countless adventurers tried to get wealth and fame there, but no one came back...
+' 
+' How to play:
+' First time: DEF S
+' Next times: GOTO 10
+' To see top 30 scores: GOTO 6000
+' 
+' When you enter a new floor, you see 24 black squares representing 8 rooms (three black squares represent one room).
+' At each floor, there are three black gems, three monsters, and various other items hidden in the rooms.
+' You can explore 3 rooms per floor.
+' To explore a room, simply type its number (from 1 to 8).
+' After having explored 3 rooms, type another number to move to the next level.
+' 
+' You get score and experience by finding gems and killing monsters.
+' When the game starts, you have 500 hit points (HP) and monsters have 3 strength points (STR).
+' 
+' Unfound black gems at each floor are added to the monsters' strength. For example, if you do not find any of the three gems, STR increases by 3.
+' 
+' Finding the 3 black gems on a floor gives bonus and heals you.
+' Killing the 3 black monsters on a floor gives bonus and heals you.
+' 
+' The games goes on until your hit points fall below 0.
+' Things are easy at first because you start with many hit points - but monsters strength tend to get increase over time.
+' 
+' See attached scans for more explanations about monsters and gems.
 1 R=RND 24:IF S(R)>2THEN 1
 2 S(R)=Q:RETURN
 3 FOR X=15TO 25STEP 2:BEEP 1,X,20:NEXT X:CURSOR Z:RETURN 

@@ -1,3 +1,26 @@
+' "Gloupman" for Sharp PC-1500 +4/8/16 Ko
+' © Hebdogiciel, Shift editions
+' Author : Marc Codin
+' Published in "Hebdogiciel" #89 - june 28,1985.
+' 
+' French version:  5608 (BASIC) bytes.
+' English version: 5556 (BASIC) bytes.
+' 
+' CLOAD "GLOUPMAN" 
+' (note: load either French or English version)
+' DEF A or RUN
+' 
+' Game :
+' Turned into a pacman, you must eat the "*"s and avoid ghosts. The PC-1500 displays the following informations : map of the current labyrinth, your position (=row) in the labyrinth (arrow), remaining lives, detail of the line where you are in the labyrinth. There is one ghost per row, and it goes through the walls. You can trick the ghosts using the tunnels. There are 2 tunnels in labys #1 and 4, 1 tunnel in laby #2, no tunnel in laby #3. You win 1 life for each completed level.
+' 
+' Keys :
+' I/P - left/right
+' Q/Z - up/down
+' 
+' Jeu :
+' Metamorphose en pacman, vous devez devorer les "*" et echapper aux fantomes. Infos dont vous disposez: le laby ou vous etes, le niveau dans le laby (fleche), le nombre de vies restant, et la ligne sur laquelle vous etes. Il y a un fantome par ligne, qui traverse les murs. Mouvement avec les touches I (gauche), P (droite), Q (haut), Z (bas). Attention: vous avez 2 tunnels au 1er laby, un seul au 2eme, aucun au 3eme et 2 au 4eme. Une vie gagnee par tableau. Au 5e laby, on recommence. Bonne chance!
+' 
+' ----- BASIC program -----------------------------------------
 1 "GLOUPMAN"
 2 "Hebdogiciel No 89"
 5 "A"WAIT 5:CLS :A$="1C3E3E361400",B$="14363E3E1C00":FOR I=0 TO 7:CURSOR I:GPRINT A$:CURSOR 25-I:GPRINT B$
@@ -75,7 +98,7 @@
 1268 DATA 1,2,2,2,2,2,1,1,1,1,1,2,2,2,2,2,1
 1269 DATA 1,2,2,1,2,2,2,2,1,2,2,2,2,1,2,2,1
 1270 DATA 1,2,2,2,2,1,1,2,2,2,1,1,2,2,2,2,1,77
-1271 DATA 1,2,2,2,1,1,2,2,1,2,2,1,1,2,2,2,1,
+1271 DATA 1,2,2,2,1,1,2,2,1,2,2,1,1,2,2,2,1
 1272 DATA 2,2,2,2,2,1,2,2,1,2,2,1,2,2,2,2,2
 1273 DATA 1,2,2,2,2,1,2,1,1,1,2,1,2,1,1,1,1
 1274 DATA 1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1

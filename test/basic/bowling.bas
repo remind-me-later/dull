@@ -1,3 +1,16 @@
+' "Bowling" for Sharp PC-1500
+' © Hebdogiciel, Shift editions.
+' Author : Charles Carron
+' Published in Hebdogiciel #13 (January 1984).
+' BASIC program - 1295 bytes.
+' 
+' CLOAD "BOWLING"
+' DEF A  or  RUN
+' 
+' Keys:
+' SPACE to drop the ball.
+' 
+' ----- BASIC program -----------------------------------------
 1 "BOWLING"
 2 "d/apres Hebdogiciel 13
 3 "SPACE: lancer la boule.

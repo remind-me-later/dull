@@ -1,3 +1,46 @@
+' "Minenboot" game (Mine boat) for Sharp PC-1500 +4KB.
+' © Happy Computer. 
+' Author : Rupert Wagner
+' Published in "Happy Computer" (January 1984).
+' BASIC program.
+' 
+' The program can be started with "DEF A" or "RUN MINE". The aim of the game is to let your ship sail safely to the harbor on the right side of the display. Before the game starts, the computer hides up to seven mines on the game field. If the ship sails over a mine, it sinks and the game is over. The ship is equipped with a minesweeper to detect the mines. You can destroy mines with the ship front cannon, but do not destroy the search boat...
+' When you reach the middle of the screen, you may be attacked by submarines shooting fast torpedoes. Torpedoes must be detroyed with the ship rear cannon.
+' 
+' Note: all controls are done through Inkey inputs and triggered by simple keystrokes; most controls have a repeat function.
+' 
+' Controls:
+' * Reserve toggle: Toggle large/small boat control
+' * RCL (Mine display): Visual display by bars or audible beeps. This key is effective only when the controller is on sweeper.
+' * SPACE (has dual function): (a) control of sweeper. (b) Control of Ship.
+' * Vertical scrolling keys: Set firing range. The firing range is in matrix points counted from the gun and displayed as a two-digit number. The corresponding gun must be loaded. 
+' * ENTER (has two functions): (a) control of minesweeper. (b) control of ship firing.
+' * Cursor Left or Cursor Right: Forward and backward search of boat or ship.
+' * SML: Switch to rear cannon. The little cannon loads itself automatically, and can shoot automatic fire.
+' (Rupert Wagner)
+' 
+' ---
+' 
+' "Minenboot" für den Sharp PC-1500
+' Beim "Minenboot" handelt es sich um ein Spiel mit echter Display-Grafik. Man benötigt dafür mindestens eine 4-KByte-Speichererweiterung.
+' 
+' Das Programm kann mit "DEF A" oder "RUN MINE" gestartet werden. Ziel des Spiels ist es, das große Schiff sicher an die Hafenmauer auf der rechten Seite des Displays zu fahren. Wird das Suchboot während des Spiels nicht versenkt, so muß das Boot an die Hafenmauer und das Schiff direkt hinter das Boot gebracht werden. Vor Spielbeginn plaziert der Computer bis zu sieben unsichtbare Minen auf dem Spielfield. Diese Minen können nur vom Suchboot unbeschadet überfahren werden. 
+' Läuft das Schiff auf eine dieser Minen, geht es unter und das Spiel ist beendet. Um diese Minen aber aufspüren zu können, ist das Suchboot mit einem Sensor-Rüssel ausgestattet. Die Anzeige der Minen erfolgt wahlweise mit Beep oder einem Balken variabler Höhe. Die Mitte des Suchrüssels ist genau dann über einer Mine, wenn der Balken sieben Matrixpunkte hoch ist, beziehungsweise wenn sieben schnelle Pieptöne hintereinander ertönen. Die Lage einer Mine kahn mit einer Boje markiert werden.
+' Nun wird mit der vorderen Kanone des Schiffes so lange auf die Mine gerschossen, bis sie getroffen ist und explodiert. Dabei muß man aufpassen, daß man nicht das eigene Suchboot trifft und versenkt. Über das Suchboot kann jedoch ohne Bedenken hinweggeschossen werden. Hat sich das Schiff fast bis zur Mitte des Displays durchgekämpft, tritt eine weitere, wesentlich größere Gefahr hinzu. Es tauchen dann nämlich U-Boot-Schnorchel auf sowie Torpedos, die von Mal zu Mal schneller werden und das Schiff verfolgen. Diese Torpedos müssen mit der kleinen Heckkanone des Schiffes abgeschossen werden, bevor sie das Schiff versenken können.
+' 
+' Erreicht das Schiff trotz der Gefahren das Ziel, so werden die Materialverluste bewertet. Hierbei werden die vernichteten Minen und torpedos auf der Feindseite gegen die verschossenen großen und kleinen Granaten auf der eigenen Seite aufgewogen. Ein eventueller Verlust der Suchboots schlägt hier ebenfalls zu Buche.
+' Alle Steuerfunktionen werden als Inkey-Funktionen durch (nicht zu kurze) Tastendrücke ausgelöst. Fast alle Steuertasten besitzen eine Repeat-Funktion!
+' Folgende Steuerfunktionen stehen zur Verfügung:
+' * Reserve-Ebenen-Taste: Umschalten der Steuerung von Schiff auf Boot und umgekehrt. Zur Kontrolle wird rechtsbündig auf dem Display ein großes oder kleines Boot angezeigt
+' * RCL-Taste (Minenanzeige): Visuelle Anzeige durch Balken oder akustische Anzeige durch Beep. Zur Kontrolle wird rechtsbündig auf dem Display ein Balken mit "V" beziehungsweise ein Kopfhörersymbol angezeigt. Diese Taste ist nur wirksam, wenn die Steuerung auf Suchboot steht.
+' * Space-Taste (besitzt Doppelfunktion): (a) Steuerung auf Suchboot: Hinter dem Boot wird eine Boje ausgesetzt, sofern der Abstand zum Schiff groß genug ist une sich nicht schon eine andere Boje auf dem Spielfeld befindet. (b) Steuerung auf Schiff: Die Bug-Kanone wird geladen. Zur kontrolle erscheint recht auf dem Display eine große Patrone. Der Ladevorgang muß vor jedem Schuß wiederholt werden.
+' * Tasten für vertikales Durchrollen des Programmspeichers: Mit diesen beiden Tasten wird die Schußentfernung eingestellt. Die Schußentfernung wird in Matrixpunkten von der Kanonenmündung aus gezählt und als zweistellige Zahl angezeigt. Die entsprechende Kanone muß zum Einstellen geladen sein. Bei der Heck-Kanone erfolgt die Änderung immer in 5er-Sprüngen.
+' * Enter-Taste (besitzt Doppelfunktion): (a) Steuerung auf Suchboot:abfrage der Minenanzeige für den jeweiligen Standort. (b) Steuerung auf Schiff:  Abfeuern der Bug-beziehungsweise Heck-Kanone.
+' * Tasten für Cursor-Links beziehungsweise Cursor-Rechts: Vorwärts- und Rückwärtffahrt von Suchboot oder Schiff.
+' * SML-Taste: Umschalten auf Heck-Kanone. Diese Umschaltung kann erst erfolgen, wenn fast die Steuerung auf "Schiff" steht. Die kleine Kanone lädt sich automatisch nach und kann auch Dauerfeuer schießen. Zur Kontrolle wird rechts auf dem Display eine Patrone angezeigt.
+' 
+' (Rupert Wagner)
+'
 5 "MINE"
 10 "A"CLS :CLEAR :WAIT 90:PRINT "     * MINEN - BOOT *":RANDOM 
 20 DIM B$(0)*56,A$(0)*22,C$(0)*24,D$(0)*18,E$(0)*38,Z$(7)*12

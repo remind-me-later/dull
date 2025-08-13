@@ -1,3 +1,34 @@
+' "Pac Man" for SHARP PC-1500 + CE-155.
+' Author: Joël Armengaud
+' Published in Hebdogiciel #42, July 1984.
+' 
+' BASIC program: 2246 bytes.
+' 
+' NEW 15394
+' CLOAD "PAC MAN"
+' RUN
+' (ATTENDEZ UN MOMENT)		"Wait a minute"	shown while checksum is calculated 
+' (ERREUR DANS LES DONNEES)	"Error in data" shown if checksum fails test 
+' (PROGRAMME PRET)		"Program ready" shown if checksum passes test 
+' RUN 120				This jumps to program in machine code
+' 
+' For the PC-1500, this mapping makes sense because F1 is right over E
+' F5		Move left
+' F6		Move right
+' F1		Move up
+' E		Move down
+' 
+' For the PC-2, this mapping works better because F1 is over T and Y
+' F5		Move left
+' F6		Move right
+' F1		Move up
+' T or Y		Move down
+' 
+' The move inputs are actually mapped to most of the keys, probably to go around actual keyboard decoding to avoid using MIPs to decode the entire keyboard.
+' 
+' As the game progresses through the maze at the left, the bits to eat are removed from the grid at the right.
+' 
+' ----- BASIC program -----------------------------------------
 10 CLS :ON ERROR GOTO 260
 20 Z=PEEK &78B8*256+PEEK &78B9+1
 30 A=STATUS 2:POKE A,&58,&38,&5A,&C5,&BE,&ED,&95,&81,3,&51,&9E,8,&5C,&3C,&91,&C,&89,4

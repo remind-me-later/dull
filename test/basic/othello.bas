@@ -1,3 +1,11 @@
+' "Othello" pour SHARP PC-1500.
+' © Logi' Stick.
+' 
+' Programme BASIC de 4343 octets.
+' 
+' CLOAD "OTHELLO"
+' 
+' ----- BASIC program -----------------------------------------
 1 "A"BEEP ON :WAIT 0:CLS :PRINT "OTHELLO : PC-1500 5Ko MIN.":CLEAR :DIM A(99),X(3):O$="0005030000"
 2 LG=4: GOSUB 5000:CLS :PRINT "   COPYRIGHT LOGI";:GPRINT O$;:PRINT "STICK": GOSUB 5000:P$="442810284400"
 3 CLS :PRINT "Othello 6";:GPRINT P$;:PRINT "6 ou 8";:GPRINT P$;:PRINT "8 ?"

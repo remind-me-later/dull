@@ -1,3 +1,11 @@
+' "Morpion" pour SHARP PC-1500 et CE-150
+' © Logi' Stick, 1983.
+' 
+' Programme BASIC de 1910 octets.
+' 
+' CLOAD "MORPION"
+' 
+' ----- BASIC program -----------------------------------------
 1 ARUN 
 2 REM 
 3 REM ***************************

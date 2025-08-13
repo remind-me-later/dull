@@ -1,3 +1,11 @@
+' "Dames" pour SHARP PC-1500.
+' © Logi' Stick, 1983.
+' 
+' Programme BASIC de 3200 octets.
+' 
+' CLOAD "DAMES"
+' 
+' ----- BASIC program -----------------------------------------
 1 ARUN 
 2 REM  
 3 REM  **************************

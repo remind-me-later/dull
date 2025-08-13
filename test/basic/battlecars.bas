@@ -1,3 +1,22 @@
+' "Battle cars" for Sharp PC-1500
+' © Hebdogiciel, Shift editions.
+' Author : Sakuma Akihiro
+' Published in Hebdogiciel #48 (September 1984).
+' BASIC program - 8733 bytes.
+'
+' CLOAD "BATTLE CARS"
+' RUN
+'
+' Commands:
+' D - Turn on
+' L - Pause
+' P - Check list
+' 1/3 - Fire left/right
+' 8 - Speed up
+' 4/6 - Turn left/right
+'
+' ----- BASIC program -----------------------------------------
+1 "BATTLE CARS"
 2 "Hebdogiciel 48"
 3 "(D)emarrer"
 4 "(L): Demande de repit"

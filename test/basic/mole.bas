@@ -1,3 +1,13 @@
+' "Catch the mole" for Sharp PC-1500
+' © Sharp.
+' in "PC-1500 application manual".
+' BASIC program - 981 bytes.
+' 
+' CLOAD "MOLE"
+' RUN  or  RUN "MOLE"  or  DEF B
+' 
+' Keys:
+' function keys (!  "  #  $  %  &)
 5000 "MOLE"
 5010 "B":CLEAR 
 5020 WAIT 150:PRINT "GAME START"

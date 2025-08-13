@@ -1,3 +1,20 @@
+' "Formula-1" for Sharp PC-1500
+' © Hebdogiciel (Shift editions)
+' Author : Marcel Griessmann
+' Published in "Hebdogiciel" #25.
+' BASIC program - 3762 bytes.
+' 
+' CLOAD "FORMULA-1"
+' RUN or DEF A
+' 
+' Game: A racing game. Wait for the green light (G), then go as fast as possible while staying on the track and avoiding the other cars !
+' 
+' Keys:
+' SPACE - left
+' ENTER - right
+' 1/2/3/4/5 - gears
+' 
+' ----- BASIC program -----------------------------------------
 1 "FORMULA 1"
 2 "Hebdogiciel #25"
 3 "Right/Left: SPACE/ENTER

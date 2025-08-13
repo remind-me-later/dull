@@ -1,3 +1,24 @@
+' "Le loup des mers" pour Sharp PC-1500
+' © Hebdogiciel (Shift éditions ?)
+' Author: Joël JONGEN
+' Published in Hebdogiciel #84 (May 1985)
+' 5088 bytes
+' 
+' Démarrage : DEF A
+' 
+' Commandes:
+' 8 6 4 2    : directions
+' P O        : periscope
+' L K        : radar
+' CL         : check list
+' flèches    : assiette
+' shift +C,D : torpille
+' 
+' But du jeu:
+' ??
+' la base se trouve en (0,0,-100)
+' 
+' ----- BASIC program -----------------------------------------
 1 "LE LOUP DES MERS"
 2 "Hebdogiciel no.84"
 3 " directions : 8,6,4,2

@@ -1,3 +1,35 @@
+' Blackjack for Sharp PC-1500.
+' Author: Antony F. P. Vickery.
+' 
+' Attached is a zipped file containing (1) a BASIC blackjack program I wrote in 1984 for my Sharp PC-1500; (2) a wave file containing the program suitable for loading into the computer. The program follows the rules of blackjack as they were in Atlantic City in New Jersey in 1984 (I actually made a trip to Atlantic City to pick up a copy of the rules). The only function that isn't implemented in Insurance, which is always a bad bet. 
+'   
+' As you will see from the source code, lines 60 to 110 actually implement an algorithm to renumber the line numbers of the program in memory. You enter the starting line number (I use 50) and the increment interval (I use 10) and the renumbering takes place automatically. To run the renumberer you enter "run 60." Entering just "run" executes the blackjack program. Of course, if you've used absolute line number references in your program you won't want to run the renumbering program. 
+'   
+' Lines 130 to 210 implement an "inverse video" routine for the display. 
+'   
+' During initialization certain questions are asked of the user. Defaults are displayed thus: <default value>. 
+'   
+' "Win limit" defaults to two times initial funds. The games will stop automatically if the win limit is reached. 
+'   
+' The program implements a basic card counting strategy which can be displayed at will (see below). 
+'   
+' Valid commands are during the game are: 
+'   
+' C = Turns card counting on or off 
+' D = Double down 
+' E = End game 
+' F = Displays available funds 
+' G = Displays game statistics (number of wins, number of losses, etc.) 
+' H = Hit 
+' S or Enter = Stick 
+' T = Displays total value of bets 
+' X = Split 
+' * = Displays this command list 
+'   
+' Hope you enjoy it.
+'   
+' Antony F. P. Vickery 
+' Lansdale, Pennsylvania, USA 
 50 ARUN :LOCK :GOTO "B-J"
 60 A=(STATUS 2)-1:B=14533:INPUT "START LINE NO.? ";C
 70 INPUT "INTERVAL? ";D:WAIT 0:C=C-D:USING "######"

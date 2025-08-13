@@ -1,3 +1,20 @@
+' "Tank combak game" for Sharp PC-1500
+' © Hebdogiciel, Shift editions.
+' Author : F Edelin
+' Published in "Hebdogiciel" #5 (Nov 1983).
+' BASIC program - 1880 bytes.
+' 
+' CLOAD "TANK"
+' RUN
+' 
+' Game : destroy tanks with grenades... If the tank shoots at you, you can hide in a pit made by a grenade.
+'  
+' Keys:
+' 1 - left
+' 3 - right
+' 2 - throw grenade (hold key to throw further)
+' 
+' ----- BASIC program -----------------------------------------
 1 REM <<<< TANK >>>>
 2 REM ///Hebdo. No 5///
 3 GOTO 1000

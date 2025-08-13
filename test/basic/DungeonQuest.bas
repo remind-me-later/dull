@@ -1,3 +1,48 @@
+' "DungeonQuest" for Sharp PC-1500 +8 KB.
+' Copyrighted Freeware.
+' Author: Tralornik.
+' BASIC program - 7537 bytes.
+' 
+' CLOAD "DUNGEONQUEST"
+' 
+' In this pocket-size RPG, you explore a dungeon for gems and keys, while fighting horrible beasts. At each level, you need to find the 7 keys and then get to the exit... The game justs fits in an 8 KB RAM module. 
+' 
+' Note: The program includes a "LOCK" statement to prevent you from accidently messing up the code. If you want to switch the PC-1500 to PRO mode, you need to type UNLOCK <ENTER> after stopping the program.
+' 
+' Start:
+' After you type RUN, the program displays a little banner, asks wheter you want sound (type Y or N), and then builds the dungeon. This will take approx 1mn15 (see screen 1).
+' 
+' Break/Resume:
+' After the dungeon is constructed, you can BREAK and turn off the game, and resume it by typing GOTO "RESUME" <ENTER>. (Do not press break when the program is creating the dungeon.)
+' 
+' Display:
+' On the left, the PC1500 displays a top-down view of the room where you are, with the possible exits. A dot appears at the center of the room if you have already visited it. "Nearby:" indicates the objects/monsters in the adjacent rooms, if any. On the right is your strengh (S) (see screen 2).
+' 
+' Displacements:
+' You can move to an adjacent room using the numeric keypad:
+'    8
+'  4 + 6
+'    2
+' Each move costs 1 point in strength (up to level 10) , then 2 points (from level 11 to 20), and so on.
+' As you find silver, gold, gems, etc, they are picked up automatically (or fallen into in the case of traps).
+' 
+' Fight (5 key):
+' When you encounter a beast, you are shown on the right and the beast on the left (see screen 3). Each of you has a number randomly changing...Press the <5> key to launch an arrow and your number must match or beat the beast's number. (Your number is from 1 to 8, the beast is from 4 to 8). You win treasure and strength if you kill the beast quickly. You loose strengh if you take to many tries.
+' 
+' Online help (F1 key)
+' Pressing F1 shows what other F-keys do (see screen 4)
+' 
+' Web (F2 key) - Author web site.
+' 
+' Sound (F3 key) - Turn sound on/off.
+' 
+' Compass (F4 key) - Indicate the direction of the exit.
+' 
+' Transport (F5 key)
+' A Transport allows you to set a room, then move anywhere and then "transport" back to the room in one move. Quite useful when you find the exit but don't have all the keys to exit.
+' 
+' Info (F6 key) - Display treasure points, keys found, and current level.
+'
 1 "DUNGEONQUEST"CLEAR :DIM A$(30,30)*1:RANDOM :DIM K(20),L(20)
 2 WAIT 200:PRINT "Dungeon Quest Ver1.3 by"
 3 PRINT "BattleQuest.com, Inc."

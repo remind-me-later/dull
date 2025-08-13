@@ -1,3 +1,26 @@
+' "Monstres & Merveilles" for Sharp PC-1500
+' © Hebdogiciel, Shift Editions.
+' Author : M. LAURENT
+' Published in Hebdogiciel #52 (October 1984).
+' BASIC program - 5132 bytes.
+' 
+' CLOAD "MONSTRES & MERVE"
+' RUN
+' 
+' Monsters & Marvels : A small Role Playing Game !
+' 
+' Commands:
+' 1st and 2nd parts of the game:
+'   C : combat
+'   F : flee
+'   cursor up : throw arrow
+'   SPACE : grab health potion (be quick)
+' 
+' Last part of the game:
+'   Q : left
+'   P : right
+' 
+' ----- BASIC program -----------------------------------------
 1 "MONSTRES & MERVEILLES"
 2 "Hebdogiciel no 52"
 4 CLEAR :RANDOM : GOTO 10

@@ -1,3 +1,21 @@
+' "Aterrissage" for Sharp PC-1500
+' Author : Olivier Bournac
+' Published in Hebdogiciel #28 (April 1984)
+' BASIC program - 1908 bytes.
+'
+' CLOAD "ATERRISSAGE"
+' RUN
+'
+' Jeu : 
+' Vous devez faire aterrir un avion a partir d'une situation parametrable (altitude, vitesse, carburant).
+' La vitesse d'arrivee doit etre inferieure a 100 et l'altitude inferieure a 5.
+' La vitesse ne doit jamais etre inferieure a 60.
+'
+' Commandes:
+' Manche: U I H K N M
+' Ailettes: curseurs Haut/Bas
+'
+' ----- BASIC program -----------------------------------------
 1 "ATERRISSAGE"
 2 "Manche: U I H K N M
 3 "Ailettes: curs.Haut/Bas

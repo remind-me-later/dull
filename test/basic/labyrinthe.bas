@@ -1,3 +1,15 @@
+' "Labyrinthe" for Sharp PC-1500
+' © Sharp.
+' in "Manuel d'applications PC-1500".
+' BASIC program - 2448 bytes.
+' 
+' CLOAD "LABYRINTHE"
+' RUN
+' 
+' Keys:
+' 2/4/6/8 - move
+' 
+' ----- BASIC program -----------------------------------------
 1 "LABYRINTHE"
 2 "Deplacements: 2 4 6 8
 10 "A"CLEAR :M=&FF,S=&FF

@@ -251,6 +251,15 @@ impl Iterator for Lexer<'_> {
                 Token::Keyword(Keyword::Pi),
                 self.span_from(start_pos),
             ))),
+            // Parse true comments, lines beginning with "'"
+            '\'' => {
+                while let Some(ch) = self.advance() {
+                    if ch == '\n' {
+                        break;
+                    }
+                }
+                self.next()
+            }
 
             // String literals
             '"' => {

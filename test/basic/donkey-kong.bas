@@ -1,3 +1,20 @@
+' "Donkey-kong" for Sharp PC-1500
+' © Hebdogiciel (Shift editions) 1985
+' Author : Yann Eric Proy
+' Published in "Hebdogiciel" #86.
+' BASIC program - 1871 bytes.
+' 
+' RUN or DEF D
+' 
+' Game: Jump over the barrels and climb the 10 levels... Up there, beware of the gorilla!
+' 
+' Keys:
+' left arrow - left
+' right arrow - right
+' up arrow - up
+' ENTER - jump
+' 
+' ----- BASIC program -----------------------------------------
 1 "DONKEY"
 2 "Hebdogiciel #86
 5 "D"CLS :WAIT 0:CURSOR 5:PRINT "**DONKEY-KONG**":FOR A=8TO 22:BEEP 2,A,8:NEXT A

@@ -1,3 +1,16 @@
+' "Bombing"(Bombardements) for Sharp PC-1500
+' © E. Beaurepaire.
+' BASIC program - 936 bytes.
+'
+' Unpublished.
+'
+' You're that pixel flying horizontally across the screen, and you drop bombs (one at a time) over structures at the bottom of the screen. Over time, you fly closer and closer to the ground, until the final crash... 
+' Hitting a 4-pixels structure gives you 4 points, a 3-pixels structures gives you 3 points, and so on. When you hit a structure, it becomes one pixel smaller. 
+' If you manage to destroy all the 4-pixels structures, you get a bonus when you sucessfully cross the screen at a height where you should have crashed into one of them. Same for 3-pixels buildings, but you probably won't go that far! 
+'
+' Start the program with DEF A or RUN. 
+' The program then randomly creates the "city". 
+' SPACE drops a bomb. Next bomb can be dropped only after the previous hits something. 
 1 "BOMBARDEMENTS"
 2 "E.BEAUREPAIRE 1983"
 10 "A"CLEAR :PAUSE " **** BOMBARDEMENTS ****"

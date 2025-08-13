@@ -1,3 +1,10 @@
+' "Decathlon" for Sharp PC-1500 + CE-150
+' © Sharpentiers.
+' Author : Maurice Choucroun
+' Published in "La revue des Sharpentiers" #11, 1985.
+' BASIC program - 7550 bytes.
+' 
+' ----- BASIC program -----------------------------------------
 1 "DECATHLON"
 2 "Sharpentier no 11"
 10 GOSUB 61E3:BEEP 2,75,200:D=4:RANDOM :DIM A$(7),B$(1)*24:A$="000068241F6444"
