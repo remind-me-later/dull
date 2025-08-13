@@ -548,7 +548,7 @@ where
                     span,
                 )))
             }
-            Token::Keyword(Keyword::PeekMem0) => {
+            Token::Keyword(Keyword::Peek) => {
                 let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
@@ -561,7 +561,7 @@ where
                     span,
                 )))
             }
-            Token::Keyword(Keyword::PeekMem1) => {
+            Token::Keyword(Keyword::PeekHashTag) => {
                 let start_span = self.current_span();
                 self.tokens.next();
                 let address = self.expect_expression_factor()?;
@@ -1796,11 +1796,11 @@ where
     fn parse_poke_stmt(&mut self) -> ParseResult<Option<Statement>> {
         let start_span = self.current_span();
         let memory_area = match self.peek_token() {
-            Token::Keyword(Keyword::PokeMem0) => {
+            Token::Keyword(Keyword::Poke) => {
                 self.tokens.next();
                 MemoryArea::Me0
             }
-            Token::Keyword(Keyword::PokeMem1) => {
+            Token::Keyword(Keyword::PokeHashTag) => {
                 self.tokens.next();
                 MemoryArea::Me1
             }

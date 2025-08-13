@@ -344,10 +344,10 @@ impl StatementInner {
             StatementInner::Poke { memory_area, exprs } => {
                 match memory_area {
                     MemoryArea::Me0 => bytes.extend_from_slice(
-                        Keyword::PokeMem0.internal_code().to_be_bytes().as_slice(),
+                        Keyword::Poke.internal_code().to_be_bytes().as_slice(),
                     ),
                     MemoryArea::Me1 => bytes.extend_from_slice(
-                        Keyword::PokeMem1.internal_code().to_be_bytes().as_slice(),
+                        Keyword::PokeHashTag.internal_code().to_be_bytes().as_slice(),
                     ),
                 }
                 for (i, expr) in exprs.iter().enumerate() {

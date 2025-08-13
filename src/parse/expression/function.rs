@@ -199,10 +199,10 @@ impl Function {
             } => {
                 match memory_area {
                     MemoryArea::Me0 => bytes.extend_from_slice(
-                        Keyword::PeekMem0.internal_code().to_be_bytes().as_slice(),
+                        Keyword::Peek.internal_code().to_be_bytes().as_slice(),
                     ),
                     MemoryArea::Me1 => bytes.extend_from_slice(
-                        Keyword::PeekMem1.internal_code().to_be_bytes().as_slice(),
+                        Keyword::PeekHashTag.internal_code().to_be_bytes().as_slice(),
                     ),
                 }
                 address.write_bytes_with_context_and_parens(
