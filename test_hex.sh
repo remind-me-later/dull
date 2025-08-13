@@ -41,7 +41,7 @@ else
 fi
 
 # Build the cargo command
-CARGO_ARGS="--remark-mode $REMARK_MODE -w $BAS_FILE -o $BIN_FILE"
+CARGO_ARGS="--remark-mode $REMARK_MODE $BAS_FILE -o $BIN_FILE"
 
 if [ "$INCLUDE_HEADER" -eq 0 ]; then
     CARGO_ARGS="--no-header $CARGO_ARGS"

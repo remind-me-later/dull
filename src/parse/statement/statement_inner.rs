@@ -172,9 +172,15 @@ impl StatementInner {
                         inner.write_bytes(bytes, preserve_source_wording);
                     }
                     StatementInner::Goto { target } => {
-                        if preserve_source_wording && *is_goto_kw_present_in_source {
+                        if preserve_source_wording {
+                            if *is_goto_kw_present_in_source {
+                                bytes.extend_from_slice(
+                                    Keyword::Goto.internal_code().to_be_bytes().as_slice(),
+                                );
+                            }
+                        } else {
                             bytes.extend_from_slice(
-                                Keyword::Goto.internal_code().to_be_bytes().as_slice(),
+                                Keyword::Then.internal_code().to_be_bytes().as_slice(),
                             );
                         }
                         target.write_bytes(bytes, preserve_source_wording);
@@ -222,9 +228,11 @@ impl StatementInner {
                 bytes.extend_from_slice(Keyword::End.internal_code().to_be_bytes().as_slice());
             }
             StatementInner::Remark { text } => {
-                // FIXME: can we safely omit the text?
                 bytes.extend_from_slice(Keyword::Rem.internal_code().to_be_bytes().as_slice());
-                bytes.extend_from_slice(text.as_bytes());
+                // FIXME: can we safely omit the text?
+                if preserve_source_wording {
+                    bytes.extend_from_slice(text.as_bytes());
+                }
             }
             StatementInner::For {
                 assignment,
@@ -486,9 +494,7 @@ impl StatementInner {
             }
         }
     }
-}
 
-impl StatementInner {
     pub fn show(&self, preserve_source_wording: bool) -> String {
         match self {
             StatementInner::Let { inner, .. } => {
@@ -503,9 +509,9 @@ impl StatementInner {
                 let mut result = "IF ".to_owned();
 
                 result.push_str(&condition.show(preserve_source_wording));
-                result.push_str(" ");
+                result.push(' ');
 
-                if *is_then_kw_present_in_source {
+                if preserve_source_wording && *is_then_kw_present_in_source {
                     result.push_str("THEN ");
                 }
 
@@ -514,8 +520,12 @@ impl StatementInner {
                         result.push_str(&inner.show_with_context(true, preserve_source_wording))
                     }
                     StatementInner::Goto { target } => {
-                        if *is_goto_kw_present_in_source {
-                            result.push_str("GOTO ");
+                        if preserve_source_wording {
+                            if *is_goto_kw_present_in_source {
+                                result.push_str("GOTO ");
+                            }
+                        } else {
+                            result.push_str("THEN ");
                         }
                         result.push_str(&target.show(preserve_source_wording));
                     }
@@ -537,7 +547,7 @@ impl StatementInner {
                 )
             }
             StatementInner::Using { using_clause } => {
-                format!("{}", using_clause.show(preserve_source_wording))
+                using_clause.show(preserve_source_wording).to_string()
             }
             StatementInner::Input { input_exprs } => {
                 let inputs = input_exprs

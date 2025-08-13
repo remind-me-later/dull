@@ -33,7 +33,7 @@ pub enum BasicType {
 /// Symbol table for tracking variable and label declarations
 #[derive(Debug, Clone)]
 pub struct SymbolTable {
-    variables: HashMap<String, BasicType>,
+    variables: HashMap<Identifier, BasicType>,
     labels: HashMap<String, u16>, // label name -> line number
 }
 
@@ -45,8 +45,8 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert_variable(&mut self, name: String, type_: BasicType) {
-        self.variables.insert(name, type_);
+    pub fn insert_variable(&mut self, id: Identifier, type_: BasicType) {
+        self.variables.insert(id, type_);
     }
 
     pub fn insert_label(&mut self, name: String, line_number: u16) {
@@ -54,36 +54,14 @@ impl SymbolTable {
     }
 }
 
-#[derive(Debug)]
-pub struct SemanticAnalysisState {
-    symbol_table: SymbolTable,
-}
-
-impl SemanticAnalysisState {
-    pub fn new() -> Self {
-        Self {
-            symbol_table: SymbolTable::new(),
-        }
-    }
-
-    pub fn insert_variable(&mut self, identifier: &Identifier, type_: BasicType) {
-        let name = identifier.to_string();
-        self.symbol_table.insert_variable(name, type_);
-    }
-
-    pub fn insert_label(&mut self, name: String, line_number: u16) {
-        self.symbol_table.insert_label(name, line_number);
-    }
-}
-
 pub struct SemanticAnalyzer {
-    state: SemanticAnalysisState,
+    symbol_table: SymbolTable,
 }
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         Self {
-            state: SemanticAnalysisState::new(),
+            symbol_table: SymbolTable::new(),
         }
     }
 
@@ -92,7 +70,7 @@ impl SemanticAnalyzer {
         // First pass: collect all labels
         for line in program.lines() {
             if let Some(label) = line.label() {
-                self.state.insert_label(label.to_owned(), line.number());
+                self.symbol_table.insert_label(label.to_owned(), line.number());
             }
         }
 
@@ -409,7 +387,7 @@ impl SemanticAnalyzer {
                 } else {
                     BasicType::Numeric
                 };
-                self.state.insert_variable(identifier, var_type);
+                self.symbol_table.insert_variable(*identifier, var_type);
                 Ok(var_type)
             }
             LValueInner::BuiltInIdentifier(keyword) => {
@@ -438,7 +416,7 @@ impl SemanticAnalyzer {
                 } else {
                     BasicType::NumericArray
                 };
-                self.state.insert_variable(identifier, array_type);
+                self.symbol_table.insert_variable(*identifier, array_type);
 
                 let element_type = if identifier.has_dollar() {
                     BasicType::String
@@ -469,7 +447,7 @@ impl SemanticAnalyzer {
                 } else {
                     BasicType::Numeric2DArray
                 };
-                self.state.insert_variable(identifier, array_type);
+                self.symbol_table.insert_variable(*identifier, array_type);
 
                 let element_type = if identifier.has_dollar() {
                     BasicType::String
@@ -530,7 +508,7 @@ impl SemanticAnalyzer {
                 } else {
                     BasicType::NumericArray
                 };
-                self.state.insert_variable(identifier, array_type);
+                self.symbol_table.insert_variable(*identifier, array_type);
             }
             DimInner::DimInner2D {
                 identifier,
@@ -573,7 +551,7 @@ impl SemanticAnalyzer {
                 } else {
                     BasicType::Numeric2DArray
                 };
-                self.state.insert_variable(identifier, array_type);
+                self.symbol_table.insert_variable(*identifier, array_type);
             }
         }
         Ok(())
@@ -1007,7 +985,7 @@ impl SemanticAnalyzer {
 pub fn analyze_program(program: &Program) -> SemanticResult<SymbolTable> {
     let mut analyzer = SemanticAnalyzer::new();
     analyzer.analyze_program(program)?;
-    Ok(analyzer.state.symbol_table)
+    Ok(analyzer.symbol_table)
 }
 
 #[cfg(test)]
@@ -1028,7 +1006,7 @@ mod tests {
         let mut analyzer = SemanticAnalyzer::new();
 
         // Create identifier "X" (numeric)
-        let identifier = Identifier::new(b'X', None, false).unwrap();
+        let identifier = Identifier::new('X', None, false).unwrap();
 
         let assignment = Assignment::new(
             LValue::new(LValueInner::Identifier(identifier), placeholder_span()),
@@ -1048,7 +1026,7 @@ mod tests {
         let mut analyzer = SemanticAnalyzer::new();
 
         // Create identifier "X$" (string)
-        let identifier = Identifier::new(b'X', None, true).unwrap();
+        let identifier = Identifier::new('X', None, true).unwrap();
 
         let assignment = Assignment::new(
             LValue::new(LValueInner::Identifier(identifier), placeholder_span()),

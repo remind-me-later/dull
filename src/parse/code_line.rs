@@ -75,7 +75,7 @@ impl CodeLine {
         if let Some(label) = &self.label {
             result.push_str(&format!("\"{}", label.name));
 
-            if label.are_quotes_closed_in_source {
+            if !preserve_source_wording || label.are_quotes_closed_in_source {
                 result.push('\"');
             }
 
@@ -90,7 +90,7 @@ impl CodeLine {
                     .iter()
                     .map(|stmt| stmt.show(preserve_source_wording))
                     .collect::<Vec<_>>()
-                    .join(":")
+                    .join(": ")
                     .to_string(),
             );
         }

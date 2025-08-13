@@ -80,11 +80,7 @@ impl LValue {
             LValueInner::Identifier(id) => format!("{}", id),
             LValueInner::BuiltInIdentifier(bi) => format!("{}", bi),
             LValueInner::Array1DAccess { identifier, index } => {
-                format!(
-                    "{}({})",
-                    format!("{}", identifier),
-                    index.show(preserve_source_wording)
-                )
+                format!("{}({})", identifier, index.show(preserve_source_wording))
             }
             LValueInner::Array2DAccess {
                 identifier,
@@ -93,7 +89,7 @@ impl LValue {
             } => {
                 format!(
                     "{}({},{})",
-                    format!("{}", identifier),
+                    identifier,
                     row_index.show(preserve_source_wording),
                     col_index.show(preserve_source_wording)
                 )

@@ -55,6 +55,9 @@ pub enum ParseError {
     ExpectedGotoOrGosub {
         span: Span,
     },
+    ExpectedThenClause {
+        span: Span,
+    },
 }
 
 /// Error types that can occur during semantic analysis
@@ -137,8 +140,7 @@ pub fn print_error(error: &CompileError, filename: &str, source: &str) {
                 .with_code("L004")
                 .with_message("Invalid REM statement")
                 .with_labels(vec![
-                    Label::primary((), span_to_range(*span))
-                        .with_message("invalid REM syntax"),
+                    Label::primary((), span_to_range(*span)).with_message("invalid REM syntax"),
                 ]),
         },
         CompileError::Parse(parse_err) => match parse_err {
@@ -177,22 +179,19 @@ pub fn print_error(error: &CompileError, filename: &str, source: &str) {
                 .with_code("P005")
                 .with_message("Expected expression")
                 .with_labels(vec![
-                    Label::primary((), span_to_range(*span))
-                        .with_message("expected expression"),
+                    Label::primary((), span_to_range(*span)).with_message("expected expression"),
                 ]),
             ParseError::ExpectedExplicitLet { span } => Diagnostic::error()
                 .with_code("P006")
                 .with_message("Expected explicit 'LET' keyword for let binding")
                 .with_labels(vec![
-                    Label::primary((), span_to_range(*span))
-                        .with_message("expected 'LET' keyword"),
+                    Label::primary((), span_to_range(*span)).with_message("expected 'LET' keyword"),
                 ]),
             ParseError::ExpectedAssignment { span } => Diagnostic::error()
                 .with_code("P007")
                 .with_message("Expected assignment")
                 .with_labels(vec![
-                    Label::primary((), span_to_range(*span))
-                        .with_message("expected assignment"),
+                    Label::primary((), span_to_range(*span)).with_message("expected assignment"),
                 ]),
             ParseError::ExpectedDimInner { span } => Diagnostic::error()
                 .with_code("P008")
@@ -205,8 +204,7 @@ pub fn print_error(error: &CompileError, filename: &str, source: &str) {
                 .with_code("P009")
                 .with_message("Expected statement")
                 .with_labels(vec![
-                    Label::primary((), span_to_range(*span))
-                        .with_message("expected statement"),
+                    Label::primary((), span_to_range(*span)).with_message("expected statement"),
                 ]),
             ParseError::ExpectedLValue { span } => Diagnostic::error()
                 .with_code("P010")
@@ -220,6 +218,12 @@ pub fn print_error(error: &CompileError, filename: &str, source: &str) {
                 .with_labels(vec![
                     Label::primary((), span_to_range(*span))
                         .with_message("expected 'GOTO' or 'GOSUB'"),
+                ]),
+            ParseError::ExpectedThenClause { span } => Diagnostic::error()
+                .with_code("P012")
+                .with_message("Expected 'THEN' clause")
+                .with_labels(vec![
+                    Label::primary((), span_to_range(*span)).with_message("expected 'THEN' clause"),
                 ]),
         },
         CompileError::Semantic(semantic_err) => match semantic_err {

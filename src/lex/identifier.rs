@@ -5,7 +5,7 @@ use std::num::NonZero;
 // The second character, if present, can be an ASCII letter or digit (0-9).
 // If the identifier ends with a '$', it is a string variable.
 // Else it's a numeric variable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Identifier {
     char1: NonZero<u8>,         // ASCII character
     char2: Option<NonZero<u8>>, // ASCII character or None
@@ -13,11 +13,24 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    pub fn new(char1: u8, char2: Option<u8>, has_dollar: bool) -> Option<Self> {
-        let char1 = NonZero::new(char1)?;
-        let char2 = char2.and_then(NonZero::new);
+    pub fn new(char1: char, char2: Option<char>, has_dollar: bool) -> Result<Self, &'static str> {
+        let char1 = if char1.is_ascii_alphabetic() {
+            NonZero::new(char1 as u8).ok_or("Invalid first character")?
+        } else {
+            return Err("Invalid first character");
+        };
 
-        Some(Identifier {
+        let char2 = if let Some(c) = char2 {
+            if c.is_ascii_alphanumeric() {
+                Some(NonZero::new(c as u8).ok_or("Invalid second character")?)
+            } else {
+                return Err("Invalid second character");
+            }
+        } else {
+            None
+        };
+
+        Ok(Identifier {
             char1,
             char2,
             has_dollar,
@@ -43,41 +56,34 @@ impl std::str::FromStr for Identifier {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = s.as_bytes();
-
-        if bytes.is_empty() {
-            return Err("Invalid empty identifier");
-        }
-
-        // Check if first character is alphabetic
-        if !bytes[0].is_ascii_alphabetic() {
-            return Err("Invalid first character for identifier");
-        }
-
-        match bytes.len() {
+        match s.len() {
+            0 => Err("Invalid empty identifier"),
             1 => {
-                // Single character identifier
-                Identifier::new(bytes[0], None, false).ok_or("Invalid single character identifier")
+                let char = s.chars().next().unwrap();
+                Identifier::new(char, None, false)
             }
             2 => {
-                if bytes[1] == b'$' {
-                    Identifier::new(bytes[0], None, true).ok_or("Invalid identifier ending with $")
-                } else if bytes[1].is_ascii_alphanumeric() {
-                    Identifier::new(bytes[0], Some(bytes[1]), false)
-                        .ok_or("Invalid second character for identifier")
+                let char1 = s.chars().next().unwrap();
+                let char2 = s.chars().nth(1).unwrap();
+
+                if char2 == '$' {
+                    Identifier::new(char1, None, true)
                 } else {
-                    Err("Invalid second character for identifier")
+                    Identifier::new(char1, Some(char2), false)
                 }
             }
             3 => {
-                if bytes[2] == b'$' && bytes[1].is_ascii_alphanumeric() {
-                    Identifier::new(bytes[0], Some(bytes[1]), true)
-                        .ok_or("Invalid identifier ending with $")
+                let char1 = s.chars().next().unwrap();
+                let char2 = s.chars().nth(1).unwrap();
+                let char3 = s.chars().nth(2).unwrap();
+
+                if char3 == '$' {
+                    Identifier::new(char1, Some(char2), true)
                 } else {
                     Err("Invalid 3-character pattern")
                 }
             }
-            _ => Err("Invalid identifier length"),
+            _ => Err("Identifier too long, maximum length is 2 characters and an optional $"),
         }
     }
 }

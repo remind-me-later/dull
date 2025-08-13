@@ -66,10 +66,10 @@ impl ExprInner {
                 value,
                 is_quote_closed_in_source,
             } => {
-                if *is_quote_closed_in_source {
-                    format!("\"{value}\"")
-                } else {
+                if preserve_source_wording && !*is_quote_closed_in_source {
                     format!("\"{value}")
+                } else {
+                    format!("\"{value}\"")
                 }
             }
             ExprInner::FunctionCall(f) => f.show(preserve_source_wording),
@@ -138,7 +138,14 @@ impl ExprInner {
                 f.write_bytes_preserving_source_parens(bytes, preserve_source_wording)
             }
             ExprInner::Parentheses(expr) => {
-                if preserve_source_wording {
+                if !preserve_source_wording {
+                    expr.write_bytes_with_context_and_parens(
+                        bytes,
+                        8,
+                        false,
+                        preserve_source_wording,
+                    );
+                } else {
                     bytes.push(b'(');
                     expr.write_bytes_with_context_and_parens(
                         bytes,
@@ -147,13 +154,6 @@ impl ExprInner {
                         preserve_source_wording,
                     );
                     bytes.push(b')');
-                } else {
-                    expr.write_bytes_with_context_and_parens(
-                        bytes,
-                        8,
-                        false,
-                        preserve_source_wording,
-                    );
                 }
             }
         }

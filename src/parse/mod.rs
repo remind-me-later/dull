@@ -1383,6 +1383,12 @@ where
                     full_span,
                 )))
             } else {
+                if then_kw.is_none() {
+                    return Err(ParseError::ExpectedThenClause {
+                        span: start_span,
+                    });
+                }
+
                 let goto_expr = self.expect_expression()?;
                 let full_span = start_span.merge(goto_expr.span());
                 let goto_stmt =

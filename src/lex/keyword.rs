@@ -173,7 +173,7 @@ impl Keyword {
             Keyword::Degree => 0xF18C,
             Keyword::Devs => 0xE857,
             Keyword::Dim => 0xF18B,
-            Keyword::Dms => 0xF186,
+            Keyword::Dms => 0xF166,
             Keyword::Dte => 0xF864,
             Keyword::End => 0xF18E,
             Keyword::Erl => 0xF053,

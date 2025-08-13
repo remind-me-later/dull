@@ -435,7 +435,7 @@ impl Iterator for Lexer<'_> {
                                 match self.remark_opt {
                                     RemarkLexOption::TrimWhitespace => {
                                         // Skip the rest of the whitespace
-                                        while self.peek().map_or(false, |&c| c == ' ' || c == '\t')
+                                        while self.peek().is_some_and(|&c| c == ' ' || c == '\t')
                                         {
                                             self.advance();
                                         }
