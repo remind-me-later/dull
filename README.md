@@ -48,6 +48,7 @@ All original files are encoded in ISO-8859 and found in [Sharp PC-1500 (TRS-80 P
 
 ## Thanks
 
-[Sharp PC-1500 (TRS-80 PC-2) resource page](http://www.pc1500.com/)
-[Sharp_PC-1500_ROM_Disassembly](https://github.com/Jeff-Birt/Sharp_PC-1500_ROM_Disassembly)
-[Sharp_CE-158](https://github.com/Jeff-Birt/Sharp_CE-158)
+- [Sharp PC-1500 (TRS-80 PC-2) resource page](http://www.pc1500.com/)
+- [Sharp_PC-1500_ROM_Disassembly](https://github.com/Jeff-Birt/Sharp_PC-1500_ROM_Disassembly)
+- [Sharp_CE-158](https://github.com/Jeff-Birt/Sharp_CE-158)
+- [Schematics](https://www.kaibader.de/sharp-pc-15001600-schematics-collection/)
